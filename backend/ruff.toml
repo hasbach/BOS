@@ -1,0 +1,10 @@
+target-version = "py312"
+line-length = 100
+extend-exclude = ["migrations/versions"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["S101"]  # assert is fine in tests
+
+[lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "E501", "SIM117"]  # test passwords, long SQL, nested with-blocks

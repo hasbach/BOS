@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BOS Screen Designs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---------- Tokens (swap these for final BOS brand colors) ---------- */
+:root{
+  --bg:#F8FAFC; --surface:#FFFFFF; --surface-2:#F1F5F9; --fg:#0F172A; --fg-2:#475569;
+  --border:#E2E8F0; --border-strong:#CBD5E1;
+  --ink:#1E293B; --on-ink:#FFFFFF;
+  --accent:#047857; --on-accent:#FFFFFF; --accent-soft:#D1FAE5; --accent-fg:#065F46;
+  --warn-soft:#FEF3C7; --warn-fg:#92400E;
+  --danger:#B91C1C; --danger-soft:#FEE2E2; --danger-fg:#991B1B;
+  --info-soft:#DBEAFE; --info-fg:#1E40AF;
+  --storeA-soft:#E0E7FF; --storeA-fg:#3730A3;
+  --storeB-soft:#FFEDD5; --storeB-fg:#9A3412;
+  --page:#E9EEF4; --shadow:0 1px 2px rgba(15,23,42,.06),0 8px 24px rgba(15,23,42,.08);
+  --r-sm:8px; --r:12px; --r-lg:16px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1220; --surface:#131C2E; --surface-2:#1C2740; --fg:#F1F5F9; --fg-2:#A3B0C4;
+    --border:#2A3650; --border-strong:#3B4A68;
+    --ink:#E2E8F0; --on-ink:#0F172A;
+    --accent:#34D399; --on-accent:#052E1F; --accent-soft:#0F3B2E; --accent-fg:#6EE7B7;
+    --warn-soft:#3F2E0B; --warn-fg:#FCD34D;
+    --danger:#F87171; --danger-soft:#451A1A; --danger-fg:#FCA5A5;
+    --info-soft:#172B54; --info-fg:#93C5FD;
+    --storeA-soft:#25275A; --storeA-fg:#C7D2FE;
+    --storeB-soft:#4A240F; --storeB-fg:#FDBA74;
+    --page:#060B14; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1220; --surface:#131C2E; --surface-2:#1C2740; --fg:#F1F5F9; --fg-2:#A3B0C4;
+  --border:#2A3650; --border-strong:#3B4A68;
+  --ink:#E2E8F0; --on-ink:#0F172A;
+  --accent:#34D399; --on-accent:#052E1F; --accent-soft:#0F3B2E; --accent-fg:#6EE7B7;
+  --warn-soft:#3F2E0B; --warn-fg:#FCD34D;
+  --danger:#F87171; --danger-soft:#451A1A; --danger-fg:#FCA5A5;
+  --info-soft:#172B54; --info-fg:#93C5FD;
+  --storeA-soft:#25275A; --storeA-fg:#C7D2FE;
+  --storeB-soft:#4A240F; --storeB-fg:#FDBA74;
+  --page:#060B14; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+
+/* ---------- Gallery page ---------- */
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--page);color:var(--fg);font-family:Inter,"IBM Plex Sans Arabic",system-ui,sans-serif;font-size:16px;line-height:1.5}
+.page{max-width:1280px;margin:0 auto;padding:24px 16px 64px}
+.hero{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;margin-bottom:8px}
+.hero h1{margin:0;font-size:28px;line-height:1.2;letter-spacing:-.01em}
+.hero p{margin:4px 0 0;color:var(--fg-2);max-width:60ch}
+.theme-btn{min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.theme-btn:focus-visible,.btn:focus-visible,.nav a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:20px 0 8px}
+.note{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;font-size:14px;color:var(--fg-2)}
+.note b{display:block;color:var(--fg);font-size:14px;margin-bottom:2px}
+.swatches{display:flex;gap:6px;margin-top:8px}
+.swatches i{width:28px;height:28px;border-radius:6px;border:1px solid var(--border)}
+h2.sec{font-size:20px;margin:40px 0 4px;letter-spacing:-.01em}
+p.sec-sub{margin:0 0 16px;color:var(--fg-2);font-size:14px;max-width:75ch}
+.grid{display:flex;flex-wrap:wrap;gap:28px 24px}
+figure{margin:0;width:360px;max-width:100%}
+figcaption{margin-top:10px;font-size:13px;color:var(--fg-2)}
+figcaption b{color:var(--fg);font-size:14px;display:block}
+
+/* ---------- Phone frame ---------- */
+.phone{width:100%;min-height:740px;background:var(--bg);border:1px solid var(--border-strong);border-radius:28px;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow);font-size:14px;position:relative}
+.phone[dir="rtl"]{font-family:"IBM Plex Sans Arabic",Inter,system-ui,sans-serif}
+.status{display:flex;justify-content:space-between;padding:8px 20px 4px;font-size:12px;font-weight:600;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.appbar{display:flex;align-items:center;gap:8px;padding:6px 12px 10px;min-height:52px}
+.appbar h3{margin:0;font-size:18px;font-weight:700;flex:1;letter-spacing:-.01em}
+.appbar .sub{font-size:12px;color:var(--fg-2);font-weight:500;display:block;letter-spacing:0}
+.iconbtn{width:44px;height:44px;border-radius:999px;border:0;background:transparent;color:var(--fg);display:grid;place-items:center;cursor:pointer;flex:none}
+.iconbtn:hover{background:var(--surface-2)}
+.body{flex:1;padding:4px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.footer{padding:12px 16px;background:var(--surface);border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.nav{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border-top:1px solid var(--border);padding:4px 4px 10px}
+.nav a{display:flex;flex-direction:column;align-items:center;gap:2px;min-height:52px;justify-content:center;font-size:11px;font-weight:600;color:var(--fg-2);text-decoration:none;border-radius:10px;cursor:pointer}
+.nav a.on{color:var(--accent)}
+.nav a.on .ic{stroke-width:2.4}
+.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.sm{width:16px;height:16px}
+.ic.lg{width:28px;height:28px}
+[dir="rtl"] .flip{transform:scaleX(-1)}
+
+/* ---------- Components ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.row{display:flex;align-items:center;gap:10px}
+.between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.grow{flex:1;min-width:0}
+.t{font-weight:600;color:var(--fg)}
+.m{color:var(--fg-2);font-size:13px}
+.xs{font-size:12px;color:var(--fg-2)}
+.num{font-variant-numeric:tabular-nums}
+.big{font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+.label{font-size:12px;font-weight:600;color:var(--fg-2);text-transform:uppercase;letter-spacing:.04em}
+[dir="rtl"] .label{letter-spacing:0;font-size:13px}
+.btn{min-height:48px;border-radius:var(--r);border:1px solid transparent;font:inherit;font-weight:600;font-size:15px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;width:100%;transition:filter .15s}
+.btn:hover{filter:brightness(.96)}
+.btn.primary{background:var(--accent);color:var(--on-accent)}
+.btn.ink{background:var(--ink);color:var(--on-ink)}
+.btn.ghost{background:var(--surface);color:var(--fg);border-color:var(--border-strong)}
+.btn.danger{background:var(--surface);color:var(--danger);border-color:var(--danger)}
+.btn[disabled]{background:var(--surface-2);color:var(--fg-2);border-color:var(--border);cursor:not-allowed}
+.btn.sm{min-height:44px;font-size:14px;width:auto;padding:0 14px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--fg-2)}
+.chip.ok{background:var(--accent-soft);color:var(--accent-fg)}
+.chip.warn{background:var(--warn-soft);color:var(--warn-fg)}
+.chip.bad{background:var(--danger-soft);color:var(--danger-fg)}
+.chip.info{background:var(--info-soft);color:var(--info-fg)}
+.chip.a{background:var(--storeA-soft);color:var(--storeA-fg)}
+.chip.b{background:var(--storeB-soft);color:var(--storeB-fg)}
+.pills{display:flex;gap:8px;overflow:hidden;flex-wrap:wrap}
+.pill{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface);font-size:13px;font-weight:600;color:var(--fg);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.pill.on{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.pill.off{color:var(--fg-2);text-decoration:line-through;background:var(--surface-2);cursor:not-allowed}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:13px;font-weight:600}
+.input{min-height:48px;border:1px solid var(--border-strong);border-radius:var(--r);background:var(--surface);padding:0 12px;display:flex;align-items:center;gap:8px;color:var(--fg);font-size:15px}
+.input.ph{color:var(--fg-2)}
+.input.focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.input.area{min-height:72px;align-items:flex-start;padding-top:10px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--surface-2);border-radius:var(--r);padding:3px;gap:3px}
+.seg span{min-height:40px;display:grid;place-items:center;border-radius:9px;font-size:13px;font-weight:600;color:var(--fg-2);cursor:pointer;text-align:center;padding:0 4px}
+.seg span.on{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgba(15,23,42,.12)}
+.th{width:52px;height:52px;border-radius:10px;display:grid;place-items:center;font-weight:700;font-size:13px;flex:none;background:var(--surface-2);color:var(--fg-2);border:1px solid var(--border)}
+.th.lg{width:72px;height:72px;font-size:16px}
+.th.c1{background:var(--info-soft);color:var(--info-fg)} .th.c2{background:var(--storeB-soft);color:var(--storeB-fg)}
+.th.c3{background:var(--warn-soft);color:var(--warn-fg)} .th.c4{background:var(--accent-soft);color:var(--accent-fg)}
+.step{display:inline-flex;align-items:center;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface)}
+.step button{width:44px;height:44px;border:0;background:transparent;color:var(--fg);display:grid;place-items:center;cursor:pointer}
+.step b{min-width:24px;text-align:center}
+.list{display:flex;flex-direction:column}
+.list>.li{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);min-height:56px}
+.list>.li:last-child{border-bottom:0}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.banner{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:var(--r);font-size:13px;font-weight:500}
+.banner.ok{background:var(--accent-soft);color:var(--accent-fg)}
+.banner.warn{background:var(--warn-soft);color:var(--warn-fg)}
+.banner.info{background:var(--info-soft);color:var(--info-fg)}
+.banner.bad{background:var(--danger-soft);color:var(--danger-fg)}
+.tot{display:flex;justify-content:space-between;padding:4px 0}
+.tot.grand{font-size:18px;font-weight:700;border-top:1px solid var(--border);margin-top:6px;padding-top:10px}
+.prog{height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--accent);border-radius:999px}
+.attr{display:grid;grid-template-columns:1fr 1fr 64px;gap:6px;margin-top:8px}
+.attr div{background:var(--surface-2);border-radius:var(--r-sm);padding:6px 8px}
+.attr b{display:block;font-size:17px;line-height:1.2}
+.checkbtn{width:48px;height:48px;border-radius:12px;border:2px solid var(--border-strong);background:var(--surface);color:transparent;display:grid;place-items:center;cursor:pointer;flex:none}
+.checkbtn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.box{width:22px;height:22px;border-radius:6px;border:2px solid var(--border-strong);display:grid;place-items:center;flex:none;color:transparent}
+.box.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.radio{width:22px;height:22px;border-radius:50%;border:2px solid var(--border-strong);flex:none;display:grid;place-items:center}
+.radio.on{border-color:var(--accent)} .radio.on::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.sheet-dim{position:absolute;inset:0;background:rgba(15,23,42,.45)}
+.sheet{position:absolute;inset-inline:0;bottom:0;background:var(--surface);border-radius:20px 20px 0 0;padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -8px 24px rgba(0,0,0,.18)}
+.sheet .grab{width:40px;height:4px;border-radius:999px;background:var(--border-strong);margin:0 auto 4px}
+.bar{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center}
+.bar .track{grid-column:1/-1;height:10px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.bar .track i{display:block;height:100%;background:var(--accent);border-radius:999px}
+.tl{display:flex;flex-direction:column;gap:10px;border-inline-start:2px solid var(--border);padding-inline-start:12px;margin-inline-start:6px}
+.logo{width:64px;height:64px;border-radius:18px;background:var(--ink);color:var(--on-ink);display:grid;place-items:center;font-weight:700;font-size:22px;letter-spacing:.02em}
+.msg{background:var(--surface-2);border-radius:var(--r);padding:12px;font-size:13px;white-space:pre-line;color:var(--fg)}
+.dims{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dims div{background:var(--surface-2);border-radius:var(--r-sm);padding:8px}
+table.v{width:100%;border-collapse:collapse;font-size:13px}
+table.v th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-2);text-align:start;padding:4px 4px 6px;font-weight:600}
+table.v td{padding:9px 4px;border-top:1px solid var(--border)}
+table.v td.n,table.v th.n{text-align:end;font-variant-numeric:tabular-nums}
+.av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:14px;flex:none;background:var(--surface-2);color:var(--fg-2);border:1px solid var(--border)}
+.badge{min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:12px;font-weight:700;display:inline-grid;place-items:center}
+.chat{display:flex;flex-direction:column;gap:6px;flex:1;justify-content:flex-end}
+.bub{max-width:80%;padding:8px 10px;border-radius:14px;font-size:14px;line-height:1.45}
+.bub.in{background:var(--surface);border:1px solid var(--border);align-self:flex-start;border-start-start-radius:4px}
+.bub.out{background:var(--accent-soft);color:var(--fg);align-self:flex-end;border-end-end-radius:4px}
+.bub .meta{display:block;font-size:11px;color:var(--fg-2);margin-top:2px;text-align:end}
+.bub.photo{padding:4px}.bub.photo div{width:150px;height:110px;border-radius:10px;background:var(--info-soft);color:var(--info-fg);display:grid;place-items:center}
+.day{align-self:center;font-size:11px;font-weight:600;color:var(--fg-2);background:var(--surface-2);padding:2px 10px;border-radius:999px}
+.composer{display:flex;align-items:center;gap:6px;padding:8px 10px 12px;background:var(--surface);border-top:1px solid var(--border)}
+.composer .input{flex:1;min-height:44px;border-radius:999px}
+.sendbtn{width:44px;height:44px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;cursor:pointer;flex:none}
+.strip{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border-top:1px solid var(--border)}
+.ordercard{border-inline-start:3px solid var(--accent);padding-inline-start:8px;margin-bottom:4px}
+@media (max-width:420px){figure{width:100%}.page{padding-inline:16px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.2a1 1 0 0 0 1 .8h9.3a1 1 0 0 0 1-.8L20.5 7H6"/></symbol>
+<symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+<symbol id="i-truck" viewBox="0 0 24 24"><path d="M2 6h11v10H2zM13 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0 1 14 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.5a7 7 0 0 1 4 5.5"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17v.5"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12Z"/></symbol>
+<symbol id="i-store" viewBox="0 0 24 24"><path d="M3 9 4.5 4h15L21 9M3 9v11h18V9M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M9 20v-6h6v6"/></symbol>
+<symbol id="i-cash" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 10v4M18 10v4"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-3"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4"/></symbol>
+<symbol id="i-print" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H4V9h16v8h-3M7 14h10v7H7z"/></symbol>
+<symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h13l-2.5 4.5L18 13H5"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4L3 5Z"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 3 10.5l7 2.5 2.5 7L21 3ZM10 13l4-4"/></symbol>
+<symbol id="i-clip" viewBox="0 0 24 24"><path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></symbol>
+</defs></svg>
+
+<div class="page">
+  <header class="hero">
+    <div>
+      <h1>BOS screen designs</h1>
+      <p>Beta Orders Solutions — From Conversation to Delivery. Mobile-first screens for the core MVP and the M3.5 WhatsApp inbox, in English and Arabic, light and dark.</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button"><svg class="ic"><use href="#i-sun"/></svg><span>Switch theme</span></button>
+  </header>
+
+  <div class="notes">
+    <div class="note"><b>Palette (proposed)</b>Slate ink for structure, green for the one primary action per screen. Amber and red only for stock and cash warnings.
+      <div class="swatches"><i style="background:var(--ink)"></i><i style="background:var(--accent)"></i><i style="background:var(--accent-soft)"></i><i style="background:var(--warn-soft)"></i><i style="background:var(--danger-soft)"></i><i style="background:var(--storeA-soft)"></i><i style="background:var(--storeB-soft)"></i></div></div>
+    <div class="note"><b>Type</b>Inter for Latin, IBM Plex Sans Arabic for Arabic. 14–16px body, tabular numerals for money and stock.</div>
+    <div class="note"><b>Navigation</b>Five bottom tabs: Sales, Packing, Delivery, Orders, More. Catalog, Reports and Settings live under More. Each role lands on its own tab.</div>
+    <div class="note"><b>Rules applied</b>48px primary buttons, 44px minimum touch targets, status never shown by color alone, store shown as a labelled tag on every line.</div>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+const ic=(n,c='')=>`<svg class="ic ${c}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const L={en:['Sales','Packing','Delivery','Orders','More'],ar:['المبيعات','التجهيز','التوصيل','الطلبات','المزيد']};
+const nav=(on,lang='en')=>`<nav class="nav">${['cart','box','truck','list','more'].map((n,i)=>`<a class="${i===on?'on':''}" ${i===on?'aria-current="page"':''}>${ic(n)}<span>${L[lang][i]}</span></a>`).join('')}</nav>`;
+const bar=(title,o={})=>`<div class="appbar">${o.back?`<button class="iconbtn" aria-label="Back">${ic('back','flip')}</button>`:''}<h3>${title}${o.sub?`<span class="sub">${o.sub}</span>`:''}</h3>${o.act||''}</div>`;
+const ib=(n,l)=>`<button class="iconbtn" aria-label="${l}">${ic(n)}</button>`;
+const A='<span class="chip a">Store A</span>', B='<span class="chip b">Store B</span>';
+const step=q=>`<span class="step"><button aria-label="Decrease">${ic('minus','sm')}</button><b class="num">${q}</b><button aria-label="Increase">${ic('plus','sm')}</button></span>`;
+const phone=(inner,dir='ltr')=>`<div class="phone" dir="${dir}" lang="${dir==='rtl'?'ar':'en'}"><div class="status"><span>9:41</span><span>4G · 82%</span></div>${inner}</div>`;
+
+const S=[];
+const add=(sec,sub)=>S.push({sec,sub,items:[]});
+const scr=(name,cap,html,dir)=>S[S.length-1].items.push({name,cap,html:phone(html,dir)});
+
+/* ================= Start ================= */
+add('Start','Sign in and the owner’s home. Sales and packing staff skip the dashboard and land on their own tab.');
+
+scr('01 · Sign in','US-01. Language is chosen before sign-in so Arabic users never see an English-only wall.',`
+<div class="body" style="justify-content:center;gap:16px;padding-top:32px">
+  <div style="display:grid;place-items:center;gap:10px;text-align:center">
+    <div class="logo">BOS</div>
+    <div><div class="big">Beta Orders Solutions</div><div class="m">From Conversation to Delivery.</div><div class="m" dir="rtl" lang="ar" style="font-family:'IBM Plex Sans Arabic',sans-serif">من أول رسالة لآخر طلبية</div></div>
+  </div>
+  <div class="seg" role="tablist" aria-label="Language"><span class="on">English</span><span lang="ar" style="font-family:'IBM Plex Sans Arabic',sans-serif">العربية</span></div>
+  <div class="field"><label>Phone or email</label><div class="input">+961 70 000 111</div></div>
+  <div class="field"><label>Password</label><div class="input between"><span>••••••••••</span><span class="xs" style="font-weight:600">Show</span></div></div>
+  <button class="btn primary">Sign in</button>
+  <button class="btn ghost">Forgot password</button>
+  <div class="xs" style="text-align:center">A product by Beta Marketing Solutions</div>
+</div>`);
+
+scr('02 · Home (owner)','US-09. Four numbers that are deliberately different things: ordered, to pack, with courier, and cash the courier still owes.',`
+${bar('Good morning, Samer',{sub:'Tuesday 10 Nov',act:ib('user','Account')})}
+<div class="body">
+  <div class="pills"><span class="pill on">${ic('store','sm')} All stores</span><span class="pill">Store A</span><span class="pill">Store B</span></div>
+  <div class="kpis">
+    <div class="kpi"><div class="xs">Orders today</div><div class="big num">24</div><div class="xs num">$1,912.00 ordered</div></div>
+    <div class="kpi"><div class="xs">Waiting to pack</div><div class="big num">7</div><div class="xs">Oldest 38 min</div></div>
+    <div class="kpi"><div class="xs">With courier</div><div class="big num">31</div><div class="xs num">$2,604.00 COD out</div></div>
+    <div class="kpi"><div class="xs">Courier owes you</div><div class="big num">$1,240</div><div class="xs">Cedar Express</div></div>
+  </div>
+  <button class="btn primary">${ic('plus')} New order</button>
+  <div class="card">
+    <div class="label">Needs attention</div>
+    <div class="list">
+      <div class="li">${ic('alert')}<div class="grow"><div class="t">2 items low on stock</div><div class="m">Blue jeans 32 · Linen shirt L</div></div>${ic('chev','flip')}</div>
+      <div class="li">${ic('flag')}<div class="grow"><div class="t">1 packing problem</div><div class="m">#1039 — wrong size on shelf</div></div>${ic('chev','flip')}</div>
+      <div class="li">${ic('sync')}<div class="grow"><div class="t">1 order not synced</div><div class="m">#1041 — Store B, retrying</div></div><span class="chip info">Commerce</span></div>
+    </div>
+  </div>
+  <div class="card between"><div><div class="t">2 drafts to finish</div><div class="m">Rana K. · Maya H.</div></div><button class="btn ghost sm">Resume</button></div>
+</div>${nav(0)}`);
+
+/* ================= Sales ================= */
+add('Sales','US-03, US-04, US-07. The sales agent keeps chatting in WhatsApp Business and builds the order here. One basket can hold items from both stores.');
+
+scr('03 · New order — customer','Source store is picked once here and stays separate from who owns each item. A phone match fills the address.',`
+${bar('New order',{back:1,sub:'Step 1 of 3 · Customer'})}
+<div class="body">
+  <div class="field"><label>Where did the customer message?</label>
+    <div class="seg"><span class="on">WhatsApp · Store A</span><span>WhatsApp · Store B</span><span>Instagram</span></div></div>
+  <div class="field"><label>Customer phone</label><div class="input focus">${ic('search')}<span class="num">+961 71 000 222</span></div></div>
+  <div class="card" style="border-color:var(--accent)">
+    <div class="between"><div class="row">${ic('user')}<div><div class="t">Rana Khoury</div><div class="m num">+961 71 000 222 · 3 orders</div></div></div><span class="chip ok">${ic('check','sm')} Match</span></div>
+    <div class="row m" style="margin-top:8px;align-items:flex-start">${ic('pin','sm')}<span>Achrafieh, Sassine Sq., Khoury bldg. 4th floor — next to the pharmacy</span></div>
+  </div>
+  <div class="field"><label>Area</label><div class="input between"><span>Beirut — Achrafieh</span>${ic('chev','sm')}</div></div>
+  <div class="field"><label>Address and landmark</label><div class="input area">Sassine Sq., Khoury bldg. 4th floor — next to the pharmacy</div></div>
+  <div class="field"><label>Note for courier <span class="xs">(optional)</span></label><div class="input ph">Call before arriving</div></div>
+</div>
+<div class="footer"><button class="btn primary">Continue to products</button></div>`);
+
+scr('04 · Add product — pick variant','Search covers every store the agent is allowed to sell from. Sold-out sizes are visibly disabled, not hidden.',`
+${bar('Add products',{back:1,sub:'Step 2 of 3',act:`<span class="chip ok" style="margin-inline-end:8px">${ic('cart','sm')} 2</span>`})}
+<div class="body">
+  <div class="input">${ic('search')}<span>jeans</span></div>
+  <div class="pills"><span class="pill on">All stores</span><span class="pill">Store A</span><span class="pill">Store B</span></div>
+  <div class="card"><div class="list">
+    <div class="li"><div class="th c1">JN</div><div class="grow"><div class="t">Slim blue jeans</div><div class="m num">JN-SLIM-BLU · $45.00</div><div class="row" style="margin-top:2px">${A}<span class="xs">6 available</span></div></div></div>
+    <div class="li"><div class="th c3">JN</div><div class="grow"><div class="t">Wide-leg black jeans</div><div class="m num">JN-WIDE-BLK · $48.00</div><div class="row" style="margin-top:2px">${B}<span class="chip bad">Out of stock</span></div></div></div>
+  </div></div>
+</div>
+<div class="sheet-dim"></div>
+<div class="sheet" role="dialog" aria-label="Choose variant">
+  <div class="grab"></div>
+  <div class="row"><div class="th lg c1">JN</div><div class="grow"><div class="t" style="font-size:16px">Slim blue jeans</div><div class="m num">$45.00 · ≈ LBP 4,027,500</div>${A}</div><button class="iconbtn" aria-label="Close">${ic('x')}</button></div>
+  <div><div class="label" style="margin-bottom:6px">Size</div><div class="pills"><span class="pill">30</span><span class="pill on">32</span><span class="pill off" aria-disabled="true">34</span><span class="pill">36</span></div></div>
+  <div><div class="label" style="margin-bottom:6px">Color</div><div class="pills"><span class="pill on">Blue</span><span class="pill">Light wash</span></div></div>
+  <div class="between"><div><div class="t">Quantity</div><div class="row"><span class="chip warn">${ic('alert','sm')} Last one in stock</span></div></div>${step(1)}</div>
+  <button class="btn primary">Add to basket · $45.00</button>
+</div>`);
+
+scr('05 · Draft basket','The critical screen. Message came through Store A, basket holds a Store B item and an untracked custom item. One delivery fee, one COD total.',`
+${bar('Basket',{back:1,sub:'Step 3 of 3',act:ib('plus','Add product')})}
+<div class="body">
+  <div class="banner ok">${ic('check','sm')}<span>Draft saved 14:32. Safe to switch to WhatsApp.</span></div>
+  <div class="card between"><div class="row">${ic('user')}<div><div class="t">Rana Khoury</div><div class="m">Achrafieh · via WhatsApp, Store A</div></div></div><button class="iconbtn" aria-label="Edit customer">${ic('edit')}</button></div>
+  <div class="card"><div class="list">
+    <div class="li"><div class="th c1">JN</div><div class="grow"><div class="t">Slim blue jeans</div><div class="m">Size 32 · Blue</div><div class="row" style="margin-top:2px;flex-wrap:wrap">${A}<span class="chip warn">Last one</span></div></div><div style="text-align:end"><div class="t num">$45.00</div>${step(1)}</div></div>
+    <div class="li"><div class="th c2">SH</div><div class="grow"><div class="t">Linen shirt</div><div class="m">Size L · White</div><div class="row" style="margin-top:2px">${B}</div></div><div style="text-align:end"><div class="t num">$32.00</div>${step(1)}</div></div>
+    <div class="li"><div class="th">+</div><div class="grow"><div class="t">Gift wrapping</div><div class="m">Custom item</div><span class="chip">No stock tracking</span></div><div style="text-align:end"><div class="t num">$2.00</div>${step(1)}</div></div>
+  </div>
+  <button class="btn ghost" style="margin-top:8px">${ic('plus')} Custom item</button></div>
+  <div class="card num">
+    <div class="tot"><span class="m">Subtotal</span><span>$79.00</span></div>
+    <div class="tot"><span class="m">Delivery fee</span><span class="row" style="gap:4px">$4.00 ${ic('edit','sm')}</span></div>
+    <div class="tot grand"><span>Total COD</span><span>$83.00</span></div>
+    <div class="xs" style="text-align:end">≈ LBP 7,428,500 at 89,500</div>
+  </div>
+</div>
+<div class="footer"><button class="btn primary">Confirm order · $83.00</button><div class="xs" style="text-align:center">Reserves stock for all 2 tracked items, or none.</div></div>`);
+
+scr('06 · Order confirmed','Shown only after the server confirms. The message is copied or opened in WhatsApp by the agent — never sent automatically.',`
+${bar('Order #1042',{act:ib('x','Close')})}
+<div class="body">
+  <div style="display:grid;place-items:center;gap:6px;text-align:center;padding:8px 0">
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--accent-soft);color:var(--accent-fg);display:grid;place-items:center">${ic('check','lg')}</div>
+    <div class="big">Order confirmed</div>
+    <div class="m">Stock reserved. Sent to packing as one pick task.</div>
+  </div>
+  <div class="card">
+    <div class="between" style="margin-bottom:8px"><span class="label">Confirmation message</span><span class="chip">English</span></div>
+    <div class="msg">Hello Rana, your order #1042 is confirmed:
+• Slim blue jeans — 32 / Blue
+• Linen shirt — L / White
+• Gift wrapping
+Delivery: $4.00
+Total on delivery: $83.00
+Address: Achrafieh, Sassine Sq.</div>
+  </div>
+  <button class="btn primary">${ic('chat')} Open in WhatsApp</button>
+  <button class="btn ghost">${ic('copy')} Copy message</button>
+  <div class="banner info">${ic('info','sm')}<span>BOS does not send or read WhatsApp messages. You press send.</span></div>
+</div>
+<div class="footer"><div class="btns"><button class="btn ghost">View order</button><button class="btn ink">${ic('plus')} New order</button></div></div>`);
+
+/* ================= Packing ================= */
+add('Packing','US-05. A separate employee on their own phone. Big size and color, one consolidated picklist even when the order spans both stores.');
+
+scr('07 · Packing queue','The packer’s home tab. Oldest first. Store tags show at a glance which shelves the order touches.',`
+${bar('Packing',{act:ib('filter','Filter')})}
+<div class="body">
+  <div class="seg"><span class="on">To pick · 7</span><span>Picking · 1</span><span>Problems · 1</span></div>
+  ${[['1042','Achrafieh','3 items',A+B,'12 min',''],['1040','Jounieh','1 item',A,'26 min',''],['1038','Tripoli — Mina','4 items',B,'38 min','warn'],['1037','Hamra','2 items',A+B,'41 min','warn']].map(o=>`
+  <div class="card"><div class="between"><div><div class="t num">#${o[0]} · ${o[2]}</div><div class="m">${o[1]}</div></div><span class="chip ${o[5]}">${ic('clock','sm')} ${o[4]}</span></div>
+    <div class="between" style="margin-top:8px"><div class="row">${o[3]}</div><button class="btn ink sm">Start picking</button></div></div>`).join('')}
+</div>${nav(1)}`);
+
+scr('08 · Picklist','Each line is checked off by hand. “Mark packed” stays locked until every tracked line is verified.',`
+${bar('Pick #1042',{back:1,sub:'Rana Khoury · Achrafieh'})}
+<div class="body">
+  <div><div class="between xs" style="margin-bottom:4px"><span class="t">1 of 3 verified</span><span>1 parcel</span></div><div class="prog" role="progressbar" aria-valuenow="1" aria-valuemin="0" aria-valuemax="3"><i style="width:33%"></i></div></div>
+  <div class="card" style="border-color:var(--accent)">
+    <div class="row"><div class="th lg c1">JN</div><div class="grow"><div class="t" style="font-size:16px">Slim blue jeans</div><div class="m num">JN-SLIM-BLU-32</div>${A}</div><button class="checkbtn on" aria-label="Verified" aria-pressed="true">${ic('check','lg')}</button></div>
+    <div class="attr"><div><span class="xs">Size</span><b>32</b></div><div><span class="xs">Color</span><b>Blue</b></div><div><span class="xs">Qty</span><b class="num">×1</b></div></div>
+  </div>
+  <div class="card">
+    <div class="row"><div class="th lg c2">SH</div><div class="grow"><div class="t" style="font-size:16px">Linen shirt</div><div class="m num">SH-LIN-WHT-L</div>${B}</div><button class="checkbtn" aria-label="Mark verified" aria-pressed="false">${ic('check','lg')}</button></div>
+    <div class="attr"><div><span class="xs">Size</span><b>L</b></div><div><span class="xs">Color</span><b>White</b></div><div><span class="xs">Qty</span><b class="num">×1</b></div></div>
+  </div>
+  <div class="card">
+    <div class="row"><div class="th lg">+</div><div class="grow"><div class="t" style="font-size:16px">Gift wrapping</div><div class="m">Custom item — nothing to pick from shelf</div></div><button class="checkbtn" aria-label="Mark done" aria-pressed="false">${ic('check','lg')}</button></div>
+  </div>
+</div>
+<div class="footer"><button class="btn primary" disabled>Mark packed — verify 2 more</button><button class="btn danger">${ic('flag')} Report a problem</button></div>`);
+
+/* ================= Delivery ================= */
+add('Delivery and cash','US-06. Hand-over, delivery result and money are three separate steps, because “delivered” is not “paid”.');
+
+scr('09 · Hand over to courier','Packed orders are selected into one manifest. One parcel and one COD amount per order, whatever stores it came from.',`
+${bar('Delivery',{act:ib('filter','Filter')})}
+<div class="body">
+  <div class="seg"><span class="on">Ready · 5</span><span>Shipped · 31</span><span>Cash</span></div>
+  <div class="field"><label>Courier</label><div class="input between"><span class="row">${ic('truck')} Cedar Express</span>${ic('chev','sm')}</div></div>
+  <div class="card"><div class="list">
+    ${[['1042','Rana Khoury','Achrafieh','83.00',1],['1040','Maya Haddad','Jounieh','45.00',1],['1036','Ziad Nassar','Saida','86.00',1],['1035','Lea Saade','Zahle','61.00',0],['1033','Omar Itani','Hamra','39.00',0]].map(o=>`
+    <div class="li"><span class="box ${o[4]?'on':''}" role="checkbox" aria-checked="${!!o[4]}">${ic('check','sm')}</span><div class="grow"><div class="t num">#${o[0]} · ${o[1]}</div><div class="m">${o[2]}</div></div><div class="t num">$${o[3]}</div></div>`).join('')}
+  </div></div>
+</div>
+<div class="footer">
+  <div class="between num"><span class="m">3 parcels selected</span><span class="t">COD to collect $214.00</span></div>
+  <button class="btn primary">${ic('truck')} Hand over 3 parcels</button>
+  <div class="btns"><button class="btn ghost">${ic('print')} Print</button><button class="btn ghost">${ic('upload')} Export CSV</button></div>
+</div>`);
+
+scr('10 · Record delivery result','Six outcomes. Returned goods go to inspection, not straight back to stock.',`
+${bar('Shipment #1042',{back:1,sub:'Cedar Express · CE-88217'})}
+<div class="body">
+  <div class="card between"><div><div class="t">Rana Khoury</div><div class="m">Achrafieh · 1 parcel</div></div><div style="text-align:end"><div class="xs">COD</div><div class="t num">$83.00</div></div></div>
+  <div class="label">What happened?</div>
+  <div class="card"><div class="list" role="radiogroup">
+    ${[['Delivered','Customer received the parcel',1],['Failed','Not reached or refused',0],['Rescheduled','New attempt agreed',0],['Returning','On its way back to you',0],['Returned','Back with you — goes to inspection',0],['Lost','Courier cannot locate it',0]].map(o=>`
+    <div class="li" role="radio" aria-checked="${!!o[2]}"><span class="radio ${o[2]?'on':''}"></span><div class="grow"><div class="t">${o[0]}</div><div class="m">${o[1]}</div></div></div>`).join('')}
+  </div></div>
+  <div class="banner warn">${ic('info','sm')}<span>Delivered means the courier now holds $83.00. It is not counted as paid until you record a remittance.</span></div>
+</div>
+<div class="footer"><button class="btn primary">Save result</button></div>`);
+
+scr('11 · Courier cash','Collected, fees, remitted and outstanding are four separate figures. Entries are never edited — corrections are added.',`
+${bar('Courier cash',{back:1,sub:'Cedar Express'})}
+<div class="body">
+  <div class="card" style="background:var(--ink);color:var(--on-ink);border-color:var(--ink)"><div style="font-size:13px;opacity:.85">Courier still owes you</div><div class="big num" style="font-size:30px">$1,240.00</div><div style="font-size:12px;opacity:.85" class="num">≈ LBP 110,980,000</div></div>
+  <div class="card num">
+    <div class="tot"><span class="m">Collected from customers</span><span>$1,860.00</span></div>
+    <div class="tot"><span class="m">Courier fees</span><span>− $120.00</span></div>
+    <div class="tot"><span class="m">Remitted to you</span><span>− $500.00</span></div>
+    <div class="tot grand"><span>Outstanding</span><span>$1,240.00</span></div>
+  </div>
+  <div class="label">History</div>
+  <div class="card"><div class="list">
+    <div class="li">${ic('cash')}<div class="grow"><div class="t">Remittance R-018</div><div class="m">9 Nov · cash · by Samer</div></div><div style="text-align:end"><div class="t num">$500.00</div><span class="chip warn">Partial</span></div></div>
+    <div class="li">${ic('truck')}<div class="grow"><div class="t">22 deliveries collected</div><div class="m">3–9 Nov</div></div><div class="t num">$1,860.00</div></div>
+    <div class="li">${ic('edit')}<div class="grow"><div class="t">Correction to R-017</div><div class="m">2 Nov · “counted twice”</div></div><div class="t num">− $40.00</div></div>
+  </div></div>
+</div>
+<div class="footer"><button class="btn primary">${ic('plus')} Record remittance</button></div>`);
+
+/* ================= Catalog ================= */
+add('Catalog and stock','US-02. Reached from More. Available is always on-hand minus reserved, and every manual change needs a reason.');
+
+scr('12 · Catalog','Search by name or SKU. Low stock is a filter and a labelled chip.',`
+${bar('Catalog',{back:1,act:ib('upload','Import CSV')})}
+<div class="body">
+  <div class="input ph">${ic('search')}<span>Search name or SKU</span></div>
+  <div class="pills"><span class="pill on">All · 86</span><span class="pill">Low stock · 2</span><span class="pill">Store A</span><span class="pill">Store B</span></div>
+  <div class="card"><div class="list">
+    ${[['c1','JN','Slim blue jeans','4 variants',A,'6 available','warn','Low'],['c2','SH','Linen shirt','6 variants',B,'3 available','warn','Low'],['c4','DR','Summer dress','5 variants',A,'28 available','',''],['c3','BG','Canvas tote bag','1 variant',A+B,'40 available','',''],['c1','JN','Wide-leg black jeans','4 variants',B,'0 available','bad','Out']].map(p=>`
+    <div class="li"><div class="th ${p[0]}">${p[1]}</div><div class="grow"><div class="t">${p[2]}</div><div class="m num">${p[3]} · ${p[5]}</div><div class="row" style="margin-top:2px">${p[4]}${p[7]?`<span class="chip ${p[6]}">${p[7]}</span>`:''}</div></div>${ic('chev','flip')}</div>`).join('')}
+  </div></div>
+</div>
+<div class="footer"><button class="btn primary">${ic('plus')} Add product</button></div>`);
+
+scr('13 · Product and variants','One row per physically stocked variant, each with its own SKU.',`
+${bar('Slim blue jeans',{back:1,act:ib('edit','Edit product')})}
+<div class="body">
+  <div class="row"><div class="th lg c1" style="width:88px;height:88px">JN</div><div class="grow"><div class="big num">$45.00</div><div class="m num">≈ LBP 4,027,500</div><div class="row" style="margin-top:4px">${A}<span class="chip">JN-SLIM-BLU</span></div></div></div>
+  <div class="card">
+    <div class="between" style="margin-bottom:4px"><span class="label">Variants</span><span class="xs">Available = on hand − reserved</span></div>
+    <table class="v"><thead><tr><th>Size / color</th><th class="n">On hand</th><th class="n">Reserved</th><th class="n">Available</th></tr></thead><tbody>
+      <tr><td><b>30</b> · Blue</td><td class="n">3</td><td class="n">0</td><td class="n"><b>3</b></td></tr>
+      <tr><td><b>32</b> · Blue <span class="chip warn">Low</span></td><td class="n">2</td><td class="n">1</td><td class="n"><b>1</b></td></tr>
+      <tr><td><b>34</b> · Blue <span class="chip bad">Out</span></td><td class="n">0</td><td class="n">0</td><td class="n"><b>0</b></td></tr>
+      <tr><td><b>36</b> · Blue</td><td class="n">2</td><td class="n">0</td><td class="n"><b>2</b></td></tr>
+    </tbody></table>
+  </div>
+  <div class="card"><div class="label">Description</div><div class="m" style="margin-top:4px">Slim fit stretch denim, mid rise. Runs true to size.</div></div>
+</div>
+<div class="footer"><div class="btns"><button class="btn ghost">${ic('plus')} Add variant</button><button class="btn ink">Adjust stock</button></div></div>`);
+
+scr('14 · Adjust stock','A reason is required and the result is previewed before saving. Goes to the audit history.',`
+${bar('Slim blue jeans',{back:1})}
+<div class="body"><div class="card"><div class="m">Variants…</div></div></div>
+<div class="sheet-dim"></div>
+<div class="sheet" role="dialog" aria-label="Adjust stock">
+  <div class="grab"></div>
+  <div class="between"><div><div class="t" style="font-size:16px">Adjust stock</div><div class="m num">Size 32 · Blue · JN-SLIM-BLU-32</div></div><button class="iconbtn" aria-label="Close">${ic('x')}</button></div>
+  <div class="dims"><div><span class="xs">On hand now</span><div class="t num">2</div></div><div><span class="xs">Reserved</span><div class="t num">1</div></div></div>
+  <div class="seg"><span class="on">Add</span><span>Remove</span><span>Set count</span></div>
+  <div class="between"><span class="t">Quantity</span>${step(6)}</div>
+  <div class="field"><label>Reason <span class="xs">(required)</span></label><div class="input between"><span>Received new stock</span>${ic('chev','sm')}</div></div>
+  <div class="field"><label>Note <span class="xs">(optional)</span></label><div class="input ph">Supplier invoice, shelf, etc.</div></div>
+  <div class="banner ok">${ic('info','sm')}<span class="num">After saving: on hand 8, available 7.</span></div>
+  <button class="btn primary">Save adjustment</button>
+  <div class="xs" style="text-align:center">Recorded with your name and time.</div>
+</div>`);
+
+/* ================= Orders ================= */
+add('Orders and reports','US-07, US-09. An order has several independent statuses. They are shown side by side, never squeezed into one label.');
+
+scr('15 · Orders','Search by number, name or phone. Each row shows packing, delivery and payment as separate chips.',`
+${bar('Orders',{act:ib('filter','Filter')})}
+<div class="body">
+  <div class="input ph">${ic('search')}<span>Order number, name or phone</span></div>
+  <div class="pills"><span class="pill on">All</span><span class="pill">To pack</span><span class="pill">With courier</span><span class="pill">Unpaid</span></div>
+  ${[['1042','Rana Khoury','83.00',A+B,[['','Packed'],['info','With courier'],['warn','Not collected']]],['1041','Karim Fares','64.00',A+B,[['','To pack'],['bad','Sync failed']]],['1036','Ziad Nassar','86.00',B,[['ok','Delivered'],['warn','Courier holds cash']]],['1029','Nour Aoun','52.00',A,[['ok','Delivered'],['ok','Settled']]],['1027','Hala Daher','39.00',A,[['bad','Returned'],['','In inspection']]]].map(o=>`
+  <div class="card"><div class="between"><div class="t num">#${o[0]} · ${o[1]}</div><div class="t num">$${o[2]}</div></div>
+    <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">${o[3]}${o[4].map(c=>`<span class="chip ${c[0]}">${c[1]}</span>`).join('')}</div></div>`).join('')}
+</div>${nav(3)}`);
+
+scr('16 · Order detail','The master order: one customer, one parcel, one COD. Per-store split is internal. The Woo sync row appears only in BOS Commerce.',`
+${bar('Order #1042',{back:1,sub:'10 Nov 14:33 · by Dana',act:ib('chat','Message customer')})}
+<div class="body">
+  <div class="dims">
+    <div><span class="xs">Sale</span><div class="t">Confirmed</div></div>
+    <div><span class="xs">Packing</span><div class="t">Packed</div></div>
+    <div><span class="xs">Delivery</span><div class="t">With courier</div></div>
+    <div><span class="xs">Payment</span><div class="t">Not collected</div></div>
+  </div>
+  <div class="card"><div class="row">${ic('user')}<div class="grow"><div class="t">Rana Khoury</div><div class="m num">+961 71 000 222 · Achrafieh</div></div></div><div class="xs" style="margin-top:6px">Came through WhatsApp, Store A</div></div>
+  <div class="card"><div class="list">
+    <div class="li"><div class="grow"><div class="t">Slim blue jeans · 32 / Blue</div>${A}</div><div class="t num">$45.00</div></div>
+    <div class="li"><div class="grow"><div class="t">Linen shirt · L / White</div>${B}</div><div class="t num">$32.00</div></div>
+    <div class="li"><div class="grow"><div class="t">Gift wrapping</div><span class="chip">Custom</span></div><div class="t num">$2.00</div></div>
+  </div>
+  <div class="num"><div class="tot"><span class="m">Delivery fee</span><span>$4.00</span></div><div class="tot grand"><span>Total COD</span><span>$83.00</span></div></div></div>
+  <div class="card"><div class="between"><span class="label">Website orders</span><span class="chip info">Commerce</span></div>
+    <div class="list"><div class="li">${A}<div class="grow m num">Woo #5531 · $47.00</div><span class="chip ok">Synced</span></div><div class="li">${B}<div class="grow m num">Woo #2290 · $32.00</div><span class="chip ok">Synced</span></div></div></div>
+  <div class="card"><div class="label" style="margin-bottom:8px">Activity</div><div class="tl">
+    <div><div class="t">Handed to Cedar Express</div><div class="xs">15:40 · Samer</div></div>
+    <div><div class="t">Packed, 3 lines verified</div><div class="xs">15:02 · Ali</div></div>
+    <div><div class="t">Confirmed, stock reserved</div><div class="xs">14:33 · Dana</div></div>
+  </div></div>
+</div>`);
+
+scr('17 · Reports','Five money stages kept apart, so ordered is never mistaken for cash in hand. A cross-store order counts once.',`
+${bar('Reports',{back:1,act:ib('upload','Export CSV')})}
+<div class="body">
+  <div class="pills"><span class="pill on">This week</span><span class="pill">Month</span><span class="pill">Custom</span><span class="pill">${ic('store','sm')} All stores</span></div>
+  <div class="card"><div class="label" style="margin-bottom:10px">From order to cash</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+    ${[['Ordered','4,820.00','61 orders',100],['Dispatched','4,310.00','54 orders',89],['Delivered','3,650.00','46 orders',76],['Collected by courier','3,400.00','',71],['Remitted to you','2,160.00','',45]].map(r=>`
+      <div class="bar"><span><span class="t">${r[0]}</span> ${r[2]?`<span class="xs">${r[2]}</span>`:''}</span><span class="t num">$${r[1]}</span><div class="track"><i style="width:${r[3]}%"></i></div></div>`).join('')}
+    </div></div>
+  <div class="kpis"><div class="kpi"><div class="xs">Returned</div><div class="big num">5</div><div class="xs num">$318.00</div></div><div class="kpi"><div class="xs">Courier fees</div><div class="big num">$184</div><div class="xs">46 deliveries</div></div></div>
+  <div class="card"><div class="label">By store</div><div class="list num">
+    <div class="li">${A}<div class="grow m">38 orders</div><div class="t">$2,940.00</div></div>
+    <div class="li">${B}<div class="grow m">31 orders</div><div class="t">$1,880.00</div></div>
+  </div><div class="xs">8 orders include both stores and are counted once in the total of 61.</div></div>
+</div>`);
+
+scr('18 · More','Catalog, reports and setup. Items a role cannot use are not shown.',`
+${bar('More')}
+<div class="body">
+  <div class="card row"><div class="logo" style="width:48px;height:48px;border-radius:12px;font-size:15px">BOS</div><div class="grow"><div class="t">Denim House Group</div><div class="m">Samer · Owner</div></div><span class="chip info">Commerce</span></div>
+  <div class="card"><div class="list">
+    ${[['box','Catalog','86 products'],['chart','Reports','']].map(r=>`<div class="li">${ic(r[0])}<div class="grow"><div class="t">${r[1]}</div>${r[2]?`<div class="m">${r[2]}</div>`:''}</div>${ic('chev','flip')}</div>`).join('')}
+  </div></div>
+  <div class="label">Setup</div>
+  <div class="card"><div class="list">
+    ${[['store','Stores','2 stores · 2 WhatsApp numbers'],['users','Employees and roles','5 people'],['truck','Couriers','Cedar Express'],['sync','WooCommerce connection','Both stores connected'],['cash','Currency and rate','1 USD = 89,500 LBP'],['globe','Language','English']].map(r=>`<div class="li">${ic(r[0])}<div class="grow"><div class="t">${r[1]}</div><div class="m num">${r[2]}</div></div>${ic('chev','flip')}</div>`).join('')}
+  </div></div>
+  <button class="btn ghost">Sign out</button>
+</div>${nav(4)}`);
+
+/* ================= Arabic ================= */
+add('Arabic (RTL)','The same screens mirrored. Layout uses logical spacing, so nothing is hand-flipped except direction arrows. Digits stay Latin, as Lebanese sellers write prices.');
+
+const Aa='<span class="chip a">المتجر أ</span>', Ba='<span class="chip b">المتجر ب</span>';
+
+scr('19 · الرئيسية','Home in Arabic.',`
+${bar('صباح الخير، سامر',{sub:'الثلاثاء 10 تشرين الثاني',act:ib('user','الحساب')})}
+<div class="body">
+  <div class="pills"><span class="pill on">${ic('store','sm')} كل المتاجر</span><span class="pill">المتجر أ</span><span class="pill">المتجر ب</span></div>
+  <div class="kpis">
+    <div class="kpi"><div class="xs">طلبات اليوم</div><div class="big num">24</div><div class="xs num">$1,912.00</div></div>
+    <div class="kpi"><div class="xs">بانتظار التجهيز</div><div class="big num">7</div><div class="xs">الأقدم منذ 38 دقيقة</div></div>
+    <div class="kpi"><div class="xs">مع شركة التوصيل</div><div class="big num">31</div><div class="xs num">$2,604.00</div></div>
+    <div class="kpi"><div class="xs">مستحقاتك عند الشركة</div><div class="big num">$1,240</div><div class="xs">Cedar Express</div></div>
+  </div>
+  <button class="btn primary">${ic('plus')} طلب جديد</button>
+  <div class="card">
+    <div class="label">يحتاج متابعة</div>
+    <div class="list">
+      <div class="li">${ic('alert')}<div class="grow"><div class="t">منتجان مخزونهما منخفض</div><div class="m">جينز أزرق 32 · قميص كتان L</div></div>${ic('chev','flip')}</div>
+      <div class="li">${ic('flag')}<div class="grow"><div class="t">مشكلة واحدة في التجهيز</div><div class="m">#1039 — مقاس خاطئ على الرف</div></div>${ic('chev','flip')}</div>
+    </div>
+  </div>
+  <div class="card between"><div><div class="t">مسودتان غير مكتملتين</div><div class="m">رنا خ. · مايا ح.</div></div><button class="btn ghost sm">متابعة</button></div>
+</div>${nav(0,'ar')}`,'rtl');
+
+scr('20 · سلة الطلب','Draft basket in Arabic.',`
+${bar('سلة الطلب',{back:1,sub:'الخطوة 3 من 3',act:ib('plus','إضافة منتج')})}
+<div class="body">
+  <div class="banner ok">${ic('check','sm')}<span>تم حفظ المسودة 14:32. يمكنك الانتقال إلى واتساب.</span></div>
+  <div class="card between"><div class="row">${ic('user')}<div><div class="t">رنا خوري</div><div class="m">الأشرفية · عبر واتساب، المتجر أ</div></div></div><button class="iconbtn" aria-label="تعديل الزبون">${ic('edit')}</button></div>
+  <div class="card"><div class="list">
+    <div class="li"><div class="th c1">JN</div><div class="grow"><div class="t">جينز أزرق ضيّق</div><div class="m">المقاس 32 · أزرق</div><div class="row" style="margin-top:2px;flex-wrap:wrap">${Aa}<span class="chip warn">آخر قطعة</span></div></div><div style="text-align:end"><div class="t num">$45.00</div>${step(1)}</div></div>
+    <div class="li"><div class="th c2">SH</div><div class="grow"><div class="t">قميص كتان</div><div class="m">المقاس L · أبيض</div><div class="row" style="margin-top:2px">${Ba}</div></div><div style="text-align:end"><div class="t num">$32.00</div>${step(1)}</div></div>
+    <div class="li"><div class="th">+</div><div class="grow"><div class="t">تغليف هدية</div><div class="m">منتج خاص</div><span class="chip">بدون مخزون</span></div><div style="text-align:end"><div class="t num">$2.00</div>${step(1)}</div></div>
+  </div>
+  <button class="btn ghost" style="margin-top:8px">${ic('plus')} منتج خاص</button></div>
+  <div class="card num">
+    <div class="tot"><span class="m">المجموع الفرعي</span><span>$79.00</span></div>
+    <div class="tot"><span class="m">رسوم التوصيل</span><span class="row" style="gap:4px">$4.00 ${ic('edit','sm')}</span></div>
+    <div class="tot grand"><span>المجموع عند الاستلام</span><span>$83.00</span></div>
+    <div class="xs" style="text-align:end">≈ 7,428,500 ل.ل. على سعر 89,500</div>
+  </div>
+</div>
+<div class="footer"><button class="btn primary">تأكيد الطلب · <span dir="ltr">$83.00</span></button><div class="xs" style="text-align:center">يُحجز المخزون للقطعتين معاً أو لا يُحجز شيء.</div></div>`,'rtl');
+
+scr('21 · قائمة التجهيز','Picklist in Arabic.',`
+${bar('تجهيز #1042',{back:1,sub:'رنا خوري · الأشرفية'})}
+<div class="body">
+  <div><div class="between xs" style="margin-bottom:4px"><span class="t">تم التحقق من 1 من 3</span><span>طرد واحد</span></div><div class="prog"><i style="width:33%"></i></div></div>
+  <div class="card" style="border-color:var(--accent)">
+    <div class="row"><div class="th lg c1">JN</div><div class="grow"><div class="t" style="font-size:16px">جينز أزرق ضيّق</div><div class="m num" dir="ltr" style="text-align:end">JN-SLIM-BLU-32</div>${Aa}</div><button class="checkbtn on" aria-label="تم التحقق" aria-pressed="true">${ic('check','lg')}</button></div>
+    <div class="attr"><div><span class="xs">المقاس</span><b>32</b></div><div><span class="xs">اللون</span><b>أزرق</b></div><div><span class="xs">الكمية</span><b class="num" dir="ltr">×1</b></div></div>
+  </div>
+  <div class="card">
+    <div class="row"><div class="th lg c2">SH</div><div class="grow"><div class="t" style="font-size:16px">قميص كتان</div><div class="m num" dir="ltr" style="text-align:end">SH-LIN-WHT-L</div>${Ba}</div><button class="checkbtn" aria-label="تحقق" aria-pressed="false">${ic('check','lg')}</button></div>
+    <div class="attr"><div><span class="xs">المقاس</span><b>L</b></div><div><span class="xs">اللون</span><b>أبيض</b></div><div><span class="xs">الكمية</span><b class="num" dir="ltr">×1</b></div></div>
+  </div>
+  <div class="card">
+    <div class="row"><div class="th lg">+</div><div class="grow"><div class="t" style="font-size:16px">تغليف هدية</div><div class="m">منتج خاص — لا شيء يُؤخذ من الرف</div></div><button class="checkbtn" aria-label="تم" aria-pressed="false">${ic('check','lg')}</button></div>
+  </div>
+</div>
+<div class="footer"><button class="btn primary" disabled>تم التجهيز — تحقق من سطرين</button><button class="btn danger">${ic('flag')} تبليغ عن مشكلة</button></div>`,'rtl');
+
+/* ================= WhatsApp inbox (M3.5) ================= */
+add('WhatsApp inbox (M3.5)','After the BOS Social beta, for store numbers approved on the official WhatsApp Cloud API. Chats live inside the Sales tab, so the bottom navigation stays at five. Numbers that are not approved keep the copy / open-in-WhatsApp flow from screen 06.');
+
+const composer=(ph,lang)=>`<div class="composer"><button class="iconbtn" aria-label="${lang==='ar'?'إرفاق':'Attach'}">${ic('clip')}</button><div class="input ph">${ph}</div><button class="sendbtn" aria-label="${lang==='ar'?'إرسال':'Send'}">${ic('send','flip')}</button></div>`;
+const thread=`
+    <span class="day">TODAY</span>
+    <div class="bub in" dir="auto">مرحبا، عندكن الجينز الأزرق مقاس 32؟<span class="meta">14:21</span></div>
+    <div class="bub in photo"><div>${ic('image','lg')}</div><span class="meta">14:21</span></div>
+    <div class="bub out" dir="auto">أهلا رنا، إي موجود، آخر قطعة<span class="meta">14:23 · Dana</span></div>
+    <div class="bub in" dir="auto">تمام، وبدي كمان القميص الكتان الأبيض L، مع تغليف هدية<span class="meta">14:24</span></div>
+    <div class="bub in" dir="auto">التوصيل عالأشرفية، ساحة ساسين<span class="meta">14:25</span></div>`;
+
+scr('22 · Chats','The Sales tab gains a Chats list covering every connected store number. Each chat shows which number it came in on and whether it already has a draft or an order.',`
+${bar('Sales',{act:ib('search','Search chats')})}
+<div class="body">
+  <div class="seg"><span class="on">Chats · 5</span><span>Drafts · 2</span></div>
+  <div class="pills"><span class="pill on">All numbers</span><span class="pill">Store A</span><span class="pill">Store B</span><span class="pill">Unread</span></div>
+  <div class="card"><div class="list">
+    ${[['RK','Rana Khoury','التوصيل عالأشرفية، ساحة ساسين','14:25',A,'<span class="badge num">3</span>',''],
+       ['MH','Maya Haddad','Photo','14:10',B,'<span class="badge num">1</span>','<span class="chip warn">Draft</span>'],
+       ['KF','Karim Fares','You: Total on delivery is $64.00','13:52',A,'','<span class="chip ok">Order #1041</span>'],
+       ['ZN','Ziad Nassar','شكرا وصلت الطلبية','Yesterday',B,'','<span class="chip ok">Order #1036</span>'],
+       ['+9','+961 76 000 333','في عندكن توصيل لطرابلس؟','Sun',A,'','<span class="chip">Replies closed</span>']].map(c=>`
+    <div class="li" style="align-items:flex-start"><div class="av">${c[0]}</div><div class="grow"><div class="between"><span class="t">${c[1]}</span><span class="xs num">${c[3]}</span></div><div class="m" dir="auto" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c[2]}</div><div class="between" style="margin-top:4px"><span class="row" style="gap:6px">${c[4]}${c[6]}</span>${c[5]}</div></div></div>`).join('')}
+  </div></div>
+</div>${nav(0)}`);
+
+scr('23 · Chat','Read and reply without leaving BOS. The bar above the keyboard is the whole point: one tap starts an order for this customer.',`
+${bar('Rana Khoury',{back:1,sub:'Store A number · replies open 21 h',act:ib('user','Customer details')})}
+<div class="body"><div class="chat">${thread}</div></div>
+<div class="strip"><div class="grow"><div class="t">No order yet</div><div class="xs">3 previous orders</div></div><button class="btn primary sm">${ic('cart')} Create order</button></div>
+${composer('Message','en')}`);
+
+scr('24 · Create order from chat','Phone and source store come from the chat, so step 1 of the old flow disappears. Products are added over the conversation; stock rules are unchanged.',`
+${bar('Rana Khoury',{back:1,sub:'Store A number'})}
+<div class="body"><div class="chat">${thread}</div></div>
+<div class="sheet-dim"></div>
+<div class="sheet" role="dialog" aria-label="Create order">
+  <div class="grab"></div>
+  <div class="between"><div><div class="t" style="font-size:16px">Order for Rana Khoury</div><div class="row" style="gap:6px;margin-top:2px;flex-wrap:wrap"><span class="chip ok">${ic('check','sm')} +961 71 000 222</span><span class="chip ok">${ic('check','sm')} WhatsApp · Store A</span></div></div><button class="iconbtn" aria-label="Close">${ic('x')}</button></div>
+  <div class="input ph">${ic('search')}<span>Add product by name or SKU</span></div>
+  <div class="list">
+    <div class="li"><div class="th c1">JN</div><div class="grow"><div class="t">Slim blue jeans</div><div class="m">32 · Blue</div>${A}</div><div class="t num">$45.00</div></div>
+    <div class="li"><div class="th c2">SH</div><div class="grow"><div class="t">Linen shirt</div><div class="m">L · White</div>${B}</div><div class="t num">$32.00</div></div>
+    <div class="li"><div class="th">+</div><div class="grow"><div class="t">Gift wrapping</div><div class="m">Custom item</div></div><div class="t num">$2.00</div></div>
+  </div>
+  <div class="field"><label>Deliver to</label><div class="input between"><span>Achrafieh, Sassine Sq. — saved address</span>${ic('edit','sm')}</div></div>
+  <div class="between num"><span class="m">3 items + $4.00 delivery</span><span class="t" style="font-size:16px">$83.00 COD</span></div>
+  <button class="btn primary">Review and confirm</button>
+  <div class="xs" style="text-align:center">Saved as a draft on this chat until confirmed.</div>
+</div>`);
+
+scr('25 · Confirmation sent from BOS','After confirming, the order summary is sent into the chat by BOS and the chat stays linked to the order.',`
+${bar('Rana Khoury',{back:1,sub:'Store A number · replies open 21 h',act:ib('user','Customer details')})}
+<div class="body"><div class="chat">
+    <div class="bub in" dir="auto">التوصيل عالأشرفية، ساحة ساسين<span class="meta">14:25</span></div>
+    <div class="bub out"><div class="ordercard"><div class="t">Order #1042 confirmed</div><div class="m">Slim blue jeans — 32 / Blue<br>Linen shirt — L / White<br>Gift wrapping</div><div class="t num" style="margin-top:4px">Total on delivery $83.00</div></div><span class="meta">14:33 · sent by BOS · delivered</span></div>
+    <div class="bub in" dir="auto">تمام شكرا<span class="meta">14:34</span></div>
+</div></div>
+<div class="strip"><div class="grow"><div class="t num">Order #1042 · $83.00</div><div class="row" style="gap:6px"><span class="chip ok">Confirmed</span><span class="chip">To pack</span></div></div><button class="btn ghost sm">View</button></div>
+${composer('Message','en')}`);
+
+scr('26 · Replies closed — template only','WhatsApp allows free-text replies only within 24 hours of the customer’s last message. After that the keyboard is replaced by approved templates, with the cost made visible.',`
+${bar('Ziad Nassar',{back:1,sub:'Store B number',act:ib('user','Customer details')})}
+<div class="body"><div class="chat">
+    <span class="day">SUN 8 NOV</span>
+    <div class="bub out"><div class="ordercard"><div class="t">Order #1036 confirmed</div><div class="t num">Total on delivery $86.00</div></div><span class="meta">11:02 · sent by BOS</span></div>
+    <div class="bub in" dir="auto">شكرا<span class="meta">11:05</span></div>
+</div>
+  <div class="banner warn">${ic('clock','sm')}<span>Replies closed. Ziad last wrote more than 24 hours ago, so only an approved template can be sent.</span></div>
+</div>
+<div class="footer">
+  <div class="label">Choose a template</div>
+  <div class="list" role="radiogroup">
+    <div class="li" role="radio" aria-checked="true"><span class="radio on"></span><div class="grow"><div class="t">Out for delivery</div><div class="m">“Your order #1036 is on its way today…”</div></div></div>
+    <div class="li" role="radio" aria-checked="false"><span class="radio"></span><div class="grow"><div class="t">Delivery failed — reschedule</div><div class="m">“We could not reach you for order…”</div></div></div>
+    <div class="li" role="radio" aria-checked="false"><span class="radio"></span><div class="grow"><div class="t">Back in stock</div><div class="m">“The item you asked about is available…”</div></div></div>
+  </div>
+  <button class="btn primary">${ic('send','flip')} Send template</button>
+  <div class="xs" style="text-align:center">Template messages are charged by Meta.</div>
+</div>`);
+
+scr('27 · WhatsApp numbers','Under More → Setup. Each store number is connected separately; one that is not approved simply stays on the copy / open flow.',`
+${bar('WhatsApp numbers',{back:1})}
+<div class="body">
+  <div class="card">
+    <div class="between"><div class="row">${ic('chat')}<div><div class="t num">+961 70 000 111</div><div class="row">${A}</div></div></div><span class="chip ok">${ic('check','sm')} Connected</span></div>
+    <div class="m" style="margin-top:8px">Chats appear in BOS. The WhatsApp Business app keeps working on this phone.</div>
+    <div class="dims" style="margin-top:8px"><div><span class="xs">Chats this month</span><div class="t num">412</div></div><div><span class="xs">Meta charges</span><div class="t num">$6.40</div></div></div>
+  </div>
+  <div class="card">
+    <div class="between"><div class="row">${ic('chat')}<div><div class="t num">+961 76 000 444</div><div class="row">${B}</div></div></div><span class="chip warn">${ic('clock','sm')} Meta review</span></div>
+    <div class="m" style="margin-top:8px">Not connected yet. Sales for this number use copy / open in WhatsApp until Meta approves it.</div>
+    <button class="btn ghost" style="margin-top:8px">Check status</button>
+  </div>
+  <div class="card"><div class="label">Who can see chats</div><div class="list">
+    <div class="li"><div class="grow"><div class="t">Sales agents</div><div class="m">Only numbers of their stores</div></div><span class="chip ok">On</span></div>
+    <div class="li"><div class="grow"><div class="t">Packing agents</div><div class="m">No access to conversations</div></div><span class="chip">Off</span></div>
+  </div></div>
+  <div class="banner info">${ic('info','sm')}<span>BOS connects only through the official WhatsApp Cloud API.</span></div>
+</div>
+<div class="footer"><button class="btn primary">${ic('plus')} Connect a number</button></div>`);
+
+scr('28 · المحادثة','Chat in Arabic.',`
+${bar('رنا خوري',{back:1,sub:'رقم المتجر أ · الرد متاح لـ 21 ساعة',act:ib('user','تفاصيل الزبون')})}
+<div class="body"><div class="chat">
+    <span class="day">اليوم</span>
+    <div class="bub in">مرحبا، عندكن الجينز الأزرق مقاس 32؟<span class="meta">14:21</span></div>
+    <div class="bub in photo"><div>${ic('image','lg')}</div><span class="meta">14:21</span></div>
+    <div class="bub out">أهلا رنا، إي موجود، آخر قطعة<span class="meta">14:23 · دانا</span></div>
+    <div class="bub in">تمام، وبدي كمان القميص الكتان الأبيض L، مع تغليف هدية<span class="meta">14:24</span></div>
+    <div class="bub in">التوصيل عالأشرفية، ساحة ساسين<span class="meta">14:25</span></div>
+</div></div>
+<div class="strip"><div class="grow"><div class="t">لا يوجد طلب بعد</div><div class="xs">3 طلبات سابقة</div></div><button class="btn primary sm">${ic('cart')} إنشاء طلب</button></div>
+${composer('اكتب رسالة','ar')}`,'rtl');
+
+document.getElementById('out').innerHTML=S.map(s=>`<h2 class="sec">${s.sec}</h2><p class="sec-sub">${s.sub}</p><div class="grid">${s.items.map(i=>`<figure>${i.html}<figcaption><b>${i.name}</b>${i.cap}</figcaption></figure>`).join('')}</div>`).join('');
+
+document.getElementById('themeBtn').addEventListener('click',()=>{
+  const r=document.documentElement;
+  const dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme=dark?'light':'dark';
+});
+</script>
+</body>
+</html>

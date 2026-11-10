@@ -1,0 +1,38 @@
+[project]
+name = "bos-backend"
+version = "0.1.0"
+description = "BOS — Beta Orders Solutions API"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "flask>=3.1",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14",
+    "psycopg[binary]>=3.2",
+    "argon2-cffi>=23.1",
+    "phonenumbers>=8.13",
+    "pillow>=11.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "openapi-core>=0.19",
+    "pyyaml>=6.0",
+    "types-pyyaml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["app"]
+
+[[tool.mypy.overrides]]
+module = ["phonenumbers.*", "argon2.*"]
+ignore_missing_imports = true

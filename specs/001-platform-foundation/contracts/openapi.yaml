@@ -1,0 +1,611 @@
+openapi: 3.1.0
+info:
+  title: BOS API — Platform Foundation (M0)
+  version: 0.2.0
+  description: |
+    Contract for milestone M0, revision 2 (one business per user; review fixes of 2026-11-10).
+    All paths are under /api/v1 on the same origin as the web app.
+
+    Conventions
+    - Authentication: opaque session cookie `bos_session` (business users) or
+      `bos_ops_session` (operators). HttpOnly, Secure, SameSite=Lax.
+    - Every POST, PUT, PATCH and DELETE requires the header `X-BOS-CSRF: 1`.
+    - One-time link tokens are never part of a URL path or query string sent to the API;
+      they travel in the request body. Web pages carry them in the URL fragment
+      (`/activate#<token>`), which browsers do not send to servers, so tokens never appear
+      in request logs.
+    - Endpoints marked "Idempotent" accept `Idempotency-Key`. A repeat with the same body
+      returns the same resource; where the first response contained a one-time link, the
+      repeat issues a fresh link and invalidates the earlier one. The same key with a
+      different body returns 409 `idempotency_conflict`.
+    - Records outside the caller's business or permitted stores return 404 `not_found`,
+      identical to a record that does not exist. A visible record without the needed
+      permission returns 403 `forbidden`.
+    - Errors: `{ "error": { "code": string, "message": string, "fields": {name: code} } }`.
+      `code` values are stable; the web app translates them.
+    - Timestamps are ISO 8601 in UTC. Money is a decimal string with a separate currency.
+servers:
+  - url: /api/v1
+
+tags:
+  - name: system
+  - name: auth
+  - name: me
+  - name: business
+  - name: stores
+  - name: staff
+  - name: audit
+  - name: ops
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: Liveness check (public)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { status: { const: ok } } } } } }
+
+  /auth/sign-in:
+    post:
+      tags: [auth]
+      summary: Sign in with phone or email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignInRequest' }
+      responses:
+        '200': { description: Signed in; session cookie set, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '401': { description: "`invalid_credentials` — identical body for unknown identifier, wrong password, inactive user and locked identifier" }
+        '403': { description: "`business_suspended` or `business_pending` — only returned after correct credentials" }
+  /auth/sign-out:
+    post:
+      tags: [auth]
+      summary: End the current session
+      responses:
+        '204': { description: Signed out }
+  /auth/password-reset/request:
+    post:
+      tags: [auth]
+      summary: Request a reset link by email
+      description: Always returns 204, whether or not the email exists. Limited to 3 requests per address per hour; excess requests still return 204 and send nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+      responses:
+        '204': { description: Accepted }
+  /auth/password-reset/complete:
+    post:
+      tags: [auth]
+      summary: Set a new password using a reset link; ends all of the user's sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenPasswordRequest' }
+      responses:
+        '204': { description: Password changed }
+        '400': { description: "`weak_password`" }
+        '410': { description: "`link_invalid` — expired, used or unknown" }
+  /invitations/preview:
+    post:
+      tags: [auth]
+      summary: Preview an activation or invitation link before accepting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        '200': { description: Preview, content: { application/json: { schema: { $ref: '#/components/schemas/InvitationPreview' } } } }
+        '410': { description: "`link_invalid` — expired, revoked or unknown; `link_already_used` — already accepted (the page then offers sign-in)" }
+  /invitations/accept:
+    post:
+      tags: [auth]
+      summary: Accept an activation or invitation link; creates the user and signs them in
+      description: |
+        The link itself is single-use, so no Idempotency-Key is needed: a second submission
+        returns 410 `link_already_used` and creates nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptInvitationRequest' }
+      responses:
+        '200': { description: Accepted; session cookie set, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '400': { description: "`weak_password`" }
+        '409': { description: "`identifier_unavailable` — the phone number or email cannot be used; ask to be invited with a different one. Reveals nothing else." }
+        '410': { description: "`link_invalid` or `link_already_used`" }
+
+  /me:
+    get:
+      tags: [me]
+      summary: Current user, their business, roles, permissions, stores and visible tabs
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '401': { description: "`unauthenticated`" }
+    patch:
+      tags: [me]
+      summary: Update own name or language; or phone/email with the current password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                locale: { enum: [en, ar] }
+                phone: { type: [string, 'null'] }
+                email: { type: [string, 'null'], format: email }
+                current_password: { type: string, description: Required when phone or email is present }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '400': { description: "`validation_failed` (`phone: invalid_phone`, `identifier: required` when both would be empty) or `wrong_password`" }
+        '409': { description: "`identifier_unavailable`" }
+  /me/password:
+    post:
+      tags: [me]
+      summary: Change own password; ends all other sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [current_password, new_password], properties: { current_password: { type: string }, new_password: { type: string } } }
+      responses:
+        '204': { description: Changed }
+        '400': { description: "`weak_password` or `wrong_password`" }
+  /me/sessions:
+    get:
+      tags: [me]
+      summary: List own signed-in devices
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Session' } } } } }
+    delete:
+      tags: [me]
+      summary: End all own sessions except the current one
+      responses:
+        '204': { description: Ended }
+  /me/sessions/{sessionId}:
+    delete:
+      tags: [me]
+      summary: End one of own sessions
+      parameters: [{ $ref: '#/components/parameters/sessionId' }]
+      responses:
+        '204': { description: Ended }
+        '404': { description: "`not_found`" }
+
+  /business:
+    get:
+      tags: [business]
+      summary: The caller's business and its settings (permission business.view)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Business' } } } }
+    patch:
+      tags: [business]
+      summary: Change name, default currency, exchange rate or default delivery fee (permission settings.manage)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BusinessSettingsUpdate' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Business' } } } }
+        '400': { description: "`validation_failed`" }
+        '403': { description: "`forbidden`" }
+
+  /stores:
+    get:
+      tags: [stores]
+      summary: Stores the caller may access (permission store.view, store-scoped)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Store' } } } } }
+    post:
+      tags: [stores]
+      summary: Add a store (permission store.manage)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreInput' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '400': { description: "`validation_failed` (fields: `whatsapp_number: invalid_phone`)" }
+        '409': { description: "`whatsapp_number_in_use` or `store_name_in_use`" }
+  /stores/{storeId}:
+    patch:
+      tags: [stores]
+      summary: Edit name or WhatsApp number, activate or deactivate (permission store.manage)
+      description: Deactivating returns 409 `confirmation_required` with the affected employees unless `confirm` is true.
+      parameters: [{ $ref: '#/components/parameters/storeId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/StoreInput'
+                - type: object
+                  properties: { status: { enum: [active, inactive] }, confirm: { type: boolean } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '404': { description: "`not_found`" }
+        '409': { description: "`confirmation_required`, `last_active_store`, `whatsapp_number_in_use`, `store_name_in_use`" }
+  /stores/{storeId}/logo:
+    put:
+      tags: [stores]
+      summary: Upload a logo — PNG, JPEG or WebP, at most 2 MB (permission store.manage)
+      parameters: [{ $ref: '#/components/parameters/storeId' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '400': { description: "`file_too_large` or `file_not_image`" }
+    get:
+      tags: [stores]
+      summary: Download the logo (permission store.view, store-scoped)
+      parameters: [{ $ref: '#/components/parameters/storeId' }]
+      responses:
+        '200': { description: Image, content: { image/webp: {} } }
+        '404': { description: "`not_found`" }
+    delete:
+      tags: [stores]
+      summary: Remove the logo (permission store.manage)
+      parameters: [{ $ref: '#/components/parameters/storeId' }]
+      responses:
+        '204': { description: Removed }
+
+  /staff:
+    get:
+      tags: [staff]
+      summary: Employees, plus pending and expired invitations (permission staff.view)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StaffList' } } } }
+  /staff/invitations:
+    post:
+      tags: [staff]
+      summary: Invite a person (permission staff.manage; Idempotent)
+      description: Returns the invitation link once. Including `owner` in roles requires staff.manage_owners.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InviteRequest' }
+      responses:
+        '201': { description: Invited, content: { application/json: { schema: { $ref: '#/components/schemas/InviteResult' } } } }
+        '400': { description: "`validation_failed` (for example `stores: required`, `phone: invalid_phone`)" }
+        '403': { description: "`forbidden`" }
+        '409': { description: "`already_member` — the identifier belongs to a user or pending invitation in this business. An identifier used in another business is NOT reported here." }
+  /staff/invitations/{invitationId}/resend:
+    post:
+      tags: [staff]
+      summary: Issue a new link for a pending or expired invitation and invalidate the old one (permission staff.manage)
+      parameters: [{ $ref: '#/components/parameters/invitationId' }]
+      responses:
+        '201': { description: New link, content: { application/json: { schema: { $ref: '#/components/schemas/InviteResult' } } } }
+        '404': { description: "`not_found`" }
+        '409': { description: "`invitation_closed` — already accepted or revoked" }
+  /staff/invitations/{invitationId}:
+    delete:
+      tags: [staff]
+      summary: Revoke a pending invitation (permission staff.manage)
+      parameters: [{ $ref: '#/components/parameters/invitationId' }]
+      responses:
+        '204': { description: Revoked }
+        '404': { description: "`not_found`" }
+        '409': { description: "`invitation_closed` — already accepted, revoked or expired" }
+  /staff/{userId}:
+    patch:
+      tags: [staff]
+      summary: Change an employee's roles, stores or active status (permission staff.manage)
+      description: Takes effect on the employee's next request. Setting inactive ends all their sessions.
+      parameters: [{ $ref: '#/components/parameters/userId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StaffUpdate' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StaffMember' } } } }
+        '403': { description: "`forbidden` — a manager changing an owner or granting owner; `cannot_modify_self`" }
+        '404': { description: "`not_found`" }
+        '409': { description: "`last_owner`" }
+  /staff/{userId}/password-reset:
+    post:
+      tags: [staff]
+      summary: Issue a single-use reset link for an employee (permission staff.manage)
+      description: Ends the employee's sessions when the link is used. Recorded in history.
+      parameters: [{ $ref: '#/components/parameters/userId' }]
+      responses:
+        '201': { description: Link, content: { application/json: { schema: { $ref: '#/components/schemas/LinkResult' } } } }
+        '403': { description: "`forbidden` — managers cannot reset an owner; `cannot_modify_self` (use change password)" }
+        '404': { description: "`not_found`" }
+
+  /audit:
+    get:
+      tags: [audit]
+      summary: History for the caller's business, newest first (permission audit.view)
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: event, in: query, schema: { type: string } }
+        - { name: actor_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AuditPage' } } } }
+
+  /ops/auth/sign-in:
+    post:
+      tags: [ops]
+      summary: Operator sign-in (email and password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } }
+      responses:
+        '200': { description: Signed in; operator cookie set, content: { application/json: { schema: { $ref: '#/components/schemas/OpsMe' } } } }
+        '401': { description: "`invalid_credentials`" }
+  /ops/auth/sign-out:
+    post:
+      tags: [ops]
+      summary: Operator sign-out
+      responses:
+        '204': { description: Signed out }
+  /ops/me:
+    get:
+      tags: [ops]
+      summary: Current operator
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OpsMe' } } } }
+        '401': { description: "`unauthenticated`" }
+  /ops/businesses:
+    get:
+      tags: [ops]
+      summary: List businesses with account-level information only
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/OpsBusiness' } } } } }
+    post:
+      tags: [ops]
+      summary: Set up a business with its first store and owner invitation (Idempotent)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OpsBusinessCreate' }
+      responses:
+        '201': { description: Created; activation link returned once, content: { application/json: { schema: { $ref: '#/components/schemas/OpsBusinessCreated' } } } }
+        '400': { description: "`validation_failed`" }
+        '409': { description: "`identifier_unavailable` — the owner's phone or email already belongs to a BOS user; `idempotency_conflict`" }
+  /ops/businesses/{businessId}:
+    patch:
+      tags: [ops]
+      summary: Suspend or reactivate a business
+      parameters: [{ $ref: '#/components/parameters/businessId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [status], properties: { status: { enum: [active, suspended] } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OpsBusiness' } } } }
+        '404': { description: "`not_found`" }
+        '409': { description: "`business_pending` — a business whose owner has not activated can be neither suspended nor set active" }
+  /ops/businesses/{businessId}/owner-activation:
+    post:
+      tags: [ops]
+      summary: Resend the owner activation link (pending or expired)
+      parameters: [{ $ref: '#/components/parameters/businessId' }]
+      responses:
+        '201': { description: New link, content: { application/json: { schema: { $ref: '#/components/schemas/LinkResult' } } } }
+        '409': { description: "`invitation_closed` — owner already activated" }
+  /ops/businesses/{businessId}/owner-password-reset:
+    post:
+      tags: [ops]
+      summary: Issue a single-use password-reset link for one owner who has no email
+      description: Recorded in the business's own history, visible to its owners.
+      parameters: [{ $ref: '#/components/parameters/businessId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [owner_user_id], properties: { owner_user_id: { type: string, format: uuid } } }
+      responses:
+        '201': { description: Link, content: { application/json: { schema: { $ref: '#/components/schemas/LinkResult' } } } }
+        '404': { description: "`not_found` — no such active owner in this business" }
+        '409': { description: "`owner_has_email` — the owner must use the email reset instead" }
+
+components:
+  parameters:
+    sessionId: { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    storeId: { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+    userId: { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    invitationId: { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
+    businessId: { name: businessId, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    Role: { enum: [owner, manager, sales, packing, dispatch] }
+    Currency: { enum: [USD, LBP] }
+    Money: { type: string, pattern: '^\d+(\.\d{1,2})?$', description: Decimal string }
+    SignInRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier: { type: string, description: Phone number in any common format, or email }
+        password: { type: string }
+    TokenPasswordRequest:
+      type: object
+      required: [token, new_password]
+      properties: { token: { type: string }, new_password: { type: string, minLength: 10 } }
+    AcceptInvitationRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token: { type: string }
+        password: { type: string, minLength: 10 }
+        locale: { enum: [en, ar] }
+    InvitationPreview:
+      type: object
+      description: Only what the inviter entered; nothing looked up from elsewhere.
+      properties:
+        kind: { enum: [owner_activation, employee] }
+        business_name: { type: string }
+        invitee_name: { type: string }
+        roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
+        expires_at: { type: string, format: date-time }
+    BusinessRef:
+      type: object
+      properties: { id: { type: string, format: uuid }, name: { type: string }, edition: { enum: [social, commerce] } }
+    Me:
+      type: object
+      properties:
+        user:
+          type: object
+          properties: { id: { type: string, format: uuid }, name: { type: string }, phone: { type: [string, 'null'] }, email: { type: [string, 'null'] }, locale: { enum: [en, ar] }, roles: { type: array, items: { $ref: '#/components/schemas/Role' } } }
+        business: { $ref: '#/components/schemas/BusinessRef' }
+        permissions: { type: array, items: { type: string } }
+        all_stores: { type: boolean }
+        stores: { type: array, items: { $ref: '#/components/schemas/Store' } }
+        tabs: { type: array, items: { enum: [sales, packing, delivery, orders, more] } }
+        start_tab: { enum: [sales, packing, delivery, orders, more] }
+    Session:
+      type: object
+      properties: { id: { type: string, format: uuid }, device: { type: string }, last_seen_at: { type: string, format: date-time }, current: { type: boolean } }
+    Business:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        edition: { enum: [social, commerce] }
+        default_currency: { $ref: '#/components/schemas/Currency' }
+        usd_lbp_rate: { $ref: '#/components/schemas/Money' }
+        default_delivery_fee: { $ref: '#/components/schemas/Money' }
+        default_delivery_fee_currency: { $ref: '#/components/schemas/Currency' }
+        timezone: { const: Asia/Beirut }
+    BusinessSettingsUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        default_currency: { $ref: '#/components/schemas/Currency' }
+        usd_lbp_rate: { $ref: '#/components/schemas/Money' }
+        default_delivery_fee: { $ref: '#/components/schemas/Money' }
+        default_delivery_fee_currency: { $ref: '#/components/schemas/Currency' }
+    Store:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        whatsapp_number: { type: [string, 'null'], description: E.164 }
+        has_logo: { type: boolean }
+        status: { enum: [active, inactive] }
+    StoreInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        whatsapp_number: { type: [string, 'null'] }
+    StaffMember:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        name: { type: string }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
+        all_stores: { type: boolean }
+        store_ids: { type: array, items: { type: string, format: uuid } }
+        status: { enum: [active, inactive] }
+    StaffInvitation:
+      type: object
+      properties:
+        invitation_id: { type: string, format: uuid }
+        name: { type: string }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
+        all_stores: { type: boolean }
+        store_ids: { type: array, items: { type: string, format: uuid } }
+        status: { enum: [pending, expired] }
+        expires_at: { type: string, format: date-time }
+    StaffList:
+      type: object
+      properties:
+        members: { type: array, items: { $ref: '#/components/schemas/StaffMember' } }
+        invitations: { type: array, items: { $ref: '#/components/schemas/StaffInvitation' } }
+    InviteRequest:
+      type: object
+      required: [name, roles]
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        email: { type: string, format: email }
+        roles: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Role' } }
+        all_stores: { type: boolean }
+        store_ids: { type: array, items: { type: string, format: uuid } }
+      description: At least one of phone or email. Owners and managers always get all stores; other roles need all_stores or at least one store.
+    StaffUpdate:
+      type: object
+      properties:
+        roles: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Role' } }
+        all_stores: { type: boolean }
+        store_ids: { type: array, items: { type: string, format: uuid } }
+        status: { enum: [active, inactive] }
+    LinkResult:
+      type: object
+      properties: { link: { type: string, description: Shown once; not retrievable later }, expires_at: { type: string, format: date-time } }
+    InviteResult:
+      allOf:
+        - $ref: '#/components/schemas/LinkResult'
+        - type: object
+          properties: { invitation: { $ref: '#/components/schemas/StaffInvitation' } }
+    AuditPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              at: { type: string, format: date-time }
+              event: { type: string }
+              actor_type: { enum: [user, operator, system, anonymous] }
+              actor_name: { type: [string, 'null'] }
+              target: { type: [string, 'null'] }
+              data: { type: object }
+        next_cursor: { type: [string, 'null'] }
+    OpsMe:
+      type: object
+      properties: { id: { type: string, format: uuid }, name: { type: string }, email: { type: string } }
+    OpsOwner:
+      type: object
+      properties: { user_id: { type: string, format: uuid }, name: { type: string }, contact: { type: string }, has_email: { type: boolean } }
+    OpsBusiness:
+      type: object
+      description: Account-level information only (FR-005c)
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        edition: { enum: [social, commerce] }
+        status: { enum: [pending, active, suspended] }
+        is_demo: { type: boolean }
+        owners: { type: array, items: { $ref: '#/components/schemas/OpsOwner' } }
+        pending_owner_contact: { type: [string, 'null'], description: Set while the first owner has not activated }
+        store_count: { type: integer }
+        user_count: { type: integer }
+        created_at: { type: string, format: date-time }
+    OpsBusinessCreate:
+      type: object
+      required: [business_name, store_name, edition, usd_lbp_rate, owner_name]
+      properties:
+        business_name: { type: string }
+        store_name: { type: string }
+        edition: { enum: [social, commerce] }
+        default_currency: { $ref: '#/components/schemas/Currency' }
+        usd_lbp_rate: { $ref: '#/components/schemas/Money' }
+        owner_name: { type: string }
+        owner_phone: { type: string }
+        owner_email: { type: string, format: email }
+      description: At least one of owner_phone or owner_email.
+    OpsBusinessCreated:
+      allOf:
+        - $ref: '#/components/schemas/LinkResult'
+        - type: object
+          properties: { business: { $ref: '#/components/schemas/OpsBusiness' } }

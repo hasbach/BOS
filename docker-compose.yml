@@ -1,0 +1,71 @@
+name: bos
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      BOS_APP_DB_USER: ${BOS_APP_DB_USER}
+      BOS_APP_DB_PASSWORD: ${BOS_APP_DB_PASSWORD}
+      BOS_TEST_DB: ${BOS_TEST_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Not on 5432: other software on this machine may already use it. This computer only.
+    ports:
+      - "127.0.0.1:${BOS_DB_PORT:-55432}:5432"
+
+  api:
+    build: ./backend
+    env_file: .env
+    environment:
+      BOS_DATABASE_URL: postgresql+psycopg://${BOS_APP_DB_USER}:${BOS_APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}
+      BOS_MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      BOS_TEST_DATABASE_URL: postgresql+psycopg://${BOS_APP_DB_USER}:${BOS_APP_DB_PASSWORD}@db:5432/${BOS_TEST_DB}
+      BOS_TEST_MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${BOS_TEST_DB}
+      BOS_UPLOAD_DIR: /data/uploads
+      BOS_SPECS_DIR: /srv/specs
+      FLASK_APP: app:create_app
+    command: flask run --host 0.0.0.0 --port 8000 --debug
+    volumes:
+      - ./backend:/srv/backend
+      # Contracts are the source of truth that tests check the code against.
+      - ./specs:/srv/specs:ro
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    # No host port: the web app forwards /api/v1 to this service.
+
+  web:
+    build: ./frontend
+    environment:
+      BOS_API_INTERNAL_URL: http://api:8000
+      WATCHPACK_POLLING: "true"
+    command: npm run dev
+    volumes:
+      - ./frontend:/srv/frontend
+      - web_node_modules:/srv/frontend/node_modules
+      - web_next:/srv/frontend/.next
+    depends_on:
+      - api
+    ports:
+      - "${BOS_WEB_BIND:-127.0.0.1}:${BOS_WEB_PORT:-3000}:3000"
+
+  mail:
+    image: axllent/mailpit
+    ports:
+      - "127.0.0.1:${BOS_MAIL_UI_PORT:-8025}:8025"
+
+volumes:
+  db_data:
+  uploads:
+  web_node_modules:
+  web_next:
