@@ -45,6 +45,10 @@ def create_app(config: Config | None = None) -> Flask:
     def health() -> ResponseReturnValue:
         return jsonify({"status": "ok"})
 
+    from app.api import register_blueprints
+
+    register_blueprints(app)
+
     from app.cli import register_cli
 
     register_cli(app)

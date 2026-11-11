@@ -115,6 +115,17 @@ class Mailer:
             log.exception("could not record an email attempt: purpose=%s", purpose)
 
 
+MAILER_EXTENSION = "bos_mailer"
+
+
+def get_mailer(app: Flask) -> Mailer:
+    """The application's mailer: one set in ``app.extensions`` (tests), else SMTP from config."""
+    mailer = app.extensions.get(MAILER_EXTENSION)
+    if isinstance(mailer, Mailer):
+        return mailer
+    return Mailer.for_app(app)
+
+
 def _ehlo_name(config: Config) -> str:
     # The name BOS greets the SMTP server with. Given explicitly because smtplib would
     # otherwise look up this machine's own name, which can take longer than the timeout.

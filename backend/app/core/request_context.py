@@ -12,6 +12,8 @@
 6. After the view: commit if the response status is below 400, otherwise roll back. The
    transaction is always closed, which also forgets the tenant context, so nothing leaks to
    the next request that reuses the pooled connection.
+7. Only after a successful commit, callbacks registered with ``on_commit`` run (for
+   example sending an email), so nothing leaves the system for work that was rolled back.
 
 Operators exist only under ``/api/v1/ops/``; business users never do. A session of the
 wrong kind for an area gets 404 ``not_found``, so neither area reveals the other.
@@ -21,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal, NoReturn
 
@@ -108,6 +111,19 @@ def request_db() -> Session:
     if not isinstance(db, Session):
         raise RuntimeError("this request has no transaction (public route?)")
     return db
+
+
+def on_commit(callback: Callable[[], object]) -> None:
+    """Run ``callback`` once this request's transaction has committed (signed-in requests).
+
+    For effects outside the database, such as sending an email: they must never happen for
+    work that is then rolled back. Callbacks run in the order given, only after a successful
+    commit, never after a rollback. A callback that fails is logged and does not change the
+    response (the database work is already saved).
+    """
+    request_db()  # only requests with a transaction have a commit to wait for
+    callbacks: list[Callable[[], object]] = g.setdefault("on_commit", [])
+    callbacks.append(callback)
 
 
 def not_found_in_tenant(
@@ -338,11 +354,14 @@ def _revoke(record: SessionRecord) -> None:
 
 def _after(response: Response) -> Response:
     db = g.pop("db", None)
+    callbacks: list[Callable[[], object]] = g.pop("on_commit", [])
     if db is None:
         return response
+    committed = False
     try:
         if response.status_code < 400:
             db.commit()
+            committed = True
         else:
             db.rollback()
     except Exception:
@@ -351,10 +370,21 @@ def _after(response: Response) -> Response:
         response.status_code = 500
     finally:
         db.close()
+    if committed:
+        _run_after_commit(callbacks)
     return response
 
 
+def _run_after_commit(callbacks: list[Callable[[], object]]) -> None:
+    for callback in callbacks:
+        try:
+            callback()
+        except Exception:
+            log.exception("a callback run after commit failed")
+
+
 def _teardown(exc: BaseException | None) -> None:
+    g.pop("on_commit", None)  # never run for a request that did not finish normally
     db = g.pop("db", None)
     if db is not None:
         db.close()  # rolls back anything not committed

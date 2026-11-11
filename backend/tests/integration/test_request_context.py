@@ -24,7 +24,12 @@ from app.config import Config
 from app.core import sessions
 from app.core.db import engine_of, get_engine, transaction
 from app.core.permissions import authenticated, operator_only, public, require
-from app.core.request_context import current_operator, current_user, not_found_in_tenant
+from app.core.request_context import (
+    current_operator,
+    current_user,
+    not_found_in_tenant,
+    on_commit,
+)
 from app.errors import ApiError
 from tests.dbsupport import TwoTenants, World
 
@@ -147,13 +152,53 @@ def _add_test_routes(app: Flask) -> None:
     def no_policy() -> ResponseReturnValue:
         raise AssertionError("a view without a policy must never run")
 
+    @app.post("/api/v1/_t/after-commit")
+    @authenticated(self_only=True)
+    def after_commit() -> ResponseReturnValue:
+        body: dict[str, Any] = request.get_json()
+        name = body["store"]
+        g.db.execute(
+            text("INSERT INTO stores (id, tenant_id, name) VALUES (:id, :t, :name)"),
+            {"id": uuid.uuid4(), "t": current_user().tenant_id, "name": name},
+        )
+        owner: Engine = app.extensions["test_owner_engine"]
+
+        def saw_the_store() -> None:
+            with owner.connect() as conn:
+                visible = conn.execute(
+                    text("SELECT count(*) FROM stores WHERE name = :n"), {"n": name}
+                ).scalar_one()
+            after_commit_calls.append(f"{name}:{visible}")
+
+        def broken() -> None:
+            after_commit_calls.append("broken")
+            raise RuntimeError("smtp is down")
+
+        if body.get("broken_first"):
+            on_commit(broken)
+        on_commit(saw_the_store)
+        if body.get("then") == "fail":
+            raise ApiError(409, "conflict_for_test")
+        return jsonify(ok=True)
+
+    @app.post("/api/v1/_t/after-commit-public")
+    @public
+    def after_commit_public() -> ResponseReturnValue:
+        on_commit(lambda: None)
+        return jsonify(ok=True)
+
+
+after_commit_calls: list[str] = []
+
 
 @pytest.fixture()
-def app(config: Config, fresh_staffed_tenants: TwoTenants) -> Iterator[Flask]:
+def app(config: Config, fresh_staffed_tenants: TwoTenants, owner_engine: Engine) -> Iterator[Flask]:
     cfg = dataclasses.replace(
         config, operator_emails=frozenset({fresh_staffed_tenants.operator_email})
     )
     application = create_app(cfg)
+    application.extensions["test_owner_engine"] = owner_engine
+    after_commit_calls.clear()
     _add_test_routes(application)
     yield application
     engine_of(application).dispose()
@@ -488,6 +533,48 @@ def test_denial_record_survives_the_rollback_of_the_refused_request(
     assert entry.actor_id == a.user_id
     assert entry.data == {"path": "/api/v1/_t/stores", "method": "POST"}
     assert str(entry.ip) == "127.0.0.1"
+
+
+def test_on_commit_callbacks_run_only_after_the_request_committed(
+    user_client: UserClient, worlds: TwoTenants
+) -> None:
+    response = _as(user_client, worlds.a).post(
+        "/api/v1/_t/after-commit", json={"store": "Mailed"}, headers=CSRF
+    )
+
+    assert response.status_code == 200
+    assert after_commit_calls == ["Mailed:1"]  # the callback already saw the committed row
+
+
+def test_on_commit_callbacks_never_run_when_the_request_rolls_back(
+    user_client: UserClient, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    response = _as(user_client, worlds.a).post(
+        "/api/v1/_t/after-commit", json={"store": "Rolled", "then": "fail"}, headers=CSRF
+    )
+
+    assert response.status_code == 409
+    assert after_commit_calls == []
+    assert "Rolled" not in _store_names(owner_engine, worlds.a.tenant_id)
+
+
+def test_a_failing_on_commit_callback_is_logged_and_does_not_change_the_answer(
+    user_client: UserClient, worlds: TwoTenants, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.ERROR, logger="bos.request_context"):
+        response = _as(user_client, worlds.a).post(
+            "/api/v1/_t/after-commit", json={"store": "Kept", "broken_first": True}, headers=CSRF
+        )
+
+    assert response.status_code == 200
+    assert after_commit_calls == ["broken", "Kept:1"]
+    assert any("after commit" in r.getMessage() for r in caplog.records)
+
+
+def test_on_commit_needs_a_request_transaction(app: Flask) -> None:
+    response = app.test_client().post("/api/v1/_t/after-commit-public", headers=CSRF)
+
+    assert response.status_code == 500
 
 
 def test_view_without_a_declared_policy_never_runs(
