@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bos-web",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/d", "/c", "cd /d frontend && %LOCALAPPDATA%\\bos-dev\\node24\\node.exe node_modules\\next\\dist\\bin\\next dev -H 127.0.0.1 -p 3100"],
+      "port": 3100
+    }
+  ]
+}

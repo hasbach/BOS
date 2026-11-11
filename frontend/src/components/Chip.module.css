@@ -1,0 +1,47 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--fg-2);
+}
+
+.neutral {
+  background: var(--surface-2);
+  color: var(--fg-2);
+}
+
+.ok {
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+}
+
+.warn {
+  background: var(--warn-soft);
+  color: var(--warn-fg);
+}
+
+.bad {
+  background: var(--danger-soft);
+  color: var(--danger-fg);
+}
+
+.info {
+  background: var(--info-soft);
+  color: var(--info-fg);
+}
+
+.storeA {
+  background: var(--storeA-soft);
+  color: var(--storeA-fg);
+}
+
+.storeB {
+  background: var(--storeB-soft);
+  color: var(--storeB-fg);
+}
