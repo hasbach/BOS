@@ -34,7 +34,8 @@ def enter_tenant_from_operator(session: Session, tenant_id: uuid.UUID) -> None:
 
     Only ``app.services.onboarding`` may call this (research R24): setting up a business,
     resending an owner activation and issuing an owner reset link. Each of those records an
-    entry in the tenant's own history.
+    entry in the tenant's own history. The demo seed (``app.services.seed``, run only from
+    the command line) uses the same path to fill the demonstration businesses it creates.
     """
     enter_tenant(session, tenant_id)
 
