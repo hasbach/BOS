@@ -42,7 +42,7 @@ export const ERROR_CODES = [
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
-export const FIELD_ERROR_CODES = ["required", "invalid_phone"] as const;
+export const FIELD_ERROR_CODES = ["required", "invalid_phone", "invalid_email", "invalid", "too_long"] as const;
 export type FieldErrorCode = (typeof FIELD_ERROR_CODES)[number];
 
 export const UNKNOWN_ERROR_KEY = "errors.unknown";

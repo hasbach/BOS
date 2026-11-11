@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 
-import proxy from "@/proxy";
+import proxy, { config } from "@/proxy";
 
 function visit(path: string, acceptLanguage?: string) {
   const headers = new Headers();
@@ -33,5 +33,19 @@ describe("locale redirect on a first visit", () => {
   it("leaves a path that already has a locale alone", async () => {
     const response = await visit("/ar/dev/components", "en");
     expect(response.headers.get("location")).toBeNull();
+  });
+});
+
+// The API sends links without a language ("/activate#token", "/reset#token"); the proxy must see
+// them to add one. A backslash lost in the matcher string once excluded every path but "/".
+describe("which paths the proxy runs on", () => {
+  const matcher = new RegExp(`^${config.matcher[0]}$`);
+
+  it.each(["/", "/activate", "/reset", "/sign-in", "/ops", "/ops/new", "/dev/components"])("runs on %s", (path) => {
+    expect(matcher.test(path)).toBe(true);
+  });
+
+  it.each(["/api/v1/health", "/_next/static/chunk.js", "/favicon.ico", "/logo.png"])("skips %s", (path) => {
+    expect(matcher.test(path)).toBe(false);
   });
 });

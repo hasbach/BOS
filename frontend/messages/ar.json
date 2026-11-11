@@ -51,7 +51,10 @@
   },
   "fieldErrors": {
     "required": "مطلوب",
-    "invalid_phone": "أدخل رقم هاتف صحيحًا"
+    "invalid_phone": "أدخل رقم هاتف صحيحًا",
+    "invalid_email": "أدخل بريدًا إلكترونيًا صحيحًا",
+    "invalid": "هذه القيمة غير صحيحة",
+    "too_long": "النص طويل جدًا"
   },
   "common": {
     "language": "اللغة",

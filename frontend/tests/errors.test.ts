@@ -22,11 +22,14 @@ const OPENAPI = resolve(process.cwd(), "../specs/001-platform-foundation/contrac
 export function codesIn(yaml: string): { errorCodes: Set<string>; fieldCodes: Set<string> } {
   const errorCodes = new Set<string>();
   const fieldCodes = new Set<string>();
-  const responseLine = /^\s*'\d{3}':\s*\{\s*description:\s*"(.*)"/;
+  // Only error responses (4xx and 5xx) carry codes, and a note after an em dash ("`validation_failed`
+  // — malformed `cursor`") names request properties, not codes.
+  const responseLine = /^\s*'[45]\d{2}':\s*\{\s*description:\s*"(.*?)"/;
   for (const line of yaml.split(/\r?\n/)) {
     const match = responseLine.exec(line);
     if (!match?.[1]) continue;
-    for (const token of match[1].matchAll(/`([^`]+)`/g)) {
+    const codesPart = match[1].split(" — ")[0] ?? "";
+    for (const token of codesPart.matchAll(/`([^`]+)`/g)) {
       const text = token[1] ?? "";
       const pair = /^[a-z_]+:\s*([a-z_]+)$/.exec(text);
       if (pair?.[1]) fieldCodes.add(pair[1]);

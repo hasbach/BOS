@@ -51,7 +51,10 @@
   },
   "fieldErrors": {
     "required": "Required",
-    "invalid_phone": "Enter a valid phone number"
+    "invalid_phone": "Enter a valid phone number",
+    "invalid_email": "Enter a valid email address",
+    "invalid": "This value is not valid",
+    "too_long": "Too long"
   },
   "common": {
     "language": "Language",

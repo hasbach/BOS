@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BOS API — Platform Foundation (M0)
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Contract for milestone M0, revision 2 (one business per user; review fixes of 2026-11-10).
     All paths are under /api/v1 on the same origin as the web app.
@@ -25,6 +25,13 @@ info:
     - Errors: `{ "error": { "code": string, "message": string, "fields": {name: code} } }`.
       `code` values are stable; the web app translates them.
     - Timestamps are ISO 8601 in UTC. Money is a decimal string with a separate currency.
+    - Field codes inside `fields` of a 400 `validation_failed`: `required`, `invalid_phone`,
+      `invalid_email`, `invalid` (wrong type, unknown enum value, malformed or out-of-range
+      value) and `too_long`. Field names are the request's own property names.
+    - Every operation that needs a session also answers 401 `unauthenticated` without one;
+      it is not repeated on each operation below.
+    - Sign-out (`/auth/sign-out`, `/ops/auth/sign-out`) needs no valid session and always
+      answers 204, so a user of a suspended business can still sign out.
 servers:
   - url: /api/v1
 
@@ -57,6 +64,7 @@ paths:
             schema: { $ref: '#/components/schemas/SignInRequest' }
       responses:
         '200': { description: Signed in; session cookie set, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '400': { description: "`validation_failed` — identifier or password missing" }
         '401': { description: "`invalid_credentials` — identical body for unknown identifier, wrong password, inactive user and locked identifier" }
         '403': { description: "`business_suspended` or `business_pending` — only returned after correct credentials" }
   /auth/sign-out:
@@ -117,8 +125,9 @@ paths:
       responses:
         '200': { description: Accepted; session cookie set, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
         '400': { description: "`weak_password`" }
+        '403': { description: "`business_suspended` — the business was suspended after the link was sent" }
         '409': { description: "`identifier_unavailable` — the phone number or email cannot be used; ask to be invited with a different one. Reveals nothing else." }
-        '410': { description: "`link_invalid` or `link_already_used`" }
+        '410': { description: "`link_invalid` (also when every invited store has since been deactivated) or `link_already_used`" }
 
   /me:
     get:
@@ -332,7 +341,9 @@ paths:
         - { name: event, in: query, schema: { type: string } }
         - { name: actor_id, in: query, schema: { type: string, format: uuid } }
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AuditPage' } } } }
+        '200': { description: OK (at most 50 entries per page), content: { application/json: { schema: { $ref: '#/components/schemas/AuditPage' } } } }
+        '400': { description: "`validation_failed` — malformed `cursor` or `actor_id`" }
+        '403': { description: "`forbidden` — only owners may read the history" }
 
   /ops/auth/sign-in:
     post:
@@ -345,6 +356,7 @@ paths:
             schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } }
       responses:
         '200': { description: Signed in; operator cookie set, content: { application/json: { schema: { $ref: '#/components/schemas/OpsMe' } } } }
+        '400': { description: "`validation_failed` — email or password missing" }
         '401': { description: "`invalid_credentials`" }
   /ops/auth/sign-out:
     post:
@@ -374,7 +386,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/OpsBusinessCreate' }
       responses:
-        '201': { description: Created; activation link returned once, content: { application/json: { schema: { $ref: '#/components/schemas/OpsBusinessCreated' } } } }
+        '201': { description: "Created; activation link returned once. A repeat with the same Idempotency-Key returns the same business with a fresh link, or without `link` if the owner has already activated.", content: { application/json: { schema: { $ref: '#/components/schemas/OpsBusinessCreated' } } } }
         '400': { description: "`validation_failed`" }
         '409': { description: "`identifier_unavailable` — the owner's phone or email already belongs to a BOS user; `idempotency_conflict`" }
   /ops/businesses/{businessId}:
@@ -389,6 +401,7 @@ paths:
             schema: { type: object, required: [status], properties: { status: { enum: [active, suspended] } } }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OpsBusiness' } } } }
+        '400': { description: "`validation_failed` — status missing or not `active` / `suspended`" }
         '404': { description: "`not_found`" }
         '409': { description: "`business_pending` — a business whose owner has not activated can be neither suspended nor set active" }
   /ops/businesses/{businessId}/owner-activation:
@@ -398,6 +411,7 @@ paths:
       parameters: [{ $ref: '#/components/parameters/businessId' }]
       responses:
         '201': { description: New link, content: { application/json: { schema: { $ref: '#/components/schemas/LinkResult' } } } }
+        '404': { description: "`not_found`" }
         '409': { description: "`invitation_closed` — owner already activated" }
   /ops/businesses/{businessId}/owner-password-reset:
     post:
@@ -412,6 +426,7 @@ paths:
             schema: { type: object, required: [owner_user_id], properties: { owner_user_id: { type: string, format: uuid } } }
       responses:
         '201': { description: Link, content: { application/json: { schema: { $ref: '#/components/schemas/LinkResult' } } } }
+        '400': { description: "`validation_failed` — `owner_user_id` missing or not a UUID" }
         '404': { description: "`not_found` — no such active owner in this business" }
         '409': { description: "`owner_has_email` — the owner must use the email reset instead" }
 

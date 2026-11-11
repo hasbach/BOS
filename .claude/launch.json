@@ -6,6 +6,12 @@
       "runtimeExecutable": "cmd.exe",
       "runtimeArgs": ["/d", "/c", "cd /d frontend && set BOS_API_INTERNAL_URL=http://127.0.0.1:5100&& %LOCALAPPDATA%\\bos-dev\\node24\\node.exe node_modules\\next\\dist\\bin\\next dev -H 127.0.0.1 -p 3100"],
       "port": 3100
+    },
+    {
+      "name": "bos-api",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/d", "/c", "cd /d backend && %USERPROFILE%\\.local\\bin\\uv.exe run python scripts/local_api.py serve"],
+      "port": 5100
     }
   ]
 }

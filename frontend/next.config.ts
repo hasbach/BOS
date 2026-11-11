@@ -12,6 +12,8 @@ const apiUrl = process.env.BOS_API_INTERNAL_URL ?? "http://127.0.0.1:5100";
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
+  // The end-to-end tests run their own server beside the development one and need their own folder.
+  distDir: process.env.BOS_NEXT_DIST_DIR ?? ".next",
   reactStrictMode: true,
   poweredByHeader: false,
   async rewrites() {
