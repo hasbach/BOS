@@ -10,6 +10,8 @@ from flask import Flask, Response, g, jsonify, request
 from flask.typing import ResponseReturnValue
 
 from app.config import Config
+from app.core.db import init_engine
+from app.core.permissions import public
 from app.errors import register_error_handlers
 
 API_PREFIX = "/api/v1"
@@ -32,8 +34,14 @@ def create_app(config: Config | None = None) -> Flask:
     _configure_logging(app)
     register_error_handlers(app)
     _register_request_logging(app)
+    init_engine(app, cfg.database_url)
+
+    from app.core.request_context import register_request_context
+
+    register_request_context(app)
 
     @app.get(f"{API_PREFIX}/health")
+    @public
     def health() -> ResponseReturnValue:
         return jsonify({"status": "ok"})
 

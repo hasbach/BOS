@@ -8,6 +8,7 @@ from collections.abc import Mapping
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from werkzeug.datastructures import Headers
 
 MIN_PASSWORD_LENGTH = 10
 # Upper bound so that hashing an enormous input cannot be used to exhaust the server.
@@ -87,7 +88,7 @@ def new_token() -> tuple[str, bytes]:
     return token, hash_token(token)
 
 
-def csrf_ok(method: str, headers: Mapping[str, str]) -> bool:
+def csrf_ok(method: str, headers: Mapping[str, str] | Headers) -> bool:
     """State-changing requests must carry a header that a cross-site form cannot set."""
     if method.upper() in _SAFE_METHODS:
         return True

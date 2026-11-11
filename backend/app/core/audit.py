@@ -133,6 +133,8 @@ def record_denied(
     event: Literal["access.denied_permission", "access.denied_tenant", "access.denied_store"],
     data: Mapping[str, Any] | None = None,
     ip: str | None = None,
+    target_type: str | None = None,
+    target_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     """Record a refused request in its own transaction, so it survives the refusal's rollback."""
     with tenant_transaction(engine, tenant_id) as session:
@@ -142,6 +144,8 @@ def record_denied(
             actor_type="user",
             actor_id=actor_id,
             event=event,
+            target_type=target_type,
+            target_id=target_id,
             data=data,
             ip=ip,
         )

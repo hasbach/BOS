@@ -95,10 +95,21 @@ def insert(conn: Connection, table: str, **values: Any) -> None:
     conn.execute(text(f"INSERT INTO {table} ({columns}) VALUES ({params})"), values)  # noqa: S608
 
 
-class World:
-    """One tenant with a row in every tenant-owned table, created as the owner role."""
+STAFF_ROLES = ("manager", "sales", "packing", "dispatch")
 
-    def __init__(self, conn: Connection, operator_id: uuid.UUID, label: str) -> None:
+
+class World:
+    """One tenant with a row in every tenant-owned table, created as the owner role.
+
+    By default it has exactly one row per tenant-owned table; the isolation tests count on
+    that. ``staffed=True`` adds, on top of that, a second store, one user per other role
+    (``manager``, ``sales``, ``packing``, ``dispatch``, all with every store) and one
+    ``sales_limited`` user who may use only the first store.
+    """
+
+    def __init__(
+        self, conn: Connection, operator_id: uuid.UUID, label: str, *, staffed: bool = False
+    ) -> None:
         self.label = label
         self.tenant_id = uuid.uuid4()
         self.store_id = uuid.uuid4()
@@ -203,14 +214,64 @@ class World:
             event="auth.sign_in",
         )
 
+        # role name -> user id; "owner" always, the others only when staffed.
+        self.users: dict[str, uuid.UUID] = {"owner": self.user_id}
+        self._second_store_id: uuid.UUID | None = None
+        if staffed:
+            self._add_staff(conn)
 
-def make_operator(conn: Connection) -> uuid.UUID:
+    @property
+    def second_store_id(self) -> uuid.UUID:
+        assert self._second_store_id is not None, "create the World with staffed=True"
+        return self._second_store_id
+
+    def user(self, role: str) -> uuid.UUID:
+        """Id of the user for a role, or ``sales_limited`` (staffed worlds only for those)."""
+        assert role in self.users, f"no {role!r} user: create the World with staffed=True"
+        return self.users[role]
+
+    def _add_staff(self, conn: Connection) -> None:
+        self._second_store_id = uuid.uuid4()
+        insert(
+            conn,
+            "stores",
+            id=self._second_store_id,
+            tenant_id=self.tenant_id,
+            name=f"Store {self.label} 2",
+        )
+        for role in (*STAFF_ROLES, "sales_limited"):
+            user_id = uuid.uuid4()
+            limited = role == "sales_limited"
+            insert(
+                conn,
+                "users",
+                id=user_id,
+                tenant_id=self.tenant_id,
+                name=f"{role} {self.label}",
+                email=f"{role.replace('_', '-')}-{self.label}@example.test",
+                password_hash="x",
+                locale="ar" if limited else "en",
+                roles=["sales"] if limited else [role],
+                all_stores=not limited,
+            )
+            if limited:
+                insert(
+                    conn,
+                    "user_stores",
+                    tenant_id=self.tenant_id,
+                    user_id=user_id,
+                    store_id=self.store_id,
+                )
+            self.users[role] = user_id
+
+
+def make_operator(conn: Connection, email: str | None = None) -> uuid.UUID:
     operator_id = uuid.uuid4()
     insert(
         conn,
         "operators",
         id=operator_id,
-        email=f"ops-{operator_id.hex[:8]}@example.test",
+        email=email or f"ops-{operator_id.hex[:8]}@example.test",
         name="Operator",
         password_hash="x",
     )
@@ -221,10 +282,41 @@ def make_operator(conn: Connection) -> uuid.UUID:
 class TwoTenants:
     a: World
     b: World
+    operator_id: uuid.UUID
+    operator_email: str
 
 
-def make_two_tenants(owner: Engine) -> TwoTenants:
+def make_two_tenants(owner: Engine, *, staffed: bool = False) -> TwoTenants:
     truncate_all(owner)
+    email = f"ops-{uuid.uuid4().hex[:8]}@example.test"
     with owner.begin() as conn:
-        operator_id = make_operator(conn)
-        return TwoTenants(a=World(conn, operator_id, "a"), b=World(conn, operator_id, "b"))
+        operator_id = make_operator(conn, email)
+        return TwoTenants(
+            a=World(conn, operator_id, "a", staffed=staffed),
+            b=World(conn, operator_id, "b", staffed=staffed),
+            operator_id=operator_id,
+            operator_email=email,
+        )
+
+
+# ---- sessions -------------------------------------------------------------------------------
+
+
+def new_user_session(app: Engine, user_id: uuid.UUID, tenant_id: uuid.UUID) -> str:
+    """Create (and commit) a session for a user; returns the raw cookie value."""
+    from app.core import sessions
+    from app.core.db import transaction
+
+    with transaction(app) as db:
+        token, _ = sessions.create_user_session(db, user_id=user_id, tenant_id=tenant_id)
+    return token
+
+
+def new_operator_session(app: Engine, operator_id: uuid.UUID) -> str:
+    """Create (and commit) a session for an operator; returns the raw cookie value."""
+    from app.core import sessions
+    from app.core.db import transaction
+
+    with transaction(app) as db:
+        token, _ = sessions.create_operator_session(db, operator_id=operator_id)
+    return token

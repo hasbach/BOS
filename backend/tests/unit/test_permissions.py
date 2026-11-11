@@ -17,8 +17,15 @@ from app.core.permissions import (
     STORE_SCOPED,
     Access,
     Decision,
+    Policy,
+    PolicyKind,
     Role,
+    authenticated,
+    operator_only,
     permissions_for,
+    policy_of,
+    public,
+    require,
     start_tab_for,
     tabs_for,
 )
@@ -210,3 +217,66 @@ def test_start_tab_follows_the_contract_order(roles: set[Role], expected: str) -
 def test_start_tab_is_always_one_of_the_visible_tabs() -> None:
     for roles in ALL_ROLE_SETS:
         assert start_tab_for(roles) in tabs_for(roles)
+
+
+# ---- endpoint policies (T024) ---------------------------------------------------------------
+
+
+def test_each_policy_decorator_declares_its_policy() -> None:
+    @public
+    def a() -> None: ...
+
+    @authenticated
+    def b() -> None: ...
+
+    @authenticated(self_only=True)
+    def c() -> None: ...
+
+    @require("staff.view")
+    def d() -> None: ...
+
+    @require("store.view", store_param="store_id")
+    def e() -> None: ...
+
+    @operator_only
+    def f() -> None: ...
+
+    assert policy_of(a) == Policy(PolicyKind.PUBLIC)
+    assert policy_of(b) == Policy(PolicyKind.AUTHENTICATED)
+    assert policy_of(c) == Policy(PolicyKind.AUTHENTICATED, self_only=True)
+    assert policy_of(d) == Policy(PolicyKind.PERMISSION, permission="staff.view")
+    assert policy_of(e) == Policy(
+        PolicyKind.PERMISSION, permission="store.view", store_param="store_id"
+    )
+    assert policy_of(f) == Policy(PolicyKind.OPERATOR)
+
+
+def test_decorators_return_the_same_function_so_order_with_route_does_not_matter() -> None:
+    def view() -> None: ...
+
+    assert require("staff.view")(view) is view
+
+
+def test_undecorated_view_has_no_policy() -> None:
+    def view() -> None: ...
+
+    assert policy_of(view) is None
+    assert policy_of(None) is None
+
+
+def test_a_view_cannot_get_two_policies() -> None:
+    with pytest.raises(ValueError, match="already"):
+
+        @public
+        @require("staff.view")
+        def view() -> None: ...
+
+
+def test_unknown_permission_is_rejected_when_declared() -> None:
+    with pytest.raises(ValueError, match="unknown permission"):
+        require("staff.fly")
+
+
+def test_store_param_is_only_for_store_scoped_permissions() -> None:
+    with pytest.raises(ValueError, match="not store-scoped"):
+        require("staff.view", store_param="store_id")

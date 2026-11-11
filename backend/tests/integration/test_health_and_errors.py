@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask import Flask
 from flask.testing import FlaskClient
 
+from app.core.permissions import public
 from app.errors import ApiError
 
 
@@ -34,6 +35,7 @@ def test_wrong_method_uses_error_envelope(client: FlaskClient) -> None:
 
 def test_api_error_carries_code_and_field_errors(app: Flask) -> None:
     @app.get("/api/v1/_test/api-error")
+    @public
     def _raise() -> str:
         raise ApiError(400, "validation_failed", "Invalid input", fields={"name": "required"})
 
@@ -51,6 +53,7 @@ def test_api_error_carries_code_and_field_errors(app: Flask) -> None:
 
 def test_unexpected_error_does_not_leak_details(app: Flask) -> None:
     @app.get("/api/v1/_test/boom")
+    @public
     def _boom() -> str:
         raise RuntimeError("secret internal detail")
 

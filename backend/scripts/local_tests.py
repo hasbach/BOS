@@ -1,6 +1,7 @@
 """Run the backend tests on this computer against the Compose database.
 
-Usage (from the ``backend`` folder, with ``docker compose up -d db`` running):
+Usage (from the ``backend`` folder, with ``python scripts/local_db.py start`` or
+``docker compose up -d db`` running):
 
     uv run python scripts/local_tests.py [pytest arguments]
 
@@ -33,7 +34,9 @@ def read_env_file(path: Path) -> dict[str, str]:
 
 def main() -> int:
     env = read_env_file(ROOT / ".env")
-    host = f"127.0.0.1:{env.get('BOS_DB_PORT', '55432')}"
+    # The private local PostgreSQL (scripts/local_db.py) if configured, else the Compose one.
+    port = env.get("BOS_LOCAL_DB_PORT") or env.get("BOS_DB_PORT", "55432")
+    host = f"127.0.0.1:{port}"
     test_db = env["BOS_TEST_DB"]
     os.environ.update(
         {

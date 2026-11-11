@@ -32,10 +32,14 @@ def init_engine(app: Flask, database_url: str) -> Engine:
     return engine
 
 
-def get_engine() -> Engine:
-    engine = current_app.extensions[_EXTENSION_KEY]
+def engine_of(app: Flask) -> Engine:
+    engine = app.extensions[_EXTENSION_KEY]
     assert isinstance(engine, Engine)
     return engine
+
+
+def get_engine() -> Engine:
+    return engine_of(current_app)
 
 
 @contextmanager
