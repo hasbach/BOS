@@ -46,7 +46,7 @@ describe("the URL locale reaches the message loader", () => {
   });
 
   it("home page calls setRequestLocale with the param", async () => {
-    const { default: HomePage } = await import("@/app/[locale]/page");
+    const { default: HomePage } = await import("@/app/[locale]/(shell)/page");
     await HomePage(params("ar"));
     expect(setRequestLocale).toHaveBeenCalledWith("ar");
   });

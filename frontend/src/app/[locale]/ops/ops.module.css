@@ -1,0 +1,141 @@
+.hero {
+  background: var(--ink);
+  color: var(--on-ink);
+  padding: 24px 16px 22px;
+  display: grid;
+  gap: 8px;
+  text-align: center;
+  justify-items: center;
+}
+
+.heroLogo {
+  inline-size: 56px;
+  block-size: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--on-ink);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.heroTitle {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.heroChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--on-ink);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  min-block-size: 44px;
+  padding-inline: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pill[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+
+.bizCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.between {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bizName {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.line {
+  font-size: 14px;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+
+.ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.seg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.segLabel {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rateRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rateRow > :first-child {
+  flex: 1;
+}
+
+.unit {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.sectionLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-2);
+  margin-block-start: 4px;
+}
+
+.sheetActions {
+  display: flex;
+  gap: 8px;
+}
+
+.sheetActions > * {
+  flex: 1;
+}

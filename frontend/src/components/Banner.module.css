@@ -1,0 +1,48 @@
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.banner svg {
+  flex: none;
+  margin-block-start: 1px;
+}
+
+.info {
+  background: var(--info-soft);
+  color: var(--info-fg);
+}
+
+.warn {
+  background: var(--warn-soft);
+  color: var(--warn-fg);
+}
+
+.bad {
+  background: var(--danger-soft);
+  color: var(--danger-fg);
+}
+
+.ok {
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+}
+
+.strong {
+  border: 2px solid var(--warn-fg);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-inline-size: 0;
+}

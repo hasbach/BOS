@@ -1,8 +1,0 @@
-.main {
-  max-inline-size: 480px;
-  margin-inline: auto;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}

@@ -4,13 +4,12 @@ import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
 
-import { HomeContent } from "./HomeContent";
+import { ResetForm } from "./ResetForm";
 
-// Placeholder home page; the real screens replace it in later tasks.
-export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function ResetPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
-  return <HomeContent />;
+  return <ResetForm />;
 }
