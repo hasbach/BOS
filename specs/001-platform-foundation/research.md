@@ -377,3 +377,19 @@ parts of R2, R5, R7, R10 and R13).
   cluster (`scripts/local_db.py`, port 55433, disk flushing off) and the frontend uses a
   portable Node 24, because Docker Desktop there failed repeatedly on very slow disk
   flushes. The Compose files remain the reference for staging and production.
+
+## R34. Contacting Beta, and the US1 screen designs (2026-11-11)
+
+- **Approved designs**: screens 29–48 in `design/bos-screens.html` (section "M0 — Sign-in
+  and setup"), approved by the product owner on 2026-11-11. Link lifetimes shown to users:
+  activation and invitation links "work once, within 7 days"; reset links "work once,
+  within 1 hour".
+- **Contacting Beta**: where a merchant needs Beta (bad or expired link, suspended business),
+  the screen offers a "Message Beta on WhatsApp" button that opens a chat with Beta's support
+  number. The number is configuration (`NEXT_PUBLIC_BOS_SUPPORT_WHATSAPP`, E.164); when it
+  is not set the button is hidden and the plain text "Contact Beta Marketing Solutions" is
+  shown, so no placeholder number ever reaches a real merchant.
+- **Names as typed**: business, store and person names are shown exactly as entered, in any
+  script, in both languages; they are never translated.
+- **Sharing one-time links**: the button opens the phone's share sheet (Web Share API) with
+  copy as the fallback; WhatsApp is the expected choice but not forced.

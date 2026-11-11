@@ -191,6 +191,21 @@ table.v td.n,table.v th.n{text-align:end;font-variant-numeric:tabular-nums}
 .sendbtn{width:44px;height:44px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;cursor:pointer;flex:none}
 .strip{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border-top:1px solid var(--border)}
 .ordercard{border-inline-start:3px solid var(--accent);padding-inline-start:8px;margin-bottom:4px}
+/* ---------- M0 additions ---------- */
+.input.err{border-color:var(--danger);box-shadow:0 0 0 3px var(--danger-soft)}
+.ferr{display:flex;gap:4px;align-items:flex-start;font-size:12px;font-weight:600;color:var(--danger)}
+.showbtn{min-height:44px;min-width:44px;border:0;background:transparent;color:var(--fg-2);font:inherit;font-size:13px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;margin-inline-end:-8px;flex:none}
+.opsbar{background:var(--ink);color:var(--on-ink)}
+.opsbar .iconbtn{color:var(--on-ink)}
+.opsbar .iconbtn:hover{background:rgba(128,128,128,.25)}
+.opsbar .sub{color:inherit;opacity:.8}
+.phone:has(.opsbar) .status{background:var(--ink);color:var(--on-ink)}
+.chip.ops{background:var(--on-ink);color:var(--ink)}
+.banner.strong{border:2px solid var(--warn-fg);font-size:14px;font-weight:700;padding:12px}
+.linkbox{font-family:ui-monospace,Consolas,monospace;font-size:13px;word-break:break-all;background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:var(--r);padding:12px;direction:ltr;text-align:left;color:var(--fg)}
+.grid.pairs{display:grid;grid-template-columns:repeat(2,360px);justify-content:start}
+@media (max-width:820px){.grid.pairs{grid-template-columns:minmax(0,360px)}}
+@media (max-width:420px){.grid.pairs{grid-template-columns:100%}}
 @media (max-width:420px){figure{width:100%}.page{padding-inline:16px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -232,6 +247,12 @@ table.v td.n,table.v th.n{text-align:end;font-variant-numeric:tabular-nums}
 <symbol id="i-clip" viewBox="0 0 24 24"><path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7"/></symbol>
 <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/></symbol>
 <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></symbol>
+<symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9"/></symbol>
+<symbol id="i-wifioff" viewBox="0 0 24 24"><path d="M2 8.8a15 15 0 0 1 4-2.4M22 8.8a15 15 0 0 0-9-3.7M5 12.5a10 10 0 0 1 3-1.8M19 12.5a10 10 0 0 0-4-2.2M8.5 16a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/></symbol>
 </defs></svg>
 
 <div class="page">
@@ -768,7 +789,207 @@ ${bar('رنا خوري',{back:1,sub:'رقم المتجر أ · الرد متاح
 <div class="strip"><div class="grow"><div class="t">لا يوجد طلب بعد</div><div class="xs">3 طلبات سابقة</div></div><button class="btn primary sm">${ic('cart')} إنشاء طلب</button></div>
 ${composer('اكتب رسالة','ar')}`,'rtl');
 
-document.getElementById('out').innerHTML=S.map(s=>`<h2 class="sec">${s.sec}</h2><p class="sec-sub">${s.sub}</p><div class="grid">${s.items.map(i=>`<figure>${i.html}<figcaption><b>${i.name}</b>${i.cap}</figcaption></figure>`).join('')}</div>`).join('');
+/* ================= M0 — Sign-in and setup (T038) ================= */
+add('M0 — Sign-in and setup','US-01. First sign-in, activation, password recovery and the Beta operator console. Every screen in English and Arabic side by side. Screens 29–38 are the main screens; 39–48 are their error, success and empty states. Sample data is fake.');
+S[S.length-1].cls='pairs';
+
+const T=l=>(e,a)=>l==='ar'?a:e;
+const pair=(n,an,cap,fn)=>{scr(n,cap,fn('en'));scr(an,'Arabic (RTL) version of the screen on the left.',fn('ar'),'rtl');};
+const ferr=m=>`<div class="ferr" role="alert">${ic('alert','sm')}<span>${m}</span></div>`;
+const fld=(label,val,o={})=>`<div class="field"><label>${label}</label><div class="input ${o.ph?'ph':''} ${o.err?'err':''} ${o.focus?'focus':''}"><span class="grow" style="overflow:hidden;text-overflow:ellipsis">${o.ltr&&val?`<bdi dir="ltr">${val}</bdi>`:val}</span>${o.end||''}</div>${o.err&&o.err.trim()?ferr(o.err):''}${o.hint?`<div class="xs">${o.hint}</div>`:''}</div>`;
+const pw=(l,label,n,o={})=>{const x=T(l);return fld(label,n?`<bdi dir="ltr" style="letter-spacing:2px">${'•'.repeat(n)}</bdi>`:'',{...o,end:`<button class="showbtn" type="button">${ic('eye','sm')}${x('Show','إظهار')}</button>`});};
+const brand=()=>`<div style="display:grid;place-items:center;gap:6px;text-align:center"><div class="logo" style="width:48px;height:48px;border-radius:14px;font-size:17px">BOS</div><div class="t">Beta Orders Solutions</div></div>`;
+const AR_F="font-family:'IBM Plex Sans Arabic',sans-serif";
+const lsw=l=>`<div class="seg" role="tablist" aria-label="${T(l)('Language','اللغة')}" style="width:210px;margin-inline-start:auto"><span class="${l==='ar'?'on':''}" lang="ar" style="${AR_F}">العربية</span><span class="${l==='en'?'on':''}" lang="en">English</span></div>`;
+const spage=(l,o)=>`${o.bar||''}<div class="body" style="gap:14px;padding-top:${o.bar?16:12}px">${o.lsw===false?'':lsw(l)}<div style="display:grid;place-items:center;gap:10px;text-align:center;padding:8px 0"><div style="width:64px;height:64px;border-radius:50%;background:var(--${o.tone}-soft);color:var(--${o.tone}-fg);display:grid;place-items:center">${ic(o.icon,'lg')}</div><div class="big">${o.title}</div><div class="m" style="max-width:300px">${o.text}</div></div>${o.body||''}</div><div class="footer">${o.btns}</div>`;
+const who=l=>{const x=T(l);return `<div class="card"><div class="label">${x('Who to ask','إلى من تتوجّه')}</div><div class="list">
+  <div class="li">${ic('user')}<div class="grow"><div class="t">${x('Business owner','صاحب النشاط')}</div><div class="m">${x('Ask Beta Marketing Solutions for a new link.','اطلب رابطاً جديداً من Beta Marketing Solutions.')}</div></div></div>
+  <div class="li">${ic('users')}<div class="grow"><div class="t">${x('Employee','موظف')}</div><div class="m">${x('Ask your manager to send a new invitation.','اطلب من مديرك إرسال دعوة جديدة.')}</div></div></div>
+</div></div>`;};
+
+/* ---- 29 Activate your account ---- */
+const activate=(l,bad)=>{const x=T(l);return `
+<div class="body" style="gap:14px;padding-top:12px">
+  ${brand()}
+  <div class="card">
+    <div class="label">${x('Your business','نشاطك التجاري')}</div>
+    <div class="t" style="font-size:17px">Demo Denim House Group</div>
+    <div class="row" style="margin-top:10px">${ic('user')}<div class="grow"><div class="t">${x('Welcome, Dana Demo','مرحباً بك، Dana Demo')}</div><div class="m">${x('Added by your manager','أضافك مديرك')}</div></div></div>
+    <div style="margin-top:8px"><div class="xs" style="margin-bottom:4px">${x('Your roles','أدوارك')}</div><div class="pills"><span class="chip a">${x('Sales','المبيعات')}</span><span class="chip a">${x('Packing','التجهيز')}</span></div></div>
+  </div>
+  <div class="field"><label>${x('Language','اللغة')}</label>
+    <div class="seg" role="radiogroup"><span class="${l==='ar'?'on':''}" lang="ar" style="${AR_F}">العربية</span><span class="${l==='en'?'on':''}" lang="en">English</span></div>
+    <div class="xs">${x('The page switches now. This becomes your language in BOS on every device.','تتغيّر هذه الصفحة فوراً. وتصبح هذه لغتك في BOS على كل أجهزتك.')}</div></div>
+  ${pw(l,x('Password','كلمة المرور'),bad?7:0,{focus:!bad,err:bad?x('Use at least 10 characters.','استخدم 10 أحرف على الأقل.'):'',hint:bad?'':x('At least 10 characters.','10 أحرف على الأقل.')})}
+  ${pw(l,x('Confirm password','تأكيد كلمة المرور'),bad?10:0,{err:bad?x('The two passwords do not match.','كلمتا المرور غير متطابقتين.'):''})}
+</div>
+<div class="footer"><button class="btn primary">${x('Activate and sign in','فعّل الحساب وسجّل الدخول')}</button></div>`;};
+pair('29 · Activate your account','29 · تفعيل حسابك','Opened from a link. Owners (sent by Beta) see their business and the role Owner; employees (sent by a manager) see the roles the manager chose. Name, business and roles are shown, not editable. The language chosen here becomes the saved language.',l=>activate(l,false));
+
+/* ---- 30 Link no longer valid ---- */
+pair('30 · Link no longer valid','30 · الرابط لم يعد صالحاً','Expired, cancelled or unknown. The page cannot tell who the visitor is, so it lists both ways to get a new link. Also used for expired password-reset links.',l=>{const x=T(l);return spage(l,{tone:'warn',icon:'clock',title:x('This link is no longer valid','هذا الرابط لم يعد صالحاً'),text:x('It has expired or was cancelled.','انتهت صلاحيته أو أُلغي.'),body:who(l)+`<button class="btn ghost">${ic('chat')} ${x('Message Beta','راسل Beta')}</button>`,btns:`<button class="btn primary">${x('Back to sign in','العودة لتسجيل الدخول')}</button><button class="btn ghost">${x('Forgot password? Get a new reset link','نسيت كلمة المرور؟ احصل على رابط جديد')}</button>`});});
+
+/* ---- 31 Already activated ---- */
+pair('31 · Already activated','31 · الحساب مفعّل بالفعل','The link was used before. Offers sign-in, with recovery one tap away.',l=>{const x=T(l);return spage(l,{tone:'accent',icon:'check',title:x('This link was already used','استُخدم هذا الرابط من قبل'),text:x('Your account is already active. Sign in with your phone or email and your password.','حسابك مفعّل بالفعل. سجّل الدخول برقم هاتفك أو بريدك الإلكتروني وكلمة المرور.'),btns:`<button class="btn primary">${x('Sign in','تسجيل الدخول')}</button><button class="btn ghost">${x('Forgot password','نسيت كلمة المرور')}</button>`});});
+
+/* ---- 32 Use a different phone number or email ---- */
+pair('32 · Use a different phone number or email','32 · استخدم هاتفاً أو بريداً آخر','Shown when acceptance fails with identifier_unavailable. Gives no reason and says nothing about other businesses. A ready message makes the next step one tap.',l=>{const x=T(l);return spage(l,{tone:'info',icon:'info',title:x('Use a different phone number or email','استخدم رقم هاتف أو بريداً إلكترونياً آخر'),text:x('We can’t use the phone number or email in this invitation to create your account.','لا يمكننا استخدام رقم الهاتف أو البريد الإلكتروني الوارد في هذه الدعوة لإنشاء حسابك.'),body:`<div class="card"><div class="label">${x('What to do','ماذا تفعل')}</div><div class="m" style="margin:4px 0 8px">${x('Ask the person who invited you to send a new invitation with a different phone number or email. Owners ask Beta; employees ask their manager.','اطلب ممّن دعاك أن يرسل لك دعوة جديدة برقم هاتف أو بريد إلكتروني مختلف. المالك يطلب من Beta، والموظف يطلب من مديره.')}</div><div class="msg">${x('Please invite me again with a different phone number or email.','من فضلك أرسل لي دعوة جديدة برقم هاتف أو بريد إلكتروني مختلف.')}</div></div><button class="btn ghost">${ic('copy')} ${x('Copy message','نسخ الرسالة')}</button>`,btns:`<button class="btn primary">${x('Back to sign in','العودة لتسجيل الدخول')}</button>`});});
+
+/* ---- 33 Forgot password ---- */
+const noMail=l=>{const x=T(l);return `<div class="banner info">${ic('info','sm')}<span><b>${x('No email on your account?','ليس لحسابك بريد إلكتروني؟')}</b><br>${x('Ask your manager to send you a reset link. If you are the owner, ask Beta.','اطلب من مديرك أن يرسل لك رابط استعادة. وإذا كنت المالك فاطلب من Beta.')}</span></div>`;};
+pair('33 · Forgot password','33 · نسيت كلمة المرور','Email only. The same confirmation (screen 43) appears whether or not the email exists. People who signed up with a phone are told who can help.',l=>{const x=T(l);return `${bar(x('Forgot password','نسيت كلمة المرور'),{back:1})}
+<div class="body">
+  <div class="m">${x('Enter your email. We will send you a link to choose a new password.','أدخل بريدك الإلكتروني وسنرسل لك رابطاً لاختيار كلمة مرور جديدة.')}</div>
+  ${fld(x('Email','البريد الإلكتروني'),'name@demo.example',{ph:1,ltr:1,focus:1})}
+  ${noMail(l)}
+</div>
+<div class="footer"><button class="btn primary">${x('Send reset link','إرسال رابط الاستعادة')}</button></div>`;});
+
+/* ---- 34 Set a new password ---- */
+pair('34 · Set a new password','34 · كلمة مرور جديدة','Opened from the reset link (emailed, or sent by a manager or Beta). Warns before saving that other devices will be signed out.',l=>{const x=T(l);return `${bar(x('New password','كلمة مرور جديدة'))}
+<div class="body">
+  <div class="m">${x('Choose a new password for your BOS account.','اختر كلمة مرور جديدة لحسابك في BOS.')}</div>
+  ${pw(l,x('New password','كلمة المرور الجديدة'),0,{focus:1,hint:x('At least 10 characters.','10 أحرف على الأقل.')})}
+  ${pw(l,x('Confirm new password','تأكيد كلمة المرور الجديدة'),0)}
+  <div class="banner info">${ic('info','sm')}<span>${x('You will be signed out of BOS on all your other devices.','سيتم تسجيل خروجك من BOS على جميع أجهزتك الأخرى.')}</span></div>
+</div>
+<div class="footer"><button class="btn primary">${x('Save new password','حفظ كلمة المرور الجديدة')}</button></div>`;});
+
+/* ---- 35 Operator sign in ---- */
+const opsSignin=(l,bad)=>{const x=T(l);return `
+<div style="background:var(--ink);color:var(--on-ink);padding:24px 16px 22px;display:grid;gap:8px;text-align:center;justify-items:center">
+  <div class="logo" style="background:var(--on-ink);color:var(--ink)">BOS</div>
+  <div class="big">${x('Operator console','لوحة تشغيل Beta')}</div>
+  <span class="chip ops">${ic('lock','sm')} ${x('Beta staff only','لفريق Beta فقط')}</span>
+</div>
+<div class="body" style="padding-top:14px;gap:14px">
+  ${lsw(l)}
+  ${fld(x('Work email','البريد الإلكتروني للعمل'),'layla@beta.example',{ltr:1,err:bad?'':''})}
+  ${pw(l,x('Password','كلمة المرور'),bad?10:0,{err:bad?x('Wrong email or password.','البريد الإلكتروني أو كلمة المرور غير صحيحة.'):''})}
+  <button class="btn ink">${x('Sign in to console','الدخول إلى اللوحة')}</button>
+  <div class="card" style="margin-top:auto"><div class="t">${x('Selling with BOS?','تبيع عبر BOS؟')}</div><div class="m">${x('This sign-in is for Beta staff. Merchants sign in on the main page.','هذا الدخول لفريق Beta فقط. يسجّل التجار دخولهم من الصفحة الرئيسية.')}</div><button class="btn ghost" style="margin-top:8px">${x('Go to merchant sign in','الذهاب إلى دخول التجار')}</button></div>
+</div>`;};
+pair('35 · Operator sign in','35 · دخول فريق Beta','Dark header, “Beta staff only” label, dark button and a signpost for merchants who land here by mistake. A wrong password shows the same single message, never which part was wrong.',l=>opsSignin(l,false));
+
+/* ---- 36 Operator — businesses list ---- */
+const stChip=(l,s)=>{const x=T(l);return s==='active'?`<span class="chip ok">${ic('check','sm')} ${x('Active','نشط')}</span>`:s==='pending'?`<span class="chip warn">${ic('clock','sm')} ${x('Pending','بانتظار التفعيل')}</span>`:`<span class="chip bad">${ic('ban','sm')} ${x('Suspended','معلّق')}</span>`;};
+const obar=(l,title,o={})=>{const x=T(l);return `<div class="appbar opsbar">${o.back?`<button class="iconbtn" aria-label="${x('Back','رجوع')}">${ic('back','flip')}</button>`:''}<h3>${title}${o.sub?`<span class="sub">${o.sub}</span>`:''}</h3>${o.act===false?'':`<span class="chip ops">${x('Beta staff','فريق Beta')}</span>`}${o.out?`<button class="iconbtn" aria-label="${x('Sign out','تسجيل الخروج')}">${ic('logout','flip')}</button>`:''}</div>`;};
+const act=(l,k)=>{const x=T(l);const m={suspend:['ban','Suspend','تعليق','danger'],react:['check','Reactivate','إعادة التفعيل','ghost'],resend:['send','Resend activation link','إعادة إرسال رابط التفعيل','ghost'],reset:['lock','Issue owner reset link','إصدار رابط استعادة للمالك','ghost']}[k];return `<button class="btn ${m[3]} sm" style="width:100%">${ic(m[0],'sm')} ${x(m[1],m[2])}</button>`;};
+const BIZ=[
+ {n:'Demo Denim House Group',ed:'Commerce',st:'active',o:'Samer Demo',c:'+961 70 000 011',stores:2,users:5,a:['suspend']},
+ {n:'Demo Linen Corner',ed:'Social',st:'pending',o:'Layla Demo',c:'+961 70 000 012',stores:1,users:0,a:['resend']},
+ {n:'Demo Shoe Bazaar',ed:'Social',st:'suspended',o:'Rami Demo',c:'rami@demo.example',stores:1,users:3,a:['react']},
+ {n:'Demo Bakery Box',ed:'Social',st:'active',o:'Maya Demo',c:'+961 70 000 014',noMail:1,stores:1,users:2,a:['suspend','reset']}];
+const bizCard=(l,b)=>{const x=T(l);return `<div class="card" style="display:flex;flex-direction:column;gap:8px">
+  <div class="between"><div class="t">${b.n}</div>${stChip(l,b.st)}</div>
+  <div class="row" style="flex-wrap:wrap;gap:6px"><span class="chip ${b.ed==='Commerce'?'info':''}">BOS ${b.ed}</span><span class="xs">${x('Stores','المتاجر')} <b class="num">${b.stores}</b> · ${x('Users','المستخدمون')} <b class="num">${b.users}</b></span></div>
+  <div class="m">${b.st==='pending'?x('Owner (not activated yet)','المالك (لم يفعّل بعد)'):x('Owner','المالك')}: ${b.o}</div><div class="m"><bdi dir="ltr" class="num">${b.c}</bdi>${b.noMail?` <span class="chip">${x('No email','بلا بريد')}</span>`:''}</div>
+  ${b.a.map(k=>act(l,k)).join('')}</div>`;};
+pair('36 · Operator — businesses','36 · المشغّل — الأنشطة التجارية','Account-level information only: name, edition, status, owner contact, store and user counts. Status is a word and an icon, not just a colour. “Issue owner reset link” appears only for an owner with no email. Nothing from inside a business is shown.',l=>{const x=T(l);return `${obar(l,x('Businesses','الأنشطة التجارية'),{sub:'Layla Demo',out:1})}
+<div class="body">
+  <div class="pills"><span class="pill on">${x('All','الكل')} 4</span><span class="pill">${x('Pending','بانتظار التفعيل')} 1</span><span class="pill">${x('Active','نشط')} 2</span><span class="pill">${x('Suspended','معلّق')} 1</span></div>
+  ${BIZ.map(b=>bizCard(l,b)).join('')}
+  <div class="banner info">${ic('info','sm')}<span>${x('You see account details only. Nothing inside a business is visible here.','تظهر هنا بيانات الحساب فقط. لا يظهر أي شيء من داخل النشاط التجاري.')}</span></div>
+</div>
+<div class="footer"><button class="btn primary">${ic('plus')} ${x('Set up a business','إعداد نشاط تجاري')}</button></div>`;});
+
+/* ---- 37 Operator — set up a business ---- */
+const setup=(l,bad)=>{const x=T(l);return `${obar(l,x('Set up a business','إعداد نشاط تجاري'),{back:1,sub:x('Creates the first store and an owner link','ينشئ أول متجر ورابط تفعيل للمالك')})}
+<div class="body">
+  ${bad?`<div class="banner bad" role="alert">${ic('alert','sm')}<span>${x('3 things to fix before you continue.','3 أمور تحتاج إلى تصحيح قبل المتابعة.')}</span></div>`:''}
+  ${fld(x('Business name','اسم النشاط التجاري'),bad?'':'Demo Linen Corner',{ph:!bad,err:bad?x('Enter the business name.','أدخل اسم النشاط التجاري.'):''})}
+  ${fld(x('First store name','اسم أول متجر'),(bad?'Hamra store':x('Main store','المتجر الرئيسي')),{ph:!bad,hint:x('Every business starts with one store.','يبدأ كل نشاط تجاري بمتجر واحد.')})}
+  <div class="field"><label>${x('Edition','الباقة')}</label><div class="seg"><span class="on">BOS Social</span><span>BOS Commerce</span></div></div>
+  <div class="field"><label>${x('Default currency','العملة الافتراضية')}</label><div class="seg"><span class="on">USD</span><span>LBP</span></div></div>
+  ${fld(x('USD → LBP rate (required)','سعر صرف الدولار بالليرة USD → LBP (مطلوب)'),bad?'':'89500',{ltr:1,ph:!bad,err:bad?x('Enter the rate, for example 89500.','أدخل السعر، مثلاً 89500.'):'',end:`<span class="xs">${x('LBP per 1 USD','ليرة لكل 1 دولار')}</span>`})}
+  <div class="label" style="margin-top:4px">${x('Owner','المالك')}</div>
+  ${fld(x('Owner name','اسم المالك'),'Layla Demo',{ph:!bad})}
+  ${fld(x('Owner phone','هاتف المالك'),'+961 70 000 013',{ltr:1,ph:!bad,err:bad?x('This phone number cannot be used. Enter a different phone number or an email.','لا يمكن استخدام رقم الهاتف هذا. أدخل رقم هاتف آخر أو بريداً إلكترونياً.'):''})}
+  ${fld(x('Owner email','بريد المالك'),bad?'':'owner@demo.example',{ltr:1,ph:!bad,hint:x('Phone, email or both. At least one is required.','هاتف أو بريد إلكتروني أو كلاهما. واحد منهما على الأقل مطلوب.')})}
+</div>
+<div class="footer"><button class="btn primary">${x('Create business and link','إنشاء النشاط والرابط')}</button></div>`;};
+pair('37 · Operator — set up a business','37 · المشغّل — إعداد نشاط تجاري','Only what the API takes. Rate is required; owner phone and email are each optional but at least one is needed. Placeholders are shown greyed.',l=>setup(l,false));
+
+/* ---- 38 Operator — link shown once ---- */
+const onceLink=(l,o)=>{const x=T(l);return `${obar(l,o.title(x),{back:0,sub:o.sub,act:false})}
+<div class="body">
+  <div class="banner ok">${ic('check','sm')}<span>${o.ok(x)}</span></div>
+  <div class="banner warn strong" role="alert">${ic('alert')}<span>${x('Copy it now. This link will not be shown again.','انسخه الآن. لن يظهر هذا الرابط مرة أخرى.')}</span></div>
+  <div class="field"><label>${o.lab(x)}</label><div class="linkbox">https://app.bos.example/activate#Xk3-demo-0000-not-a-real-token</div>
+    <div class="xs">${o.reset?x('Works once, within 1 hour.','يعمل مرة واحدة، خلال ساعة واحدة.'):x('Works once, within 7 days (until 18 Nov 2026).','يعمل مرة واحدة، خلال 7 أيام (حتى 18 Nov 2026).')}</div></div>
+  <button class="btn primary">${ic('copy')} ${x('Copy link','نسخ الرابط')}</button>
+  <button class="btn ghost">${ic('chat')} ${x('Share on WhatsApp','مشاركة عبر واتساب')}</button>
+  ${o.note?`<div class="banner info">${ic('info','sm')}<span>${o.note(x)}</span></div>`:''}
+  <div class="xs">${o.lost(x)}</div>
+</div>
+<div class="footer"><button class="btn ghost">${x('Done','تم')}</button></div>`;};
+pair('38 · Operator — activation link (shown once)','38 · المشغّل — رابط التفعيل (يظهر مرة واحدة)','After setup. Send it to the owner yourself; Share opens the phone’s share sheet. Leaving this screen loses the link for good, so Done is the only way out.',l=>onceLink(l,{
+ title:x=>x('Business created','تم إنشاء النشاط'),sub:'Demo Linen Corner',
+ ok:x=>x('Demo Linen Corner is set up. Status: Pending until the owner activates.','تم إعداد Demo Linen Corner. الحالة: بانتظار التفعيل حتى يفعّل المالك حسابه.'),
+ lab:x=>x('Activation link for Layla Demo','رابط التفعيل لـ Layla Demo'),
+ lost:x=>x('Lost it? Use “Resend activation link” on the list. That cancels this one and makes a new one.','ضاع الرابط؟ استخدم «إعادة إرسال رابط التفعيل» في القائمة. يلغي ذلك هذا الرابط وينشئ رابطاً جديداً.')}));
+
+/* ================= States ================= */
+/* ---- 39–41 Sign in states ---- */
+const signin=(l,st)=>{const x=T(l);
+ const wrong=st==='wrong';
+ const banner=st==='suspended'?`<div class="banner warn" role="alert">${ic('lock','sm')}<span>${x('This business account is suspended. Contact Beta Marketing Solutions.','حساب هذا النشاط التجاري معلّق. تواصل مع Beta Marketing Solutions.')}</span></div>`:st==='offline'?`<div class="banner info" role="alert">${ic('wifioff','sm')}<span>${x('No connection. Check your internet and try again. Nothing was sent.','لا يوجد اتصال بالإنترنت. تحقّق من الاتصال وحاول مرة أخرى. لم يُرسل شيء.')}</span></div>`:'';
+ return `<div class="body" style="justify-content:center;gap:14px;padding-top:12px">
+  ${lsw(l)}
+  <div style="display:grid;place-items:center;gap:10px;text-align:center"><div class="logo">BOS</div><div><div class="big">Beta Orders Solutions</div><div class="m">${x('From Conversation to Delivery.','من أول رسالة لآخر طلبية')}</div></div></div>
+  ${banner}
+  ${fld(x('Phone or email','الهاتف أو البريد الإلكتروني'),'+961 70 000 111',{ltr:1,err:wrong?' ':''})}
+  ${pw(l,x('Password','كلمة المرور'),10,{err:wrong?x('Wrong phone, email or password. Check them and try again.','رقم الهاتف أو البريد الإلكتروني أو كلمة المرور غير صحيحة. تحقّق منها وحاول مرة أخرى.'):''})}
+  <button class="btn primary">${st==='offline'?x('Try again','إعادة المحاولة'):x('Sign in','تسجيل الدخول')}</button>
+  <button class="btn ghost">${x('Forgot password','نسيت كلمة المرور')}</button>
+  <div class="xs" style="text-align:center">${x('A product by Beta Marketing Solutions','منتج من Beta Marketing Solutions')}</div>
+ </div>`;};
+pair('39 · Sign in — wrong password','39 · الدخول — كلمة مرور خاطئة','One generic message for an unknown account, wrong password, inactive user and a temporarily locked identifier. It never says which, and never mentions locking.',l=>signin(l,'wrong'));
+pair('40 · Sign in — business suspended','40 · الدخول — النشاط معلّق','Shown only after a correct password (business_suspended). For a business whose owner has not activated yet (business_pending) the same banner reads: “This business is not activated yet. Open the activation link you received, or ask Beta.” / «لم يُفعَّل حساب هذا النشاط بعد. افتح رابط التفعيل الذي وصلك أو اسأل Beta.»',l=>signin(l,'suspended'));
+pair('41 · Sign in — no connection','41 · الدخول — لا اتصال','Offline notice. What was typed stays in the fields; nothing is shown as done.',l=>signin(l,'offline'));
+
+/* ---- 42 Activate with errors ---- */
+pair('42 · Activate — field errors','42 · التفعيل — أخطاء الحقول','Too short (weak_password) and not matching, shown under each field. Nothing is created until both are fixed.',l=>activate(l,true));
+
+/* ---- 43 Forgot password — sent ---- */
+pair('43 · Forgot password — sent','43 · نسيت كلمة المرور — تم الإرسال','The same message every time, whether or not an account uses the address, and also after the per-address limit is reached.',l=>{const x=T(l);return spage(l,{bar:bar(x('Forgot password','نسيت كلمة المرور'),{back:1}),lsw:false,tone:'accent',icon:'send',title:x('Check your email','تحقّق من بريدك الإلكتروني'),text:x('If an account uses this email, we sent a link to reset the password.','إذا كان هناك حساب يستخدم هذا البريد الإلكتروني، فقد أرسلنا إليه رابطاً لاستعادة كلمة المرور.'),body:`<div class="xs" style="text-align:center">${x('The link works once, within 1 hour. Nothing arrived? Check your spam folder, wait a few minutes and try again.','يعمل الرابط مرة واحدة خلال ساعة واحدة. لم يصل شيء؟ تحقّق من البريد غير الهام، وانتظر بضع دقائق ثم حاول مرة أخرى.')}</div>${noMail(l)}`,btns:`<button class="btn primary">${x('Back to sign in','العودة لتسجيل الدخول')}</button><button class="btn ghost">${x('Use another email','استخدام بريد آخر')}</button>`});});
+
+/* ---- 44 New password — done ---- */
+pair('44 · New password — done','44 · كلمة المرور الجديدة — تم','Success. Says plainly that other devices were signed out. The reset does not sign this device in, so the next step is Sign in.',l=>{const x=T(l);return spage(l,{bar:bar(x('New password','كلمة مرور جديدة')),lsw:false,tone:'accent',icon:'check',title:x('Password changed','تم تغيير كلمة المرور'),text:x('We signed you out on all other devices. Sign in with your new password.','سجّلنا خروجك من جميع الأجهزة الأخرى. سجّل الدخول بكلمة المرور الجديدة.'),btns:`<button class="btn primary">${x('Sign in','تسجيل الدخول')}</button>`});});
+
+/* ---- 45 Operator setup — errors ---- */
+pair('45 · Operator — setup errors','45 · المشغّل — أخطاء الإعداد','validation_failed (missing name, missing rate) and identifier_unavailable. Operators may be told the owner’s phone or email is already used; merchants never are.',l=>setup(l,true));
+
+/* ---- 46 Operator — suspend confirmation ---- */
+pair('46 · Operator — confirm suspend','46 · المشغّل — تأكيد التعليق','Suspending is reversible, and the sheet says so. The same pattern is used for Reactivate.',l=>{const x=T(l);return `${obar(l,x('Businesses','الأنشطة التجارية'),{sub:'Layla Demo',out:1})}
+<div class="body">${bizCard(l,BIZ[0])}${bizCard(l,BIZ[1])}</div>
+<div class="sheet-dim"></div>
+<div class="sheet" role="dialog" aria-label="${x('Suspend business','تعليق النشاط')}">
+  <div class="grab"></div>
+  <div class="t" style="font-size:17px">${x('Suspend Demo Denim House Group?','تعليق Demo Denim House Group؟')}</div>
+  <div class="m">${x('Nobody in this business will be able to sign in until you reactivate it. Nothing is deleted.','لن يتمكن أي شخص في هذا النشاط من تسجيل الدخول حتى تعيد تفعيله. لا يُحذف أي شيء.')}</div>
+  <div class="btns"><button class="btn ghost">${x('Cancel','إلغاء')}</button><button class="btn danger">${ic('ban','sm')} ${x('Suspend','تعليق')}</button></div>
+</div>`;});
+
+/* ---- 47 Operator — owner reset link ---- */
+pair('47 · Operator — owner reset link (shown once)','47 · المشغّل — رابط استعادة المالك (يظهر مرة واحدة)','Same pattern as screen 38, for an owner with no email and no other owner to help. Tells the operator the action is recorded where the owners can see it.',l=>onceLink(l,{reset:1,
+ title:x=>x('Reset link ready','رابط الاستعادة جاهز'),sub:'Demo Bakery Box · Maya Demo',
+ ok:x=>x('Reset link created for Maya Demo.','تم إنشاء رابط استعادة لـ Maya Demo.'),
+ lab:x=>x('Password reset link for Maya Demo','رابط استعادة كلمة المرور لـ Maya Demo'),
+ note:x=>x('This is recorded in the business’s history, and its owners can see it.','يُسجَّل هذا الإجراء في سجل النشاط ويستطيع مالكوه رؤيته.'),
+ lost:x=>x('Lost it? Issue a new one from the list. The old link stops working.','ضاع الرابط؟ أصدر رابطاً جديداً من القائمة. يتوقف الرابط القديم عن العمل.')}));
+
+/* ---- 48 Operator — empty ---- */
+pair('48 · Operator — no businesses yet','48 · المشغّل — لا أنشطة بعد','Empty state with the one next step.',l=>{const x=T(l);return `${obar(l,x('Businesses','الأنشطة التجارية'),{sub:'Layla Demo',out:1})}
+<div class="body" style="justify-content:center;align-items:center;text-align:center;gap:10px">
+  <div style="width:64px;height:64px;border-radius:50%;background:var(--surface-2);color:var(--fg-2);display:grid;place-items:center">${ic('store','lg')}</div>
+  <div class="big">${x('No businesses yet','لا توجد أنشطة تجارية بعد')}</div>
+  <div class="m" style="max-width:280px">${x('Set up the first business to create an owner activation link.','أعدّ أول نشاط تجاري لإنشاء رابط تفعيل للمالك.')}</div>
+  <button class="btn primary" style="max-width:280px">${ic('plus')} ${x('Set up a business','إعداد نشاط تجاري')}</button>
+</div>`;});
+
+
+document.getElementById('out').innerHTML=S.map(s=>`<h2 class="sec">${s.sec}</h2><p class="sec-sub">${s.sub}</p><div class="grid${s.cls?' '+s.cls:''}">${s.items.map(i=>`<figure>${i.html}<figcaption><b>${i.name}</b>${i.cap}</figcaption></figure>`).join('')}</div>`).join('');
 
 document.getElementById('themeBtn').addEventListener('click',()=>{
   const r=document.documentElement;
