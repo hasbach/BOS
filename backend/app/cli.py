@@ -72,6 +72,7 @@ bos_cli = AppGroup("bos", help="BOS operational commands.")
 
 OPERATOR_PASSWORD_ENV = "BOS_OPERATOR_PASSWORD"  # noqa: S105 (a variable name)
 DEMO_PASSWORD_ENV = "BOS_DEMO_PASSWORD"  # noqa: S105 (a variable name)
+ALLOW_DEMO_SEED_ENV = "BOS_ALLOW_DEMO_SEED"
 
 
 def _password_from_env(name: str) -> str:
@@ -167,7 +168,16 @@ def maintenance() -> None:
 
 @bos_cli.command("seed-demo")
 def seed_demo() -> None:
-    """Create the demonstration businesses if absent (password from BOS_DEMO_PASSWORD)."""
+    """Create the demonstration businesses if absent (password from BOS_DEMO_PASSWORD).
+
+    Refuses to run unless BOS_ALLOW_DEMO_SEED=true: the demo users are active and their
+    sign-in details are known.
+    """
+    if os.environ.get(ALLOW_DEMO_SEED_ENV, "").strip().lower() != "true":
+        raise click.ClickException(
+            f"seed-demo creates active users with known sign-in details, so it only runs when "
+            f"{ALLOW_DEMO_SEED_ENV}=true is set. Never set it in production."
+        )
     from app.core.db import get_engine
     from app.services.seed import seed_demo as run_seed
 

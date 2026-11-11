@@ -26,8 +26,11 @@ docker compose exec api flask db upgrade
 ```
 
 ```bash
-docker compose exec api flask bos seed-demo
+docker compose exec -e BOS_ALLOW_DEMO_SEED=true api flask bos seed-demo
 ```
+
+`seed-demo` refuses to run without `BOS_ALLOW_DEMO_SEED=true`, because it creates users with
+known sign-in details. Never set it in production.
 
 ```bash
 docker compose exec -e BOS_OPERATOR_PASSWORD api flask bos create-operator --email ops@example.test

@@ -27,6 +27,7 @@ from tests.dbsupport import TwoTenants, truncate_all
 OPS_EMAIL = "ops.person@example.test"
 STRONG = "correct horse battery"
 OTHER_STRONG = "another long passphrase"
+ALLOW_SEED = {"BOS_ALLOW_DEMO_SEED": "true"}
 
 
 @pytest.fixture()
@@ -44,7 +45,12 @@ def clean_db(owner_engine: Engine) -> Iterator[None]:
 
 
 def _run(app: Flask, *args: str, env: dict[str, str] | None = None) -> Result:
-    environment = {"BOS_OPERATOR_PASSWORD": "", "BOS_DEMO_PASSWORD": "", **(env or {})}
+    environment = {
+        "BOS_OPERATOR_PASSWORD": "",
+        "BOS_DEMO_PASSWORD": "",
+        "BOS_ALLOW_DEMO_SEED": "",
+        **(env or {}),
+    }
     return app.test_cli_runner().invoke(args=["bos", *args], env=environment)
 
 
@@ -287,11 +293,40 @@ def test_maintenance_with_nothing_to_do_still_records_the_run(
 # ---- seed-demo --------------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("allow", [None, "", "false", "1"], ids=["unset", "empty", "false", "one"])
+def test_seed_demo_refuses_unless_explicitly_allowed(
+    app: Flask, owner_engine: Engine, clean_db: None, allow: str | None
+) -> None:
+    env = {"BOS_DEMO_PASSWORD": STRONG}
+    if allow is not None:
+        env["BOS_ALLOW_DEMO_SEED"] = allow
+
+    result = _run(app, "seed-demo", env=env)
+
+    assert result.exit_code != 0
+    assert "BOS_ALLOW_DEMO_SEED" in result.output
+    assert "production" in result.output
+    assert STRONG not in result.output
+    assert _rows(owner_engine, "SELECT id FROM tenants") == []
+    assert _rows(owner_engine, "SELECT id FROM operators") == []
+    assert _rows(owner_engine, "SELECT id FROM users") == []
+
+
+def test_seed_demo_accepts_true_in_any_case(
+    app: Flask, owner_engine: Engine, clean_db: None
+) -> None:
+    result = _run(
+        app, "seed-demo", env={"BOS_DEMO_PASSWORD": STRONG, "BOS_ALLOW_DEMO_SEED": "TRUE"}
+    )
+
+    assert result.exit_code == 0, result.output
+
+
 @pytest.mark.parametrize("password", ["", "weak"], ids=["missing", "weak"])
 def test_seed_demo_needs_a_strong_password_from_the_environment(
     app: Flask, owner_engine: Engine, clean_db: None, password: str
 ) -> None:
-    result = _run(app, "seed-demo", env={"BOS_DEMO_PASSWORD": password})
+    result = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": password})
 
     assert result.exit_code != 0
     assert "BOS_DEMO_PASSWORD" in result.output
@@ -302,7 +337,7 @@ def test_seed_demo_needs_a_strong_password_from_the_environment(
 def test_seed_demo_creates_exactly_the_documented_rows(
     app: Flask, owner_engine: Engine, clean_db: None
 ) -> None:
-    result = _run(app, "seed-demo", env={"BOS_DEMO_PASSWORD": STRONG})
+    result = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": STRONG})
 
     assert result.exit_code == 0, result.output
     assert STRONG not in result.output
@@ -386,11 +421,11 @@ def test_seed_demo_creates_exactly_the_documented_rows(
 def test_seed_demo_twice_changes_nothing_the_second_time(
     app: Flask, owner_engine: Engine, clean_db: None
 ) -> None:
-    first = _run(app, "seed-demo", env={"BOS_DEMO_PASSWORD": STRONG})
+    first = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": STRONG})
     assert first.exit_code == 0, first.output
     before = _snapshot(owner_engine)
 
-    second = _run(app, "seed-demo", env={"BOS_DEMO_PASSWORD": OTHER_STRONG})
+    second = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": OTHER_STRONG})
 
     assert second.exit_code == 0, second.output
     assert "nothing changed" in second.output.lower()
@@ -402,7 +437,7 @@ def test_seed_demo_leaves_other_businesses_alone(
 ) -> None:
     before = _snapshot(owner_engine)
 
-    result = _run(app, "seed-demo", env={"BOS_DEMO_PASSWORD": STRONG})
+    result = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": STRONG})
 
     assert result.exit_code == 0, result.output
     after = _snapshot(owner_engine)

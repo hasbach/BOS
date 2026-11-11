@@ -177,7 +177,7 @@ Constraints: at most one `pending` invitation per `(tenant_id, invitee_phone_e16
 | Field | Type | Rules |
 |---|---|---|
 | id | bigserial | PK |
-| identifier_hash | bytea | hash of the normalized identifier typed |
+| identifier_hash | bytea | HMAC-SHA-256 (keyed with the server secret) of the normalized identifier typed; a separate namespace holds password-reset email requests (recorded with `success = true`, so they never count towards a sign-in block) |
 | ip | inet | |
 | success | bool | |
 | at | timestamptz | indexed with identifier_hash and with ip |

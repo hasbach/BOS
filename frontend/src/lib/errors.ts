@@ -27,6 +27,7 @@ export const ERROR_CODES = [
   "idempotency_conflict",
   "identifier_unavailable",
   "invalid_credentials",
+  "invalid_idempotency_key",
   "invitation_closed",
   "last_active_store",
   "last_owner",

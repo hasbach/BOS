@@ -359,3 +359,21 @@ parts of R2, R5, R7, R10 and R13).
   Python 3.12 images. The database and API publish no host ports; only the web app (3000)
   and the mail viewer (8025) do, both configurable.
 - **Rationale**: Ports 5432 and 8000 are used by other software on the development PC.
+
+## R33. Decisions after the foundation phase (2026-11-11)
+
+- **Identifier hashing**: `login_attempts.identifier_hash` is HMAC-SHA-256 keyed with
+  `BOS_SECRET_KEY`, not plain SHA-256: a plain hash of a Lebanese phone number can be
+  reversed by trying every number. Rotating the secret resets the counters, which is
+  acceptable. Password-reset email requests use the same table in a separate namespace.
+- **Idempotency key format**: 1–200 characters; otherwise 400 `invalid_idempotency_key`.
+  The request fingerprint covers method, path and canonical JSON body.
+- **Demo seed guard**: `flask bos seed-demo` creates active users with known identifiers,
+  so it refuses to run unless `BOS_ALLOW_DEMO_SEED=true` is set. Development and staging
+  set it; production never does.
+- **Operators**: `create-operator` sets a password but never reactivates a deactivated
+  operator; reactivation is a deliberate separate act (not needed in M0).
+- **Development without Docker**: on the development PC, PostgreSQL runs as a private local
+  cluster (`scripts/local_db.py`, port 55433, disk flushing off) and the frontend uses a
+  portable Node 24, because Docker Desktop there failed repeatedly on very slow disk
+  flushes. The Compose files remain the reference for staging and production.

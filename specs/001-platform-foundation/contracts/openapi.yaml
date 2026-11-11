@@ -17,7 +17,8 @@ info:
     - Endpoints marked "Idempotent" accept `Idempotency-Key`. A repeat with the same body
       returns the same resource; where the first response contained a one-time link, the
       repeat issues a fresh link and invalidates the earlier one. The same key with a
-      different body returns 409 `idempotency_conflict`.
+      different body returns 409 `idempotency_conflict`. A key that is empty or longer than
+      200 characters returns 400 `invalid_idempotency_key`.
     - Records outside the caller's business or permitted stores return 404 `not_found`,
       identical to a record that does not exist. A visible record without the needed
       permission returns 403 `forbidden`.
