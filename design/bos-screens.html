@@ -211,6 +211,17 @@ table.v td.n,table.v th.n{text-align:end;font-variant-numeric:tabular-nums}
 @media (max-width:420px){.grid.pairs{grid-template-columns:100%}}
 @media (max-width:420px){figure{width:100%}.page{padding-inline:16px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* ---------- M0 shell and account additions (T073) ---------- */
+.nav.sh{padding:4px 4px calc(18px + env(safe-area-inset-bottom,0px));position:relative}
+.nav.sh::after{content:"";position:absolute;bottom:6px;left:50%;width:112px;height:4px;margin-left:-56px;border-radius:999px;background:var(--fg);opacity:.3}
+.nav.sh a{min-height:56px;gap:3px}
+.nav.sh .tabic{width:56px;height:30px;border-radius:999px;display:grid;place-items:center}
+.nav.sh a:not(.on) .ic{stroke-width:1.8}
+.nav.sh a.on{color:var(--fg)}
+.nav.sh a.on .tabic{background:var(--accent-soft);color:var(--accent-fg)}
+.nav.sh a.on .ic{stroke-width:2.6}
+.nav.sh a.on .tn{font-weight:700}
+.pill.t44{min-height:44px}
 </style>
 </head>
 <body>
@@ -255,7 +266,10 @@ table.v td.n,table.v th.n{text-align:end;font-variant-numeric:tabular-nums}
 <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
 <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></symbol>
 <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9"/></symbol>
-<symbol id="i-wifioff" viewBox="0 0 24 24"><path d="M2 8.8a15 15 0 0 1 4-2.4M22 8.8a15 15 0 0 0-9-3.7M5 12.5a10 10 0 0 1 3-1.8M19 12.5a10 10 0 0 0-4-2.2M8.5 16a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+<symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></symbol>
+<symbol id="i-wifioff"viewBox="0 0 24 24"><path d="M2 8.8a15 15 0 0 1 4-2.4M22 8.8a15 15 0 0 0-9-3.7M5 12.5a10 10 0 0 1 3-1.8M19 12.5a10 10 0 0 0-4-2.2M8.5 16a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/></symbol>
 </defs></svg>
 
 <div class="page">
@@ -1327,6 +1341,180 @@ pair('100 · Stores — loading','100 · المتاجر — جارٍ التحم�
 <div class="footer"><button class="btn primary" disabled>${ic('plus')} ${x('Add store','إضافة متجر')}</button></div>`;});
 pair('101 · Stores — could not load','101 · المتاجر — تعذّر التحميل','Error with a retry. Says nothing was changed.',l=>{const x=T(l);return spage(l,{bar:sBar(l),lsw:false,tone:'warn',icon:'wifioff',title:x('Couldn’t load stores','تعذّر تحميل المتاجر'),text:x('Check your connection and try again. Nothing was changed.','تحقّق من الاتصال وحاول مرة أخرى. لم يتغيّر شيء.'),btns:`<button class="btn primary">${ic('sync','sm')} ${x('Try again','إعادة المحاولة')}</button><button class="btn ghost">${x('Back to More','العودة إلى المزيد')}</button>`});});
 pair('102 · Store not found','102 · المتجر غير موجود','not_found (404): the store was opened but is no longer there, or belongs to another business.',l=>{const x=T(l);return spage(l,{bar:ebar(l,x('Stores','المتاجر'),{back:1}),lsw:false,tone:'info',icon:'search',title:x('Not found','غير موجود'),text:x('This store is no longer in your business. Go back to refresh the list.','لم يعد هذا المتجر موجوداً في نشاطك. عد لتحديث القائمة.'),btns:`<button class="btn primary">${x('Back to stores','العودة إلى المتاجر')}</button>`});});
+
+/* ================= M0 — App shell and account (T073) ================= */
+add('M0 — App shell and account','US-04. The shell every role lands in, the full More menu, and the account screens: history, devices, language, profile and password, plus the offline, failed-save and install states. Every screen in English and Arabic side by side. Screens 103–106 are the shell and the coming-soon state; 107–108 the More menu; 109–114 History; 115–118 Devices; 119 Language; 120–128 Profile and password; 129–131 offline, failed save and install. Times are Beirut time. Sample data is fake.');
+S[S.length-1].cls='pairs';
+{
+const TABS={sales:[0,'cart'],packing:[1,'box'],delivery:[2,'truck'],orders:[3,'list'],more:[4,'more']};
+const shNav=(l,keys,on)=>`<nav class="nav sh" aria-label="${T(l)('Main','التنقل الرئيسي')}" style="grid-template-columns:repeat(${keys.length},1fr)">${keys.map(k=>`<a class="${k===on?'on':''}" ${k===on?'aria-current="page"':''}><span class="tabic">${ic(TABS[k][1])}</span><span class="tn">${L[l][TABS[k][0]]}</span></a>`).join('')}</nav>`;
+const ROLE_TABS={owner:['sales','packing','delivery','orders','more'],sales:['sales','orders','more'],packing:['packing','orders','more']};
+const SOON={sales:['Here you will create orders from your customers’ chats and confirm them.','هنا ستُنشئ الطلبات من محادثات زبائنك وتؤكدها.'],packing:['Here you will see the orders to pack and check off each item.','هنا ستظهر الطلبات الجاهزة للتجهيز وتتحقق من كل قطعة.'],delivery:['Here you will hand parcels to couriers and record delivery results and cash.','هنا ستسلّم الطرود لشركات التوصيل وتسجّل نتائج التوصيل والمبالغ المحصّلة.'],orders:['Here you will find every order with its packing, delivery and payment status.','هنا ستجد كل الطلبات مع حالة تجهيزها وتوصيلها ودفعها.']};
+const readyNow=(l,rows)=>{const x=T(l);return `<div class="card" style="width:100%;text-align:start"><div class="label">${x('Ready now, under More','جاهز الآن في قائمة المزيد')}</div><div class="list">${rows.map(r=>`<div class="li">${ic(r[0])}<div class="grow"><div class="t">${r[1]}</div></div>${ic('chev','flip')}</div>`).join('')}</div></div>`;};
+const soon=(l,tab,o={})=>{const x=T(l);return `<div class="body" style="justify-content:center;align-items:center;text-align:center;gap:10px">
+  <div style="width:72px;height:72px;border-radius:50%;background:var(--info-soft);color:var(--info-fg);display:grid;place-items:center">${ic(TABS[tab][1],'lg')}</div>
+  <span class="chip info">${ic('clock','sm')} ${x('Coming soon','قريباً')}</span>
+  <div class="big">${L[l][TABS[tab][0]]}</div>
+  <div class="m" style="max-width:290px">${SOON[tab][ix(l)]}</div>
+  <div class="xs" style="max-width:290px">${x('Nothing is wrong. This part of BOS is switched on in a later update.','لا يوجد أي خطأ. يُفعَّل هذا القسم من BOS في تحديث لاحق.')}</div>
+  ${o.ready||''}
+</div>`;};
+const shell=(l,role,tab,o={})=>`${bar(L[l][TABS[tab][0]],{sub:'Demo Denim House Group'})}${o.top||''}${soon(l,tab,o)}${o.below||''}${shNav(l,ROLE_TABS[role],tab)}`;
+
+/* ---- 103–105 Shell by role ---- */
+pair('103 · Shell — owner','103 · الواجهة — المالك','Owners and managers get all five tabs and open on Sales. Tabs and the start tab come from GET /me (tabs, start_tab), never worked out on the phone. The active tab is marked by a filled shape behind a heavier icon and a bold label, not by colour alone. The bar sits above the phone’s home indicator (safe-area padding).',l=>shell(l,'owner','sales'));
+pair('104 · Shell — sales agent','104 · الواجهة — موظف مبيعات','A sales agent sees Sales, Orders and More, and opens on Sales. Tabs they cannot use are not shown at all. Someone with several roles gets the union, for example Sales + Packing shows Sales, Packing, Orders and More and still opens on Sales.',l=>shell(l,'sales','sales'));
+pair('105 · Shell — packing agent','105 · الواجهة — موظف تجهيز','A packing agent sees Packing, Orders and More, and opens on Packing. A dispatch agent gets the same shape with Delivery instead of Packing, opening on Delivery.',l=>shell(l,'packing','packing'));
+
+/* ---- 106 Coming soon ---- */
+pair('106 · Coming soon','106 · قريباً','The calm placeholder used for Sales, Packing, Delivery and Orders in M0, each with its own icon and one line about what it will do. It is not an error: no warning colour, no retry. Below it, what already works, limited to what this person may open.',l=>{const x=T(l);return shell(l,'owner','orders',{ready:readyNow(l,[['users',x('Employees','الموظفون')],['store',x('Stores','المتاجر')],['gear',x('Settings','الإعدادات')]])});});
+
+/* ---- 107–108 More ---- */
+const mRow=r=>`<div class="li">${ic(r[0])}<div class="grow"><div class="t">${r[1]}</div>${r[2]?`<div class="m">${r[2]}</div>`:''}</div>${ic('chev','flip')}</div>`;
+const mGrp=(title,rows)=>`<div class="label">${title}</div><div class="card" style="padding:0 12px"><div class="list">${rows.map(mRow).join('')}</div></div>`;
+const moreM=(l,role,o={})=>{const x=T(l);const own=role==='owner';
+ const biz=own?[['users',x('Employees','الموظفون'),`<span class="num">5</span> ${x('people','أشخاص')}`],['store',x('Stores','المتاجر'),`<span class="num">3</span> ${x('stores','متاجر')}`],['gear',x('Settings','الإعدادات'),`USD · 1 USD = <bdi dir="ltr" class="num">89,500</bdi> LBP`],['clock',x('History','السجل'),x('Who did what, and when','من فعل ماذا ومتى')]]:[['store',x('Stores','المتاجر'),SN(l,'B')]];
+ const me=own?['Samer Demo','+961 70 000 011']:['Hadi Demo','+961 70 000 025'];
+ const acc=[['user',x('Profile','الملف الشخصي'),`${me[0]} · <bdi dir="ltr" class="num">${me[1]}</bdi>`],['phone',x('Devices','الأجهزة'),own?`<span class="num">3</span> ${x('signed in','أجهزة مسجّلة')}`:`<span class="num">1</span> ${x('signed in','جهاز مسجّل')}`],['globe',x('Language','اللغة'),x('English','العربية')]];
+ return `${ebar(l,x('More','المزيد'))}
+<div class="body">
+  ${o.top||''}
+  <div class="card row"><div class="logo" style="width:48px;height:48px;border-radius:12px;font-size:15px">BOS</div><div class="grow"><div class="t">Demo Denim House Group</div><div class="m">${me[0]} · ${own?x('Owner','المالك'):x('Sales agent','موظف مبيعات')}</div></div></div>
+  ${mGrp(x('Business','النشاط'),biz)}
+  ${mGrp(x('Your account','حسابك'),acc)}
+  <button class="btn ghost">${ic('logout','flip')} ${x('Sign out','تسجيل الخروج')}</button>
+</div>${shNav(l,ROLE_TABS[own?'owner':'sales'],'more')}`;};
+pair('107 · More — owner','107 · المزيد — المالك','The full M0 menu, replacing screens 18 and 75: Catalog and Reports return when their milestones ship. Business holds Employees, Stores, Settings and History; Your account holds Profile, Devices and Language. A manager sees the same menu without History (audit.view is owner-only).',l=>moreM(l,'owner'));
+pair('108 · More — sales agent','108 · المزيد — موظف مبيعات','Only what a sales agent may open: their own store (read only, screens 96–97), Profile, Devices and Language. No Employees, Settings or History. Packing and dispatch agents get the same menu.',l=>moreM(l,'sales'));
+
+/* ---- 109–114 History ---- */
+const EV={
+ 'auth.sign_in':['user','Sign-in','تسجيل دخول'],'auth.sign_in_failed':['alert','Failed sign-in','محاولة دخول فاشلة'],'auth.sign_out':['logout','Sign-out','تسجيل خروج',1],'auth.session_revoked':['phone','Device signed out','إنهاء جلسة على جهاز'],
+ 'auth.password_changed':['lock','Password changed','تغيير كلمة المرور'],'auth.password_reset_issued':['lock','Reset link issued','إصدار رابط استعادة'],'auth.identifier_changed':['edit','Phone or email changed','تغيير الهاتف أو البريد'],
+ 'invitation.created':['send','Invitation sent','إرسال دعوة',1],'invitation.accepted':['check','Invitation accepted','قبول دعوة'],'invitation.revoked':['x','Invitation revoked','إلغاء دعوة'],'invitation.resent':['send','Invitation resent','إعادة إرسال دعوة',1],
+ 'user.roles_changed':['users','Roles changed','تعديل الأدوار'],'user.stores_changed':['users','Store access changed','تعديل المتاجر المسموحة'],'user.deactivated':['ban','Employee deactivated','إلغاء تفعيل موظف'],'user.reactivated':['check','Employee reactivated','إعادة تفعيل موظف'],
+ 'store.created':['store','Store added','إضافة متجر'],'store.updated':['store','Store changed','تعديل متجر'],'store.deactivated':['ban','Store deactivated','إلغاء تفعيل متجر'],'store.reactivated':['store','Store reactivated','إعادة تفعيل متجر'],
+ 'tenant.settings_changed':['gear','Settings changed','تعديل الإعدادات'],'tenant.created':['flag','Business set up','إعداد النشاط'],'tenant.suspended':['ban','Business suspended','تعليق النشاط'],'tenant.reactivated':['check','Business reactivated','إعادة تفعيل النشاط'],
+ 'access.denied_permission':['ban','Refused: no permission','وصول مرفوض: بلا صلاحية'],'access.denied_tenant':['ban','Refused: not in your business','وصول مرفوض: خارج نشاطك'],'access.denied_store':['ban','Refused: store not allowed','وصول مرفوض: متجر غير مسموح'],
+ 'email.sent':['send','Email sent','إرسال بريد إلكتروني',1],'email.failed':['alert','Email not sent','تعذّر إرسال بريد إلكتروني']};
+const ACT={op:['the Beta team','فريق Beta'],sys:['BOS, automatically','BOS تلقائياً'],anon:['someone not signed in','شخص لم يسجّل الدخول']};
+const hRow=(l,r)=>{const x=T(l);const e=EV[r.e];const w=ACT[r.a]?ACT[r.a][ix(l)]:r.a;return `<div class="li" style="align-items:flex-start;padding:12px 0"><div class="av" style="width:36px;height:36px" aria-hidden="true">${ic(e[0],'sm'+(e[3]?' flip':''))}</div><div class="grow" style="display:flex;flex-direction:column;gap:2px"><div class="between" style="align-items:flex-start"><span class="t">${e[ix(l)+1]}</span><bdi dir="ltr" class="xs num">${r.t}</bdi></div>${r.d?`<div class="m">${r.d[ix(l)]}</div>`:''}<div class="xs">${x('By','بواسطة')} ${w}</div></div></div>`;};
+const hDay=(l,d)=>`<div class="label">${d.h[ix(l)]}</div><div class="card" style="padding:0 12px"><div class="list">${d.r.map(r=>hRow(l,r)).join('')}</div></div>`;
+const D_TODAY=['Today · Thu 12 Nov','اليوم · الخميس 12 تشرين الثاني'],D_YEST=['Yesterday · Wed 11 Nov','أمس · الأربعاء 11 تشرين الثاني'],D_TUE=['Tue 10 Nov','الثلاثاء 10 تشرين الثاني'];
+const HDAYS=[
+ {h:D_TODAY,r:[{e:'tenant.settings_changed',t:'09:41',d:['Exchange rate: 89,500 → 90,000 LBP','سعر الصرف: من <bdi dir="ltr">89,500</bdi> إلى <bdi dir="ltr">90,000</bdi> ل.ل.'],a:'Samer Demo'},{e:'invitation.created',t:'09:12',d:['Hadi Demo · Sales agent · Store B','Hadi Demo · موظف مبيعات · المتجر ب'],a:'Karim Demo'},{e:'auth.sign_in_failed',t:'08:55',d:['Dana Demo’s account','حساب Dana Demo'],a:'anon'},{e:'auth.sign_in',t:'08:30',d:['Chrome on Android','Chrome على Android'],a:'Dana Demo'}]},
+ {h:D_YEST,r:[{e:'store.updated',t:'18:05',d:['Store B · WhatsApp number','المتجر ب · رقم واتساب'],a:'Karim Demo'},{e:'user.roles_changed',t:'11:02',d:['Dana Demo · Sales → Sales, Packing','Dana Demo · من «المبيعات» إلى «المبيعات، التجهيز»'],a:'Samer Demo'},{e:'email.sent',t:'10:15',d:['Password reset email to Tala Demo','رسالة استعادة كلمة المرور إلى Tala Demo'],a:'sys'}]},
+ {h:D_TUE,r:[{e:'access.denied_permission',t:'16:48',d:['Nour Demo tried to open Settings','حاول Nour Demo فتح الإعدادات'],a:'Nour Demo'},{e:'auth.password_reset_issued',t:'15:02',d:['For Samer Demo','لـ Samer Demo'],a:'op'}]}];
+const DDAYS=[
+ {h:D_TODAY,r:[{e:'auth.sign_in',t:'08:30',d:['Chrome on Android','Chrome على Android'],a:'Dana Demo'}]},
+ {h:D_YEST,r:[{e:'auth.sign_out',t:'19:10',d:['Chrome on Android','Chrome على Android'],a:'Dana Demo'},{e:'auth.sign_in',t:'08:20',d:['Chrome on Android','Chrome على Android'],a:'Dana Demo'}]},
+ {h:D_TUE,r:[{e:'auth.session_revoked',t:'12:30',d:['Safari on iPhone','Safari على iPhone'],a:'Dana Demo'},{e:'auth.password_changed',t:'12:28',d:'',a:'Dana Demo'}]}];
+const fBar=(l,ev,pp)=>{const x=T(l);return `<div class="pills" role="group" aria-label="${x('Filters','التصفية')}"><button class="pill t44 ${ev?'on':''}" aria-haspopup="dialog">${ic('filter','sm')} ${ev?EV[ev][ix(l)+1]:x('All events','كل الأحداث')}</button><button class="pill t44 ${pp?'on':''}" aria-haspopup="dialog">${ic('user','sm')} ${pp||x('Everyone','الجميع')}</button>${ev||pp?`<button class="pill t44">${ic('x','sm')} ${x('Clear','مسح')}</button>`:''}</div>`;};
+const hBar=l=>ebar(l,T(l)('History','السجل'),{back:1,sub:'Demo Denim House Group'});
+const hNote=l=>`<div class="xs">${T(l)('Newest first. Times are Beirut time.','الأحدث أولاً. الأوقات بتوقيت بيروت.')}</div>`;
+const skH=()=>`<div class="li" style="padding:12px 0"><div class="sk" style="width:36px;height:36px;border-radius:50%;flex:none"></div><div class="grow" style="display:flex;flex-direction:column;gap:8px"><div class="sk" style="height:14px;width:50%"></div><div class="sk" style="height:12px;width:75%"></div></div></div>`;
+const hist=(l,o={})=>{const x=T(l);return `${hBar(l)}
+<div class="body">
+  ${fBar(l,o.ev,o.pp)}
+  ${hNote(l)}
+  ${(o.days||HDAYS).map(d=>hDay(l,d)).join('')}
+  ${o.loading?`<div class="card" style="padding:0 12px" aria-busy="true"><div class="list">${skH()}${skH()}</div></div><button class="btn ghost" disabled role="status">${ic('sync','sm')} ${x('Loading more…','جارٍ تحميل المزيد…')}</button>`:`<button class="btn ghost">${x('Load more','عرض المزيد')}</button>`}
+</div>`;};
+const tallSheet=(l,bg,title,inner,foot)=>{const x=T(l);return `${bg}<div class="sheet-dim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="${title}" style="top:72px"><div class="grab"></div><div class="between"><div class="t" style="font-size:17px">${title}</div><button class="iconbtn" aria-label="${x('Close','إغلاق')}">${ic('x')}</button></div><div style="flex:1;min-height:0;overflow:hidden"><div style="display:flex;flex-direction:column;gap:12px">${inner}</div></div>${foot}</div>`;};
+const EG=[[['Sign-in and devices','الدخول والأجهزة'],['auth.sign_in','auth.sign_in_failed','auth.sign_out','auth.session_revoked']],[['Passwords and contact details','كلمات المرور وبيانات الاتصال'],['auth.password_changed','auth.password_reset_issued','auth.identifier_changed']],[['Employees and invitations','الموظفون والدعوات'],['invitation.created','invitation.accepted','invitation.revoked','invitation.resent','user.roles_changed','user.stores_changed','user.deactivated','user.reactivated']],[['Stores','المتاجر'],['store.created','store.updated','store.deactivated','store.reactivated']],[['Business and settings','النشاط والإعدادات'],['tenant.settings_changed','tenant.created','tenant.suspended','tenant.reactivated']],[['Refused access','وصول مرفوض'],['access.denied_permission','access.denied_tenant','access.denied_store']],[['Emails','البريد الإلكتروني'],['email.sent','email.failed']]];
+const evPill=(l,k,on)=>`<span class="pill t44 ${on?'on':''}" role="radio" aria-checked="${on?'true':'false'}">${on?ic('check','sm'):''}${k?EV[k][ix(l)+1]:T(l)('All events','كل الأحداث')}</span>`;
+
+pair('109 · History','109 · السجل','GET /audit, owners only. Newest first, grouped by day, 50 at a time; Load more asks for the next page with next_cursor and the button disappears when next_cursor is null. Each entry shows the translated event name, what it was about, who did it and the Beirut time. Beta team and automatic entries are named as such; a failed sign-in says it was by someone not signed in, and names the account it was tried on.',l=>hist(l));
+pair('110 · History — filter by event','110 · السجل — حسب نوع الحدث','One event type at a time, because the API filter (event) takes a single value. Types are grouped so the list is easy to scan; the sheet scrolls. The chosen one is marked with a tick as well as colour. Operator sign-ins and maintenance runs are platform events and never appear.',l=>{const x=T(l);return tallSheet(l,hist(l,{days:[HDAYS[0]]}),x('Show events','عرض الأحداث'),`<div class="pills">${evPill(l,'',0)}</div>${EG.map(g=>`<div><div class="label" style="margin-bottom:6px">${g[0][ix(l)]}</div><div class="pills" role="radiogroup" aria-label="${g[0][ix(l)]}">${g[1].map(k=>evPill(l,k,k==='user.roles_changed')).join('')}</div></div>`).join('')}`,`<button class="btn primary">${x('Show results','عرض النتائج')}</button>`);});
+pair('111 · History — filter by person','111 · السجل — حسب الشخص','People come from the business’s employee list (actor_id). Inactive people stay in the list, because their past actions still matter. Entries by the Beta team, by BOS automatically or by someone not signed in have no person to pick, and the sheet says so.',l=>{const x=T(l);const ppl=[['Everyone','الجميع',0],['Samer Demo','Samer Demo',0,1],['Karim Demo','Karim Demo',0],['Dana Demo','Dana Demo',1],['Nour Demo','Nour Demo',0],['Tala Demo','Tala Demo',0],['Omar Demo','Omar Demo',0,0,1]];
+ return tallSheet(l,hist(l,{days:[HDAYS[0]]}),x('Show entries by','عرض ما قام به'),`<div class="list" role="radiogroup" aria-label="${x('Person','الشخص')}">${ppl.map(p=>`<div class="li" role="radio" aria-checked="${p[2]?'true':'false'}"><span class="radio ${p[2]?'on':''}"></span><div class="grow"><span class="t">${p[ix(l)]}</span>${p[3]?` <span class="chip">${x('You','أنت')}</span>`:''}${p[4]?` <span class="chip">${ic('ban','sm')} ${x('Inactive','غير نشط')}</span>`:''}</div></div>`).join('')}</div><div class="xs">${x('Entries by the Beta team, by BOS automatically or by someone not signed in can’t be filtered by person.','لا يمكن تصفية ما قام به فريق Beta أو BOS تلقائياً أو شخص دون تسجيل دخول حسب الشخص.')}</div>`,`<button class="btn primary">${x('Show results','عرض النتائج')}</button>`);});
+pair('112 · History — filtered, loading more','112 · السجل — بعد التصفية، تحميل المزيد','Filters show as filled pills with a Clear pill beside them. While the next page loads, placeholder rows appear under the list and the button says Loading; entries already shown stay put.',l=>hist(l,{pp:'Dana Demo',days:DDAYS,loading:1}));
+pair('113 · History — nothing matches','113 · السجل — لا نتائج','Empty state for a filter with no entries, with the one way out. A brand-new business always has at least its setup and activation entries, so an unfiltered history is never empty.',l=>{const x=T(l);return `${hBar(l)}
+<div class="body">
+  ${fBar(l,'store.deactivated','Dana Demo')}
+  <div style="flex:1;display:grid;place-items:center;align-content:center;text-align:center;gap:10px">
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--surface-2);color:var(--fg-2);display:grid;place-items:center">${ic('search','lg')}</div>
+    <div class="big">${x('Nothing matches','لا توجد نتائج')}</div>
+    <div class="m" style="max-width:280px">${x('No “Store deactivated” entries by Dana Demo. Try another event type or person.','لا توجد أحداث «إلغاء تفعيل متجر» قام بها Dana Demo. جرّب نوعاً آخر أو شخصاً آخر.')}</div>
+    <button class="btn ghost" style="max-width:240px">${ic('x','sm')} ${x('Clear filters','مسح التصفية')}</button>
+  </div>
+</div>`;});
+pair('114 · History — not allowed','114 · السجل — غير مسموح','forbidden (403): only owners may read the history. Managers and agents have no History entry in More; this is what they get from an old link.',l=>{const x=T(l);return spage(l,{bar:hBar(l),lsw:false,tone:'info',icon:'lock',title:x('Only owners can see the history','السجل متاح للمالكين فقط'),text:x('If you need to check who did what, ask an owner of your business.','إن احتجت إلى معرفة من فعل ماذا، اسأل أحد مالكي نشاطك.'),btns:`<button class="btn primary">${x('Back to More','العودة إلى المزيد')}</button>`});});
+
+/* ---- 115–118 Devices ---- */
+const DV=[{d:['Chrome on Android','Chrome على Android'],k:'phone',cur:1},{d:['Safari on iPhone','Safari على iPhone'],k:'phone',t:['Today, 08:15','اليوم، <bdi dir="ltr">08:15</bdi>']},{d:['Edge on Windows','Edge على Windows'],k:'laptop',t:['3 Nov 2026, 19:40','3 تشرين الثاني 2026، <bdi dir="ltr">19:40</bdi>']}];
+const dRow=(l,v)=>{const x=T(l);return `<div class="li" style="padding:12px 0"><div class="av" aria-hidden="true">${ic(v.k)}</div><div class="grow" style="display:flex;flex-direction:column;gap:2px"><div class="t">${v.d[ix(l)]}</div><div class="m">${v.cur?x('Active now','نشط الآن'):`${x('Last active','آخر نشاط')} ${v.t[ix(l)]}`}</div>${v.cur?`<div><span class="chip ok">${ic('check','sm')} ${x('This device','هذا الجهاز')}</span></div>`:''}</div>${v.cur?'':`<button class="btn ghost sm" aria-label="${x('Sign out on ','تسجيل الخروج من ')}${v.d[ix(l)]}">${x('Sign out','تسجيل الخروج')}</button>`}</div>`;};
+const devs=(l,list,o={})=>{const x=T(l);const others=list.filter(v=>!v.cur).length;return `${ebar(l,x('Devices','الأجهزة'),{back:1,sub:x('Where you are signed in','الأجهزة التي سجّلت الدخول منها')})}
+<div class="body">
+  ${o.ok?dBanner(l,'ok','check',o.ok):''}
+  <div class="card" style="padding:0 12px"><div class="list">${list.map(v=>dRow(l,v)).join('')}</div></div>
+  ${others?'':`<div class="m">${x('No other devices are signed in to your account.','لا توجد أجهزة أخرى مسجّلة الدخول إلى حسابك.')}</div>`}
+  ${dBanner(l,'info','info',x('Only your own devices are listed. A device you don’t use for 30 days is signed out on its own.','تظهر هنا أجهزتك أنت فقط. ويُسجَّل الخروج تلقائياً من أي جهاز لا تستخدمه مدة 30 يوماً.'))}
+  <div class="xs">${x('To sign out on this phone, use Sign out in More.','لتسجيل الخروج من هذا الهاتف، استخدم «تسجيل الخروج» في قائمة المزيد.')}</div>
+</div>
+${others?`<div class="footer"><button class="btn danger">${ic('logout','flip')} ${x('Sign out all other devices','تسجيل الخروج من كل الأجهزة الأخرى')}</button></div>`:''}`;};
+pair('115 · Devices','115 · الأجهزة','GET /me/sessions: the person’s own signed-in devices, this one first and marked “This device” in words. Each line shows the browser and device and when it was last active, in Beirut time. Sign out on a line ends that session at once (DELETE /me/sessions/{id}); it needs no confirmation because signing in again undoes it.',l=>devs(l,DV));
+pair('116 · Devices — one signed out','116 · الأجهزة — بعد إنهاء جهاز','Shown only after the server answers 204: the line is gone and a message names the device. If it fails, the line stays and the failed-save pattern (screen 130) is used.',l=>{const x=T(l);return devs(l,[DV[0],DV[2]],{ok:x('Signed out on Safari on iPhone.','تم تسجيل الخروج من Safari على iPhone.')});});
+pair('117 · Confirm sign out all other devices','117 · تأكيد الخروج من الأجهزة الأخرى','DELETE /me/sessions ends every session except this one, so it asks first and says this phone stays signed in.',l=>{const x=T(l);return sheetOver(l,devs(l,DV),x('Sign out all other devices?','تسجيل الخروج من كل الأجهزة الأخرى؟'),x('You stay signed in on this phone. The 2 other devices will need your password to sign in again.','ستبقى مسجّل الدخول على هذا الهاتف. أما الجهازان الآخران فسيحتاجان إلى كلمة مرورك لتسجيل الدخول مجدداً.'),`<button class="btn ghost">${x('Cancel','إلغاء')}</button><button class="btn danger">${ic('logout','sm flip')} ${x('Sign out others','خروج الأجهزة الأخرى')}</button>`);});
+pair('118 · Devices — others signed out','118 · الأجهزة — بعد خروج الأجهزة الأخرى','After the server confirms: only this device is left, the message says so, and the button is gone because there is nothing more to end.',l=>{const x=T(l);return devs(l,[DV[0]],{ok:x('Signed out on 2 other devices.','تم تسجيل الخروج من جهازين آخرين.')});});
+
+/* ---- 119 Language ---- */
+pair('119 · Language','119 · اللغة','Two choices, each written in its own language. Tapping one flips the whole layout at once and saves it to the account (PATCH /me, locale), so BOS opens in that language on every device. If the save fails, the screen stays in the new language on this phone and the failed-save banner says it was not saved for other devices.',l=>{const x=T(l);const opt=(on,lang,name,sub)=>`<div class="li" role="radio" aria-checked="${on?'true':'false'}" style="min-height:60px"><span class="radio ${on?'on':''}"></span><div class="grow"><div class="t" lang="${lang}"${lang==='ar'?` style="${AR_F}"`:''}>${name}</div><div class="m">${sub}</div></div></div>`;
+ return `${ebar(l,x('Language','اللغة'),{back:1})}
+<div class="body">
+  <div class="card" style="padding:0 12px"><div class="list" role="radiogroup" aria-label="${x('Language','اللغة')}">${opt(l==='ar','ar','العربية',x('Arabic · right to left','من اليمين إلى اليسار'))}${opt(l==='en','en','English',x('English · left to right','الإنجليزية · من اليسار إلى اليمين'))}</div></div>
+  ${dBanner(l,'info','globe',x('Saved to your account. BOS opens in this language on every device you sign in on.','تُحفظ في حسابك. يفتح BOS بهذه اللغة على كل جهاز تسجّل الدخول منه.'))}
+  <div class="xs">${x('The layout flips as soon as you tap. Numbers stay in Latin digits.','يتغيّر اتجاه الصفحة فور اختيارك. وتبقى الأرقام بالأرقام اللاتينية.')}</div>
+</div>${shNav(l,ROLE_TABS.owner,'more')}`;});
+
+/* ---- 120–125 Profile ---- */
+const PE=l=>{const x=T(l);return {
+ phone:x('This phone number is not valid. Example: <bdi dir="ltr">+961 70 000 111</bdi>','رقم الهاتف غير صالح. مثال: <bdi dir="ltr">+961 70 000 111</bdi>'),
+ used:x('This email can’t be used for your account. Enter a different one.','لا يمكن استخدام هذا البريد الإلكتروني لحسابك. أدخل بريداً آخر.'),
+ wrong:x('That password is not correct. Try again.','كلمة المرور هذه غير صحيحة. حاول مرة أخرى.'),
+ weak:x('Use at least 10 characters.','استخدم 10 أحرف على الأقل.'),
+ match:x('The two passwords do not match.','كلمتا المرور غير متطابقتين.')};};
+const prof=(l,o={})=>{const x=T(l),e=o.e||{};return `${ebar(l,x('Profile','الملف الشخصي'),{back:1,sub:'Demo Denim House Group'})}
+<div class="body">
+  ${o.top||''}
+  ${o.sum?dBanner(l,'bad','alert',o.sum):''}
+  ${o.ok?dBanner(l,'ok','check',o.ok):''}
+  <div class="card row"><div class="av" style="width:52px;height:52px">SD</div><div class="grow"><div class="t" style="font-size:17px">${o.name||'Samer Demo'}</div><div class="pills" style="gap:4px;margin-top:4px"><span class="chip info">${x('Owner','المالك')}</span></div></div></div>
+  ${fld(x('Name','الاسم'),o.name||'Samer Demo',{focus:o.fName})}
+  ${fld(x('Phone','الهاتف'),o.phone||'+961 70 000 011',{ltr:1,err:e.phone,focus:o.fPhone})}
+  ${fld(x('Email (optional)','البريد الإلكتروني (اختياري)'),o.email||'name@demo.example',{ltr:1,ph:!o.email,err:e.email,focus:o.fMail,hint:e.email?'':x('Add an email so you can reset your password yourself.','أضف بريداً إلكترونياً لتستعيد كلمة مرورك بنفسك.')})}
+  <div class="xs">${ic('lock','sm')} ${x('Changing your phone or email asks for your current password.','يُطلب إدخال كلمة المرور الحالية عند تغيير الهاتف أو البريد الإلكتروني.')}</div>
+  <div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="label">${x('Password','كلمة المرور')}</div><div class="m">${x('Changing it signs you out on your other devices.','تغييرها يسجّل خروجك من أجهزتك الأخرى.')}</div><button class="btn ghost">${ic('lock','sm')} ${x('Change password','تغيير كلمة المرور')}</button></div>
+</div>
+<div class="footer">${o.retry?`<button class="btn primary">${ic('sync','sm')} ${x('Try again','إعادة المحاولة')}</button>`:`<button class="btn primary">${x('Save changes','حفظ التغييرات')}</button>`}</div>`;};
+const pwSheet=(l,bg,o={})=>{const x=T(l);return `${bg}<div class="sheet-dim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="${x('Confirm it’s you','تأكيد هويتك')}"><div class="grab"></div><div class="t" style="font-size:17px">${x('Confirm it’s you','تأكيد هويتك')}</div><div class="m">${x('Enter your current password to change your phone number to','أدخل كلمة مرورك الحالية لتغيير رقم هاتفك إلى')} <bdi dir="ltr" class="num" style="white-space:nowrap">+961 70 000 012</bdi>.</div>${pw(l,x('Current password','كلمة المرور الحالية'),o.err?9:0,{focus:!o.err,err:o.err?PE(l).wrong:''})}<div class="btns"><button class="btn ghost">${x('Cancel','إلغاء')}</button><button class="btn primary">${x('Confirm and save','تأكيد وحفظ')}</button></div></div>`;};
+pair('120 · Profile','120 · الملف الشخصي','Name, phone and email from GET /me, edited with one Save (PATCH /me). A person without an email is told why adding one helps. Roles are shown, not edited here. Change password opens screen 126.',l=>prof(l));
+pair('121 · Profile — confirm with password','121 · الملف الشخصي — التأكيد بكلمة المرور','Changing the phone or the email sends current_password with the change, so Save first opens this sheet. It names the new value, so the person knows exactly what they are confirming. A name-only change saves straight away.',l=>pwSheet(l,prof(l,{phone:'+961 70 000 012',fPhone:1})));
+pair('122 · Profile — wrong password','122 · الملف الشخصي — كلمة مرور خاطئة','wrong_password (400): the sheet stays open with the message under the field. The new phone number is kept behind it; nothing changed.',l=>pwSheet(l,prof(l,{phone:'+961 70 000 012'}),{err:1}));
+pair('123 · Profile — invalid phone','123 · الملف الشخصي — رقم غير صالح','validation_failed with phone: invalid_phone. The sheet closes and the message sits under the field with a working example. Clearing both phone and email (identifier: required) reads: “Keep a phone number or an email so you can sign in.” / «أبقِ رقم هاتف أو بريداً إلكترونياً لتتمكن من تسجيل الدخول.»',l=>{const x=T(l);return prof(l,{phone:'70 00',sum:x('1 thing to fix before saving.','أمر واحد يحتاج إلى تصحيح قبل الحفظ.'),e:{phone:PE(l).phone}});});
+pair('124 · Profile — can’t use this email','124 · الملف الشخصي — لا يمكن استخدام البريد','identifier_unavailable (409). The same neutral words whether the address belongs to someone in this business or anywhere else, so nothing about other businesses is revealed. The message goes under the field that changed; for a phone it reads “This phone number can’t be used…”.',l=>{const x=T(l);return prof(l,{email:'samer@demo.example',sum:x('Not saved.','لم يُحفظ شيء.'),e:{email:PE(l).used}});});
+pair('125 · Profile — saved','125 · الملف الشخصي — تم الحفظ','Shown only after the server answers 200. A changed phone or email is repeated in its saved form, because it is now what the person signs in with.',l=>{const x=T(l);return prof(l,{phone:'+961 70 000 012',ok:x('Saved. From now on, sign in with +961 70 000 012.','تم الحفظ. من الآن، سجّل الدخول بالرقم <bdi dir="ltr">+961 70 000 012</bdi>.')});});
+
+/* ---- 126–128 Change password ---- */
+const chPw=(l,bad)=>{const x=T(l),m=PE(l);return `${ebar(l,x('Change password','تغيير كلمة المرور'),{back:1})}
+<div class="body">
+  ${bad?dBanner(l,'bad','alert',x('Not changed. 2 things to fix.','لم تتغيّر كلمة المرور. أمران يحتاجان إلى تصحيح.')):''}
+  ${pw(l,x('Current password','كلمة المرور الحالية'),bad?9:0,{focus:!bad,err:bad?m.wrong:''})}
+  ${pw(l,x('New password','كلمة المرور الجديدة'),bad?7:0,{err:bad?m.weak:'',hint:bad?'':x('At least 10 characters.','10 أحرف على الأقل.')})}
+  ${pw(l,x('Confirm new password','تأكيد كلمة المرور الجديدة'),bad?8:0,{err:bad?m.match:''})}
+  ${dBanner(l,'info','info',x('You stay signed in on this phone. We sign you out on all your other devices.','ستبقى مسجّل الدخول على هذا الهاتف، وسنسجّل خروجك من جميع أجهزتك الأخرى.'))}
+</div>
+<div class="footer"><button class="btn primary">${x('Change password','تغيير كلمة المرور')}</button></div>`;};
+pair('126 · Change password','126 · تغيير كلمة المرور','POST /me/password with the current and the new password. Says before saving that other devices will be signed out. The confirm field is checked on the phone; the API takes only current and new.',l=>chPw(l,false));
+pair('127 · Change password — errors','127 · تغيير كلمة المرور — أخطاء','wrong_password and weak_password come from the server; the mismatch is caught before sending. Each message sits under its field.',l=>chPw(l,true));
+pair('128 · Change password — done','128 · تغيير كلمة المرور — تم','After 204. This device stays signed in; the message says the others were signed out, which also shows on Devices.',l=>{const x=T(l);return spage(l,{bar:ebar(l,x('Change password','تغيير كلمة المرور'),{back:1}),lsw:false,tone:'accent',icon:'check',title:x('Password changed','تم تغيير كلمة المرور'),text:x('You are still signed in here. We signed you out on all your other devices.','ما زلت مسجّل الدخول هنا. وسجّلنا خروجك من جميع أجهزتك الأخرى.'),btns:`<button class="btn primary">${x('Back to profile','العودة إلى الملف الشخصي')}</button>`});});
+
+/* ---- 129–131 Offline, failed save, install ---- */
+const offB=l=>{const x=T(l);return `<div class="banner info" role="status">${ic('wifioff','sm')}<span><b>${x('You’re offline.','أنت غير متصل بالإنترنت.')}</b> ${x('You can look around, but nothing can be saved until you’re back online.','يمكنك التصفّح، لكن لا يمكن حفظ أي شيء حتى يعود الاتصال.')}</span></div>`;};
+pair('129 · Offline notice','129 · إشعار عدم الاتصال','Appears at the top of every screen while the phone has no connection and goes away by itself when it is back. It is a notice, not an error: what is on screen stays usable to read. Nothing is queued to send later in M0.',l=>moreM(l,'owner',{top:offB(l)}));
+pair('130 · Save didn’t go through','130 · لم يتم الحفظ','A save that gets no answer. The message says plainly it did not go through and nothing was saved, everything typed stays in the fields, and the button becomes Try again. Nothing is shown as saved unless the server confirmed it. The same banner is used on every M0 form.',l=>{const x=T(l);return prof(l,{name:'Samer Demo Haddad',fName:1,retry:1,sum:x('Didn’t go through. Nothing was saved because we couldn’t reach BOS. Check your connection and try again. What you typed is still here.','لم يتم الحفظ. تعذّر الوصول إلى BOS فلم يُحفظ أي شيء. تحقّق من الاتصال وحاول مرة أخرى، فما كتبته ما زال هنا.')});});
+pair('131 · Install to home screen','131 · التثبيت على الشاشة الرئيسية','A small card, offered once after sign-in and only on browsers that can install. Install opens the browser’s own prompt; Not now hides it. On iPhone the button is replaced by one line: “Tap Share, then Add to Home Screen.” / «اضغط مشاركة ثم إضافة إلى الشاشة الرئيسية.» Once installed, BOS opens full-screen on the start tab.',l=>{const x=T(l);return shell(l,'owner','sales',{below:`<div style="padding:0 12px 12px"><div class="card" style="display:flex;flex-direction:column;gap:10px" role="region" aria-label="${x('Install BOS','تثبيت BOS')}"><div class="row" style="align-items:flex-start"><div class="logo" style="width:44px;height:44px;border-radius:12px;font-size:14px;flex:none">BOS</div><div class="grow"><div class="t">${x('Add BOS to your home screen','أضف BOS إلى الشاشة الرئيسية')}</div><div class="m">${x('It opens full-screen, like an app.','يفتح بملء الشاشة مثل أي تطبيق.')}</div></div></div><div class="btns"><button class="btn ghost sm" style="width:100%">${x('Not now','ليس الآن')}</button><button class="btn primary sm" style="width:100%">${ic('download','sm')} ${x('Install','تثبيت')}</button></div></div></div>`});});
+}
 
 document.getElementById('out').innerHTML=S.map(s=>`<h2 class="sec">${s.sec}</h2><p class="sec-sub">${s.sub}</p><div class="grid${s.cls?' '+s.cls:''}">${s.items.map(i=>`<figure>${i.html}<figcaption><b>${i.name}</b>${i.cap}</figcaption></figure>`).join('')}</div>`).join('');
 
