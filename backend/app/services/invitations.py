@@ -461,7 +461,7 @@ def _create_user(
 ) -> Accepted:
     tenant_id: uuid.UUID = invitation.tenant_id
     tenant_status = db.execute(
-        text("SELECT status FROM tenants WHERE id = :id FOR UPDATE"), {"id": tenant_id}
+        text("SELECT status FROM tenants WHERE id = :id FOR NO KEY UPDATE"), {"id": tenant_id}
     ).scalar_one()
     if tenant_status == "suspended":
         raise ApiError(403, "business_suspended", "This business is suspended")

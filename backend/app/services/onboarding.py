@@ -137,7 +137,7 @@ def reissue_owner_activation(
     ``NotFound`` for an unknown business.
     """
     status = db.execute(
-        text("SELECT status FROM tenants WHERE id = :id FOR UPDATE"), {"id": tenant_id}
+        text("SELECT status FROM tenants WHERE id = :id FOR NO KEY UPDATE"), {"id": tenant_id}
     ).scalar_one_or_none()
     if status is None:
         raise NotFound("tenant", tenant_id)
@@ -168,7 +168,7 @@ def set_business_status(
 ) -> None:
     """Suspend or reactivate. A pending business can be neither (409 ``business_pending``)."""
     current = db.execute(
-        text("SELECT status FROM tenants WHERE id = :id FOR UPDATE"), {"id": tenant_id}
+        text("SELECT status FROM tenants WHERE id = :id FOR NO KEY UPDATE"), {"id": tenant_id}
     ).scalar_one_or_none()
     if current is None:
         raise NotFound("tenant", tenant_id)

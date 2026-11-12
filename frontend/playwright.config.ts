@@ -4,10 +4,10 @@ import { join } from "node:path";
 // End-to-end tests (task T036). They drive an installed browser (Edge; set BOS_E2E_BROWSER=chrome
 // to use Chrome instead): nothing is downloaded. They start their own web server on port 3200 with
 // its own build folder, so the development server on 3100 is never touched, and use the BOS API on
-// 5100 (started here unless one is already running). The API uses the development database.
+// 5100 (BOS_E2E_API_PORT overrides it; started here unless one is already running). The API uses the development database.
 
 const WEB_PORT = 3200;
-const API_PORT = 5100;
+const API_PORT = Number(process.env.BOS_E2E_API_PORT ?? 5100);
 const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`;
 const channel = process.env.BOS_E2E_BROWSER === "chrome" ? "chrome" : "msedge";
 
