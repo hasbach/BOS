@@ -203,6 +203,9 @@ table.v td.n,table.v th.n{text-align:end;font-variant-numeric:tabular-nums}
 .chip.ops{background:var(--on-ink);color:var(--ink)}
 .banner.strong{border:2px solid var(--warn-fg);font-size:14px;font-weight:700;padding:12px}
 .linkbox{font-family:ui-monospace,Consolas,monospace;font-size:13px;word-break:break-all;background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:var(--r);padding:12px;direction:ltr;text-align:left;color:var(--fg)}
+.sk{background:linear-gradient(90deg,var(--surface-2),var(--border),var(--surface-2));background-size:200% 100%;border-radius:8px;animation:sk 1.4s ease-in-out infinite}
+@keyframes sk{0%{background-position:100% 0}100%{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.sk{animation:none}}
 .grid.pairs{display:grid;grid-template-columns:repeat(2,360px);justify-content:start}
 @media (max-width:820px){.grid.pairs{grid-template-columns:minmax(0,360px)}}
 @media (max-width:420px){.grid.pairs{grid-template-columns:100%}}
@@ -918,7 +921,7 @@ const onceLink=(l,o)=>{const x=T(l);return `${obar(l,o.title(x),{back:0,sub:o.su
   <div class="field"><label>${o.lab(x)}</label><div class="linkbox">https://app.bos.example/activate#Xk3-demo-0000-not-a-real-token</div>
     <div class="xs">${o.reset?x('Works once, within 1 hour.','يعمل مرة واحدة، خلال ساعة واحدة.'):x('Works once, within 7 days (until 18 Nov 2026).','يعمل مرة واحدة، خلال 7 أيام (حتى 18 Nov 2026).')}</div></div>
   <button class="btn primary">${ic('copy')} ${x('Copy link','نسخ الرابط')}</button>
-  <button class="btn ghost">${ic('chat')} ${x('Share on WhatsApp','مشاركة عبر واتساب')}</button>
+  <button class="btn ghost">${ic('chat')} ${x('Share link','مشاركة الرابط')}</button>
   ${o.note?`<div class="banner info">${ic('info','sm')}<span>${o.note(x)}</span></div>`:''}
   <div class="xs">${o.lost(x)}</div>
 </div>
@@ -988,6 +991,210 @@ pair('48 · Operator — no businesses yet','48 · المشغّل — لا أن�
   <button class="btn primary" style="max-width:280px">${ic('plus')} ${x('Set up a business','إعداد نشاط تجاري')}</button>
 </div>`;});
 
+
+/* ================= M0 — Employees (T054) ================= */
+add('M0 — Employees','US-02. Owners and managers invite people, give them roles and stores, and manage them. Every screen in English and Arabic side by side. Screens 49–56 are the list, invitation form and links; 57–66 are employee and invitation details with the rules shown; 67–74 are confirmations and states. Sample data is fake.');
+S[S.length-1].cls='pairs';
+
+const RN={owner:['Owner','المالك'],manager:['Manager','المدير'],sales:['Sales','المبيعات'],packing:['Packing','التجهيز'],dispatch:['Dispatch','التوصيل والتحصيل']};
+const RF={owner:['Owner','المالك'],manager:['Manager','المدير'],sales:['Sales agent','موظف مبيعات'],packing:['Packing agent','موظف تجهيز'],dispatch:['Dispatch / collections agent','موظف توصيل وتحصيل']};
+const RD={owner:['Full access. Can manage other owners.','صلاحيات كاملة. يستطيع إدارة المالكين الآخرين.'],manager:['Runs the business day to day. Always has all stores.','يدير العمل اليومي. لديه دائماً كل المتاجر.'],sales:['Creates and confirms orders.','ينشئ الطلبات ويؤكدها.'],packing:['Packs orders.','يجهّز الطلبات.'],dispatch:['Handles couriers and cash collection.','يتعامل مع شركات التوصيل وتحصيل المبالغ.']};
+const ix=l=>l==='ar'?1:0;
+const SN=(l,k)=>k==='A'?(l==='ar'?'المتجر أ':'Store A'):(l==='ar'?'المتجر ب':'Store B');
+const sch=(l,k)=>k==='A'?(l==='ar'?Aa:A):(l==='ar'?Ba:B);
+const ebar=(l,title,o={})=>bar(title,o).replace('aria-label="Back"',`aria-label="${T(l)('Back','رجوع')}"`);
+
+const PP={
+ samer:{n:'Samer Demo',c:'+961 70 000 011',r:['owner'],all:1,st:'active',you:1},
+ karim:{n:'Karim Demo',c:'karim@demo.example',r:['manager'],all:1,st:'active'},
+ dana:{n:'Dana Demo',c:'+961 70 000 021',r:['sales','packing'],s:['A'],st:'active'},
+ nour:{n:'Nour Demo',c:'+961 70 000 023',r:['dispatch'],s:['A','B'],st:'active'},
+ tala:{n:'Tala Demo',c:'tala@demo.example',r:['owner'],all:1,st:'active'},
+ omar:{n:'Omar Demo',c:'+961 70 000 024',r:['packing'],s:['B'],st:'inactive'},
+ hadi:{n:'Hadi Demo',c:'+961 70 000 025',r:['sales'],s:['B'],st:'pending',exp:'18 Nov 2026'},
+ rita:{n:'Rita Demo',c:'rita@demo.example',r:['packing'],all:1,st:'expired',exp:'4 Nov 2026'}
+};
+const pst=(l,s)=>{const x=T(l);return {active:`<span class="chip ok">${ic('check','sm')} ${x('Active','نشط')}</span>`,inactive:`<span class="chip">${ic('ban','sm')} ${x('Inactive','غير نشط')}</span>`,pending:`<span class="chip warn">${ic('clock','sm')} ${x('Pending','بانتظار القبول')}</span>`,expired:`<span class="chip bad">${ic('alert','sm')} ${x('Expired','منتهية الصلاحية')}</span>`}[s];};
+const ini=p=>p.n.split(' ').map(w=>w[0]).join('');
+const cts=p=>`<bdi dir="ltr" class="num">${p.c}</bdi>`;
+const rch=(l,p)=>p.r.map(k=>`<span class="chip ${k==='owner'?'info':''}">${RN[k][ix(l)]}</span>`).join('');
+const stl=(l,p)=>p.all?`<span class="chip">${ic('store','sm')} ${T(l)('All stores','كل المتاجر')}</span>`:p.s.map(k=>sch(l,k)).join('');
+const exl=(l,p)=>{const x=T(l);return p.st==='pending'?`${x('Expires','تنتهي في')} <bdi dir="ltr" class="num">${p.exp}</bdi>`:p.st==='expired'?`${x('Expired on','انتهت في')} <bdi dir="ltr" class="num">${p.exp}</bdi>`:'';};
+const prow=(l,p)=>{const x=T(l);return `<div class="li" style="align-items:flex-start;padding:12px 0"><div class="av">${ini(p)}</div><div class="grow" style="display:flex;flex-direction:column;gap:4px"><div class="between" style="align-items:flex-start"><div class="t">${p.n}${p.you?` <span class="chip">${x('You','أنت')}</span>`:''}</div>${pst(l,p.st)}</div><div class="m">${cts(p)}</div><div class="pills" style="gap:4px">${rch(l,p)}</div><div class="pills" style="gap:4px;align-items:center"><span class="xs">${x('Stores','المتاجر')}</span>${stl(l,p)}</div>${exl(l,p)?`<div class="xs">${exl(l,p)}</div>`:''}</div><span style="margin-top:12px">${ic('chev','flip')}</span></div>`;};
+const grp=(l,title,rows)=>`<div class="label">${title} · <span class="num">${rows.length}</span></div><div class="card" style="padding:0 12px"><div class="list">${rows.map(p=>prow(l,p)).join('')}</div></div>`;
+const EM=l=>{const x=T(l);return {
+ name:x('Enter the person’s name.','أدخل اسم الشخص.'),
+ contact:x('Enter a phone number or an email.','أدخل رقم هاتف أو بريداً إلكترونياً.'),
+ roles:x('Choose at least one role.','اختر دوراً واحداً على الأقل.'),
+ phone:x('This phone number is not valid. Example: <bdi dir="ltr">+961 70 000 025</bdi>','رقم الهاتف غير صالح. مثال: <bdi dir="ltr">+961 70 000 025</bdi>'),
+ mail:x('This email is not valid. Example: <bdi dir="ltr">name@demo.example</bdi>','البريد الإلكتروني غير صالح. مثال: <bdi dir="ltr">name@demo.example</bdi>'),
+ stores:x('Choose at least one store, or All stores.','اختر متجراً واحداً على الأقل أو كل المتاجر.'),
+ dup:x('Someone in your business already uses this phone number, or has a pending invitation for it. Use a different phone number or email.','يوجد في نشاطك شخص يستخدم رقم الهاتف هذا أو لديه دعوة قائمة به. استخدم رقم هاتف أو بريداً إلكترونياً آخر.')};};
+
+/* ---- 49 Employees list ---- */
+const empList=l=>{const x=T(l);return `${ebar(l,x('Employees','الموظفون'),{back:1,sub:'Demo Denim House Group'})}
+<div class="body">
+  ${grp(l,x('Active','نشطون'),[PP.samer,PP.karim,PP.dana,PP.nour])}
+  ${grp(l,x('Inactive','غير نشطين'),[PP.omar])}
+  ${grp(l,x('Pending invitations','دعوات بانتظار القبول'),[PP.hadi])}
+  ${grp(l,x('Expired invitations','دعوات منتهية الصلاحية'),[PP.rita])}
+</div>
+<div class="footer"><button class="btn primary">${ic('plus')} ${x('Invite someone','دعوة شخص')}</button></div>`;};
+pair('49 · Employees','49 · الموظفون','From More → Employees, for owners and managers. People are grouped as Active, Inactive, Pending invitations and Expired invitations. Each row shows name, contact, roles as labelled chips, store access, and status as a word with an icon. Tapping a row opens its detail.',empList);
+
+/* ---- Invite form ---- */
+const chk=(on,label,desc,o={})=>`<div class="li" role="checkbox" aria-checked="${on?'true':'false'}"${o.dim?' aria-disabled="true"':''} style="${o.dim?'opacity:.55':''}"><span class="box ${on?'on':''}">${ic('check','sm')}</span><div class="grow"><div class="t">${label}</div>${desc?`<div class="m">${desc}</div>`:''}</div>${o.lock?ic('lock','sm'):''}</div>`;
+const rolesBox=(l,sel,o={})=>{const x=T(l);const keys=o.owner===false?['manager','sales','packing','dispatch']:['owner','manager','sales','packing','dispatch'];
+ return `<div class="field"><label>${x('Roles','الأدوار')}</label><div class="card" style="padding:0 12px${o.err?';border-color:var(--danger)':''}"><div class="list" role="group" aria-label="${x('Roles','الأدوار')}">${keys.map(k=>chk(sel.includes(k),RF[k][ix(l)],RD[k][ix(l)])).join('')}</div></div>${o.err?ferr(o.err):`<div class="xs">${o.hint||x('Choose one or more.','اختر دوراً واحداً أو أكثر.')}</div>`}</div>`;};
+const storesBox=(l,o={})=>{const x=T(l);
+ const body=o.forced?chk(true,x('All stores','كل المتاجر'),x('Owners and managers always have all stores.','المالك والمدير لديهما دائماً كل المتاجر.'),{lock:1}):chk(!!o.all,x('All stores','كل المتاجر'),'')+['A','B'].map(k=>chk((o.sel||[]).includes(k),SN(l,k),'',{dim:o.all})).join('');
+ return `<div class="field"><label>${x('Stores','المتاجر')}</label><div class="card" style="padding:0 12px${o.err?';border-color:var(--danger)':''}"><div class="list" role="group" aria-label="${x('Stores','المتاجر')}">${body}</div></div>${o.err?ferr(o.err):o.forced?'':`<div class="xs">${x('Choose All stores, or one or more stores.','اختر كل المتاجر أو متجراً واحداً أو أكثر.')}</div>`}</div>`;};
+const invForm=(l,o={})=>{const x=T(l);const e=o.e||{};const roles=o.roles||[];const forced=roles.includes('owner')||roles.includes('manager');
+ return `${ebar(l,x('Invite someone','دعوة شخص'),{back:1,sub:x('They get a link and choose their own password','يحصل على رابط ويختار كلمة مروره بنفسه')})}
+<div class="body">
+  ${o.sum?`<div class="banner bad" role="alert">${ic('alert','sm')}<span>${o.sum}</span></div>`:''}
+  ${fld(x('Name','الاسم'),o.name||x('Full name','الاسم الكامل'),{ph:!o.name,err:e.name})}
+  ${fld(x('Phone','الهاتف'),o.phone||'+961 70 000 000',{ltr:1,ph:!o.phone,err:e.phone})}
+  ${fld(x('Email','البريد الإلكتروني'),o.email||'name@demo.example',{ltr:1,ph:!o.email,err:e.email,hint:(e.phone||e.email)?'':x('Phone, email or both. At least one is required.','هاتف أو بريد إلكتروني أو كلاهما. واحد منهما على الأقل مطلوب.')})}
+  ${rolesBox(l,roles,{owner:!o.mgr,err:e.roles,hint:o.mgr?x('Only an owner can invite another owner.','المالك وحده يستطيع دعوة مالك آخر.'):''})}
+  ${storesBox(l,{forced:forced,all:o.all,sel:o.stores,err:forced?'':e.stores})}
+  <div class="banner info">${ic('info','sm')}<span>${x('They choose their own password when they accept. You will not see it.','يختار الشخص كلمة مروره بنفسه عند قبول الدعوة. لن تراها أنت.')}</span></div>
+</div>
+<div class="footer"><button class="btn primary">${x('Create invitation','إنشاء الدعوة')}</button></div>`;};
+pair('50 · Invite someone','50 · دعوة شخص','Only what the API takes: name, phone and/or email, roles (one or more) and stores. Owner shows as a role only to owners. Stores are All stores or one or more stores.',l=>invForm(l,{name:'Hadi Demo',phone:'+961 70 000 025',roles:['sales'],stores:['B']}));
+pair('51 · Invite someone — as a manager','51 · دعوة شخص — من مدير','A manager sees no Owner role. Choosing Manager (or Owner, for owners) forces All stores: it is shown ticked and locked with the reason, not hidden.',l=>invForm(l,{mgr:1,name:'Sami Demo',phone:'+961 70 000 027',roles:['manager']}));
+pair('52 · Invite — empty form','52 · الدعوة — نموذج فارغ','validation_failed for a missing name, no phone or email, and no role. The messages sit next to their fields.',l=>{const m=EM(l);return invForm(l,{sum:T(l)('3 things to fix before you continue.','3 أمور تحتاج إلى تصحيح قبل المتابعة.'),e:{name:m.name,phone:m.contact,email:' ',roles:m.roles}});});
+pair('53 · Invite — phone, email, stores','53 · الدعوة — الهاتف والبريد والمتاجر','invalid_phone, an invalid email, and stores required for a role that is not Owner or Manager.',l=>{const m=EM(l);return invForm(l,{sum:T(l)('3 things to fix before you continue.','3 أمور تحتاج إلى تصحيح قبل المتابعة.'),name:'Hadi Demo',phone:'12 345',email:'hadi@demo',roles:['sales'],stores:[],e:{phone:m.phone,email:m.mail,stores:m.stores}});});
+pair('54 · Invite — already in your business','54 · الدعوة — موجود في نشاطك','already_member: the phone or email belongs to someone in this business or to a pending invitation here. A number used in another business is never reported on this screen.',l=>{const m=EM(l);return invForm(l,{sum:T(l)('The invitation was not created.','لم تُنشأ الدعوة.'),name:'Hadi Demo',phone:'+961 70 000 021',roles:['sales'],stores:['B'],e:{phone:m.dup}});});
+
+/* ---- Links shown once ---- */
+const sLink=(l,o)=>{const x=T(l);return `${ebar(l,o.title(x),{sub:o.sub})}
+<div class="body">
+  <div class="banner ok">${ic('check','sm')}<span>${o.ok(x)}</span></div>
+  <div class="banner warn strong" role="alert">${ic('alert')}<span>${x('Copy it now. This link will not be shown again.','انسخه الآن. لن يظهر هذا الرابط مرة أخرى.')}</span></div>
+  <div class="field"><label>${o.lab(x)}</label><div class="linkbox">https://app.bos.example/activate#Xk3-demo-0000-not-a-real-token</div>
+    <div class="xs">${o.reset?x('Works once, within 1 hour.','يعمل مرة واحدة، خلال ساعة واحدة.'):x('Works once, within 7 days (until 18 Nov 2026).','يعمل مرة واحدة، خلال 7 أيام (حتى 18 Nov 2026).')}</div></div>
+  <button class="btn primary">${ic('copy')} ${x('Copy link','نسخ الرابط')}</button>
+  <button class="btn ghost">${ic('chat')} ${x('Share link','مشاركة الرابط')}</button>
+  <div class="banner info">${ic('info','sm')}<span>${o.note(x)}</span></div>
+  <div class="xs">${o.lost(x)}</div>
+</div>
+<div class="footer"><button class="btn ghost">${x('Done','تم')}</button></div>`;};
+pair('55 · Invitation link (shown once)','55 · رابط الدعوة (يظهر مرة واحدة)','Same pattern as screen 38, for an employee. Send it to the person yourself; Share opens the phone’s share sheet. Leaving the screen loses the link, so Done is the only way out.',l=>sLink(l,{
+ title:x=>x('Invitation ready','الدعوة جاهزة'),sub:'Hadi Demo',
+ ok:x=>x('Invitation created for Hadi Demo. It stays Pending until they accept.','تم إنشاء دعوة لـ Hadi Demo. تبقى بانتظار القبول حتى يقبلها.'),
+ lab:x=>x('Invitation link for Hadi Demo','رابط الدعوة لـ Hadi Demo'),
+ note:x=>x('Hadi chooses their own password when they open the link. You will not see it.','يختار Hadi كلمة مروره بنفسه عند فتح الرابط. لن تراها أنت.'),
+ lost:x=>x('Lost it? Open the invitation and tap Resend link. That makes a new link and the old one stops working.','ضاع الرابط؟ افتح الدعوة واضغط «إعادة إرسال الرابط». يُنشأ رابط جديد ويتوقف الرابط القديم.')}));
+pair('56 · Invitation link — resent','56 · رابط الدعوة — بعد إعادة الإرسال','After Resend link on a pending or expired invitation. The old link stops working the moment this one is made.',l=>sLink(l,{
+ title:x=>x('New link ready','الرابط الجديد جاهز'),sub:'Rita Demo',
+ ok:x=>x('New link created for Rita Demo. The old link no longer works.','تم إنشاء رابط جديد لـ Rita Demo. الرابط القديم لم يعد يعمل.'),
+ lab:x=>x('New invitation link for Rita Demo','رابط الدعوة الجديد لـ Rita Demo'),
+ note:x=>x('The invitation is Pending again and expires 7 days from now.','عادت الدعوة بانتظار القبول وتنتهي صلاحيتها بعد 7 أيام من الآن.'),
+ lost:x=>x('Lost it? Resend again. Each new link replaces the last one.','ضاع الرابط؟ أعد الإرسال مرة أخرى. كل رابط جديد يلغي السابق.')}));
+
+/* ---- Employee detail ---- */
+const dHead=(l,p)=>{const x=T(l);return `<div class="card"><div class="row" style="align-items:flex-start"><div class="av" style="width:52px;height:52px">${ini(p)}</div><div class="grow"><div class="t" style="font-size:17px">${p.n}${p.you?` <span class="chip">${x('You','أنت')}</span>`:''}</div><div class="m">${cts(p)}</div>${p.c.includes('@')?'':`<span class="chip" style="margin-top:4px">${x('No email','بلا بريد')}</span>`}</div>${pst(l,p.st)}</div></div>`;};
+const roBlock=(l,p)=>{const x=T(l);return `<div class="card"><div class="label">${ic('lock','sm')} ${x('Roles · read only','الأدوار · للقراءة فقط')}</div><div class="pills" style="margin:6px 0 12px;gap:6px">${rch(l,p)}</div><div class="label">${x('Stores · read only','المتاجر · للقراءة فقط')}</div><div class="pills" style="margin-top:6px;gap:6px">${stl(l,p)}</div></div>`;};
+const acct=(l,p)=>{const x=T(l);return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="label">${x('Account','الحساب')}</div>
+  ${p.st==='inactive'?`<div class="m">${x('Reactivating lets them sign in again straight away.','تتيح إعادة التفعيل لصاحب الحساب تسجيل الدخول مجدداً فوراً.')}</div><button class="btn primary">${ic('check','sm')} ${x('Reactivate','إعادة التفعيل')}</button>`:`<div class="m">${x('They are signed out on every device at once and cannot sign in until you reactivate them.','يُسجَّل خروجه من كل الأجهزة فوراً، ولا يستطيع تسجيل الدخول حتى تعيد تفعيله.')}</div><button class="btn danger">${ic('ban','sm')} ${x('Deactivate','إلغاء التفعيل')}</button>`}
+  <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:10px"><div class="m">${x('For someone with no email. You get a link once to send to them. It works once, within 1 hour.','لمن ليس له بريد إلكتروني. تحصل على رابط مرة واحدة لترسله إليه. يعمل مرة واحدة، خلال ساعة واحدة.')}</div><button class="btn ghost">${ic('lock','sm')} ${x('Issue password-reset link','إصدار رابط استعادة كلمة المرور')}</button></div></div>`;};
+const dBanner=(l,tone,icon,t)=>`<div class="banner ${tone}" role="${tone==='bad'?'alert':'note'}">${ic(icon,'sm')}<span>${t}</span></div>`;
+const empDetail=(l,p,o={})=>{const x=T(l);const m=EM(l);const forced=p.r.includes('owner')||p.r.includes('manager');
+ return `${ebar(l,p.n,{back:1,sub:x('Employee','موظف')})}
+<div class="body">
+  ${o.sum?dBanner(l,'bad','alert',o.sum):''}
+  ${p.st==='inactive'?dBanner(l,'warn','ban',x('Inactive. This person cannot sign in.','غير نشط. لا يستطيع هذا الشخص تسجيل الدخول.')):''}
+  ${dHead(l,p)}
+  ${rolesBox(l,o.noRoles?[]:p.r,{err:o.noRoles?m.roles:''})}
+  ${storesBox(l,{forced:forced,all:p.all,sel:o.noStores?[]:p.s,err:o.noStores?m.stores:''})}
+  ${dBanner(l,'info','info',x('Changes take effect on their next action.','تسري التغييرات عند أول إجراء يقوم به.'))}
+  ${acct(l,p)}
+</div>
+<div class="footer"><button class="btn primary">${x('Save changes','حفظ التغييرات')}</button></div>`;};
+pair('57 · Employee detail','57 · تفاصيل الموظف','Owner or manager editing a sales and packing employee. Roles and stores are edited here and saved together. Deactivate warns what it does; the reset link is for people without email and is shown once.',l=>empDetail(l,PP.dana));
+pair('58 · Employee detail — field errors','58 · تفاصيل الموظف — أخطاء الحقول','validation_failed on save: every role removed, or a store-limited role with no store. Nothing is saved until fixed.',l=>empDetail(l,PP.dana,{noRoles:1,noStores:1,sum:T(l)('2 things to fix before saving.','أمران يحتاجان إلى تصحيح قبل الحفظ.')}));
+pair('59 · Employee detail — inactive','59 · تفاصيل الموظف — غير نشط','A deactivated person: status is stated in words and the main action becomes Reactivate.',l=>empDetail(l,PP.omar));
+pair('60 · Employee detail — your own row','60 · تفاصيل الموظف — حسابك أنت','Nobody can change their own roles, stores or status (cannot_modify_self), so the row is read only with the reason. A sole owner is also told what to do first.',l=>{const x=T(l);const p=PP.samer;return `${ebar(l,p.n,{back:1,sub:x('Employee','موظف')})}
+<div class="body">
+  ${dBanner(l,'info','lock',x('You can’t change your own roles, stores or status. Ask another owner.','لا يمكنك تغيير أدوارك أو متاجرك أو حالتك بنفسك. اطلب ذلك من مالك آخر.'))}
+  ${dHead(l,p)}
+  ${roBlock(l,p)}
+  ${dBanner(l,'warn','alert',x('You are the only owner. To step down, first make someone else an owner.','أنت المالك الوحيد. لتتنحّى، اجعل شخصاً آخر مالكاً أولاً.'))}
+  <div class="m">${x('To change your own password, use Change password in your account.','لتغيير كلمة مرورك، استخدم «تغيير كلمة المرور» في حسابك.')}</div>
+</div>
+<div class="footer"><button class="btn ghost">${x('Back to employees','العودة إلى الموظفين')}</button></div>`;});
+pair('61 · Employee detail — manager viewing an owner','61 · تفاصيل الموظف — مدير يعرض مالكاً','A manager cannot change an owner’s access or reset their password (forbidden), so the screen is read only and says why. There is no Deactivate or reset action to tap.',l=>{const x=T(l);const p=PP.samer;return `${ebar(l,p.n,{back:1,sub:x('Employee','موظف')})}
+<div class="body">
+  ${dBanner(l,'info','lock',x('Only an owner can change an owner’s access or reset their password.','المالك وحده يستطيع تغيير صلاحيات مالك آخر أو استعادة كلمة مروره.'))}
+  ${dHead(l,{...p,you:0})}
+  ${roBlock(l,p)}
+</div>
+<div class="footer"><button class="btn ghost">${x('Back to employees','العودة إلى الموظفين')}</button></div>`;});
+pair('62 · Employee detail — last owner','62 · تفاصيل الموظف — المالك الأخير','last_owner: deactivating or demoting the only active owner is refused with this message, and nothing changes. Shown on top after the attempt.',l=>{const x=T(l);return empDetail(l,PP.tala,{sum:x('A business must keep at least one active owner. Make someone else an owner first.','يجب أن يبقى في النشاط مالك نشط واحد على الأقل. اجعل شخصاً آخر مالكاً أولاً.')});});
+pair('63 · Reset link (shown once)','63 · رابط الاستعادة (يظهر مرة واحدة)','Same pattern as screen 47, for an employee. Works once, within 1 hour. Using it signs the person out everywhere, and issuing it is recorded in history.',l=>sLink(l,{reset:1,
+ title:x=>x('Reset link ready','رابط الاستعادة جاهز'),sub:'Nour Demo',
+ ok:x=>x('Reset link created for Nour Demo.','تم إنشاء رابط استعادة لـ Nour Demo.'),
+ lab:x=>x('Password reset link for Nour Demo','رابط استعادة كلمة المرور لـ Nour Demo'),
+ note:x=>x('When used, Nour is signed out on all devices. This is recorded in the business’s history.','عند استخدامه يُسجَّل خروج Nour من جميع الأجهزة. يُسجَّل هذا الإجراء في سجل النشاط.'),
+ lost:x=>x('Lost it? Issue a new one from the employee’s page.','ضاع الرابط؟ أصدر رابطاً جديداً من صفحة الموظف.')}));
+
+/* ---- Invitation detail ---- */
+const invDetail=(l,p,o={})=>{const x=T(l);
+ return `${ebar(l,p.n,{back:1,sub:x('Invitation','دعوة')})}
+<div class="body">
+  ${o.closed?dBanner(l,'bad','alert',x('This invitation is no longer open. It was accepted, cancelled or has expired, so nothing was changed.','هذه الدعوة لم تعد مفتوحة. فقد قُبلت أو أُلغيت أو انتهت صلاحيتها، ولم يتغيّر شيء.')):''}
+  <div class="card"><div class="row" style="align-items:flex-start"><div class="av" style="width:52px;height:52px">${ini(p)}</div><div class="grow"><div class="t" style="font-size:17px">${p.n}</div><div class="m">${cts(p)}</div></div>${o.closed?'':pst(l,p.st)}</div>
+    <div class="dims" style="margin-top:10px"><div><span class="xs">${x('Roles','الأدوار')}</span><div class="pills" style="gap:4px;margin-top:4px">${rch(l,p)}</div></div><div><span class="xs">${x('Stores','المتاجر')}</span><div class="pills" style="gap:4px;margin-top:4px">${stl(l,p)}</div></div></div>
+    <div class="m" style="margin-top:8px">${exl(l,p)}</div></div>
+  ${o.closed?'':dBanner(l,'info','info',p.st==='pending'?x('The link was shown only once. Resend to get a new link to send. The old link stops working.','ظهر الرابط مرة واحدة فقط. أعد إرساله للحصول على رابط جديد تشاركه، ويتوقف الرابط القديم.'):x('The link has expired. Resend to create a new one that works once, within 7 days.','انتهت صلاحية الرابط. أعد إرساله لإنشاء رابط جديد يعمل مرة واحدة خلال 7 أيام.'))}
+</div>
+<div class="footer">${o.closed?`<button class="btn ghost">${x('Back to employees','العودة إلى الموظفين')}</button>`:`<button class="btn primary">${ic('send','sm flip')} ${x('Resend link','إعادة إرسال الرابط')}</button>${p.st==='pending'?`<button class="btn danger">${ic('x','sm')} ${x('Revoke invitation','إلغاء الدعوة')}</button>`:''}`}</div>`;};
+pair('64 · Invitation detail — pending','64 · تفاصيل الدعوة — بانتظار القبول','Resend makes a new link and stops the old one. Revoke asks for confirmation first (screen 68).',l=>invDetail(l,PP.hadi));
+pair('65 · Invitation detail — expired','65 · تفاصيل الدعوة — منتهية الصلاحية','An expired invitation can be resent but not revoked (the API refuses it), so there is no Revoke button.',l=>invDetail(l,PP.rita));
+pair('66 · Invitation detail — no longer open','66 · تفاصيل الدعوة — لم تعد مفتوحة','invitation_closed: the person accepted (or it was cancelled) while this screen was open. Actions are removed and the only way on is back to the list.',l=>invDetail(l,PP.hadi,{closed:1}));
+
+/* ---- Confirm dialogs ---- */
+const sheetOver=(l,bg,title,text,btns)=>`${bg}<div class="sheet-dim"></div><div class="sheet" role="dialog" aria-label="${title}"><div class="grab"></div><div class="t" style="font-size:17px">${title}</div><div class="m">${text}</div><div class="btns">${btns}</div></div>`;
+pair('67 · Confirm deactivate','67 · تأكيد إلغاء التفعيل','Says plainly that the person is signed out everywhere at once. Deactivating is reversible and nothing is deleted.',l=>{const x=T(l);const p=PP.dana;
+ return sheetOver(l,`${ebar(l,p.n,{back:1,sub:x('Employee','موظف')})}<div class="body">${dHead(l,p)}${acct(l,p)}</div>`,
+  x('Deactivate Dana Demo?','إلغاء تفعيل Dana Demo؟'),
+  x('They will be signed out on every device right away and cannot sign in until you reactivate them. Nothing is deleted.','يُسجَّل خروج الحساب من كل الأجهزة فوراً، ولا يمكن تسجيل الدخول به حتى تعيد تفعيله. لا يُحذف أي شيء.'),
+  `<button class="btn ghost">${x('Cancel','إلغاء')}</button><button class="btn danger">${ic('ban','sm')} ${x('Deactivate','إلغاء التفعيل')}</button>`);});
+pair('68 · Confirm revoke invitation','68 · تأكيد إلغاء الدعوة','Revoking ends the link at once. The person can be invited again later.',l=>{const x=T(l);
+ return sheetOver(l,invDetail(l,PP.hadi),
+  x('Revoke the invitation for Hadi Demo?','إلغاء الدعوة المرسلة إلى Hadi Demo؟'),
+  x('The link stops working at once. You can invite them again later.','يتوقف الرابط عن العمل فوراً. يمكنك دعوته مجدداً لاحقاً.'),
+  `<button class="btn ghost">${x('Keep invitation','إبقاء الدعوة')}</button><button class="btn danger">${ic('x','sm')} ${x('Revoke','إلغاء الدعوة')}</button>`);});
+
+/* ---- States ---- */
+pair('69 · Employees — only you','69 · الموظفون — أنت وحدك','Empty state: the list holds only the signed-in owner, with the one next step.',l=>{const x=T(l);return `${ebar(l,x('Employees','الموظفون'),{back:1,sub:'Demo Denim House Group'})}
+<div class="body">
+  ${grp(l,x('Active','نشطون'),[PP.samer])}
+  <div class="card" style="display:grid;place-items:center;text-align:center;gap:8px;padding:20px 16px">
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--surface-2);color:var(--fg-2);display:grid;place-items:center">${ic('users','lg')}</div>
+    <div class="big">${x('It’s just you so far','أنت وحدك حتى الآن')}</div>
+    <div class="m" style="max-width:280px">${x('Invite your team so each person can use BOS on their own phone, with only the access you choose.','ادعُ فريقك ليستخدم كل شخص BOS على هاتفه، بالصلاحيات التي تحددها أنت.')}</div>
+  </div>
+</div>
+<div class="footer"><button class="btn primary">${ic('plus')} ${x('Invite someone','دعوة شخص')}</button></div>`;});
+const skRow=()=>`<div class="li" style="padding:12px 0"><div class="sk" style="width:44px;height:44px;border-radius:50%;flex:none"></div><div class="grow" style="display:flex;flex-direction:column;gap:8px"><div class="sk" style="height:14px;width:55%"></div><div class="sk" style="height:12px;width:80%"></div><div class="sk" style="height:12px;width:40%"></div></div></div>`;
+pair('70 · Employees — loading','70 · الموظفون — جارٍ التحميل','Placeholder rows with a visible “Loading” line. Invite stays visible but unavailable until the list arrives.',l=>{const x=T(l);return `${ebar(l,x('Employees','الموظفون'),{back:1,sub:'Demo Denim House Group'})}
+<div class="body" aria-busy="true">
+  <div class="row m" role="status">${ic('sync','sm')} ${x('Loading employees…','جارٍ تحميل الموظفين…')}</div>
+  <div class="card" style="padding:0 12px"><div class="list">${skRow()}${skRow()}${skRow()}${skRow()}</div></div>
+</div>
+<div class="footer"><button class="btn primary" disabled>${ic('plus')} ${x('Invite someone','دعوة شخص')}</button></div>`;});
+pair('71 · Employees — could not load','71 · الموظفون — تعذّر التحميل','Error with a retry. Says nothing was changed.',l=>{const x=T(l);return spage(l,{bar:ebar(l,x('Employees','الموظفون'),{back:1,sub:'Demo Denim House Group'}),lsw:false,tone:'warn',icon:'wifioff',title:x('Couldn’t load employees','تعذّر تحميل الموظفين'),text:x('Check your connection and try again. Nothing was changed.','تحقّق من الاتصال وحاول مرة أخرى. لم يتغيّر شيء.'),btns:`<button class="btn primary">${ic('sync','sm')} ${x('Try again','إعادة المحاولة')}</button><button class="btn ghost">${x('Back to More','العودة إلى المزيد')}</button>`});});
+pair('72 · Not found','72 · غير موجود','not_found when an employee or invitation was opened but is no longer there (or belongs to another business).',l=>{const x=T(l);return spage(l,{bar:ebar(l,x('Employees','الموظفون'),{back:1}),lsw:false,tone:'info',icon:'search',title:x('Not found','غير موجود'),text:x('This employee or invitation is no longer in your business. Go back to refresh the list.','لم يعد هذا الموظف أو هذه الدعوة موجوداً في نشاطك. عد لتحديث القائمة.'),btns:`<button class="btn primary">${x('Back to employees','العودة إلى الموظفين')}</button>`});});
+pair('73 · Not allowed','73 · غير مسموح','What a sales, packing or dispatch user sees if they reach the page anyway (forbidden). They should never see the Employees entry (screen 74).',l=>{const x=T(l);return spage(l,{bar:ebar(l,x('Employees','الموظفون'),{back:1}),lsw:false,tone:'info',icon:'lock',title:x('You can’t open Employees','لا يمكنك فتح صفحة الموظفين'),text:x('Only owners and managers can see this page. If you need something changed, ask your manager.','يستطيع المالك والمدير فقط رؤية هذه الصفحة. إن احتجت إلى تغيير ما، اطلب من مديرك.'),btns:`<button class="btn primary">${x('Back to More','العودة إلى المزيد')}</button>`});});
+pair('74 · More — sales agent','74 · المزيد — موظف مبيعات','More for a sales-only employee: no Employees, Reports, Couriers, connections or rate. Tabs are only Sales, Orders and More. Compare with screen 18.',l=>{const x=T(l);const items=[['box',x('Catalog','الكتالوج'),x('86 products','86 منتجاً')],['store',x('Stores','المتاجر'),SN(l,'B')],['globe',x('Language','اللغة'),x('English','العربية')]];
+ return `${ebar(l,x('More','المزيد'))}
+<div class="body">
+  <div class="card row"><div class="logo" style="width:48px;height:48px;border-radius:12px;font-size:15px">BOS</div><div class="grow"><div class="t">Demo Denim House Group</div><div class="m">Hadi Demo · ${x('Sales agent','موظف مبيعات')}</div></div></div>
+  <div class="card"><div class="list">${items.map(r=>`<div class="li">${ic(r[0])}<div class="grow"><div class="t">${r[1]}</div><div class="m">${r[2]}</div></div>${ic('chev','flip')}</div>`).join('')}</div></div>
+  <button class="btn ghost">${x('Sign out','تسجيل الخروج')}</button>
+</div><nav class="nav" style="grid-template-columns:repeat(3,1fr)">${[[0,'cart',0],[3,'list',0],[4,'more',1]].map(t=>`<a class="${t[2]?'on':''}" ${t[2]?'aria-current="page"':''}>${ic(t[1])}<span>${L[l][t[0]]}</span></a>`).join('')}</nav>`;});
 
 document.getElementById('out').innerHTML=S.map(s=>`<h2 class="sec">${s.sec}</h2><p class="sec-sub">${s.sub}</p><div class="grid${s.cls?' '+s.cls:''}">${s.items.map(i=>`<figure>${i.html}<figcaption><b>${i.name}</b>${i.cap}</figcaption></figure>`).join('')}</div>`).join('');
 

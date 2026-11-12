@@ -393,3 +393,18 @@ parts of R2, R5, R7, R10 and R13).
   script, in both languages; they are never translated.
 - **Sharing one-time links**: the button opens the phone's share sheet (Web Share API) with
   copy as the fallback; WhatsApp is the expected choice but not forced.
+
+## R35. Employee screens (2026-11-12)
+
+- **Approved designs**: screens 49–74 in `design/bos-screens.html` (section "M0 — Employees"),
+  approved by the product owner on 2026-11-12, with these decisions:
+  - Share buttons for one-time links read "Share link" (they open the phone's share sheet).
+  - Expired invitations can be resent but not revoked; pending ones can be both.
+  - "Issue password-reset link" is offered for every employee, without a confirmation step
+    (single use, one hour, recorded in history).
+  - Deactivate (and removing the Owner role) is disabled up front for the only active owner;
+    the server still refuses with `last_owner` if two changes race.
+  - Resend lives in the invitation detail only, not on list rows.
+- **Arabic role names** (confirmed by the product owner): مالك (Owner), مدير (Manager),
+  موظف مبيعات (Sales agent), موظف تجهيز (Packing agent), موظف توصيل وتحصيل
+  (Dispatch/collections); Deactivate = إلغاء التفعيل.
