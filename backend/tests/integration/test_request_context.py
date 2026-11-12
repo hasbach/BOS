@@ -29,6 +29,7 @@ from app.core.request_context import (
     current_user,
     not_found_in_tenant,
     on_commit,
+    on_rollback,
 )
 from app.errors import ApiError
 from tests.dbsupport import TwoTenants, World
@@ -177,6 +178,7 @@ def _add_test_routes(app: Flask) -> None:
         if body.get("broken_first"):
             on_commit(broken)
         on_commit(saw_the_store)
+        on_rollback(lambda: after_commit_calls.append(f"undo:{name}"))
         if body.get("then") == "fail":
             raise ApiError(409, "conflict_for_test")
         return jsonify(ok=True)
@@ -554,7 +556,7 @@ def test_on_commit_callbacks_never_run_when_the_request_rolls_back(
     )
 
     assert response.status_code == 409
-    assert after_commit_calls == []
+    assert after_commit_calls == ["undo:Rolled"]  # only the on_rollback callback
     assert "Rolled" not in _store_names(owner_engine, worlds.a.tenant_id)
 
 

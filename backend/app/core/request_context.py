@@ -14,6 +14,8 @@
    the next request that reuses the pooled connection.
 7. Only after a successful commit, callbacks registered with ``on_commit`` run (for
    example sending an email), so nothing leaves the system for work that was rolled back.
+   Callbacks registered with ``on_rollback`` run instead when the transaction does not
+   commit (for example removing a file written for work that was then rolled back).
 
 Operators exist only under ``/api/v1/ops/``; business users never do. A session of the
 wrong kind for an area gets 404 ``not_found``, so neither area reveals the other.
@@ -126,6 +128,19 @@ def on_commit(callback: Callable[[], object]) -> None:
     callbacks.append(callback)
 
 
+def on_rollback(callback: Callable[[], object]) -> None:
+    """Run ``callback`` if this request's transaction does not commit (signed-in requests).
+
+    The undo for an effect made outside the database *before* the commit, such as a file
+    written to storage that the transaction is about to reference: if the work is rolled
+    back (an error response, an exception, or a failed commit), the file is removed again.
+    Callbacks run in the order given; a callback that fails is logged.
+    """
+    request_db()
+    callbacks: list[Callable[[], object]] = g.setdefault("on_rollback", [])
+    callbacks.append(callback)
+
+
 def not_found_in_tenant(
     target_type: str | None = None, target_id: uuid.UUID | None = None
 ) -> NoReturn:
@@ -139,6 +154,20 @@ def not_found_in_tenant(
     if isinstance(principal, UserPrincipal):
         _record_denied(
             principal, "access.denied_tenant", target_type=target_type, target_id=target_id
+        )
+    raise _not_found()
+
+
+def not_found_in_store(store_id: uuid.UUID, permission: str) -> NoReturn:
+    """Refuse a store the caller may not work in: 404 ``not_found``, ``access.denied_store``.
+
+    The same answer and record as the permission decorator's store check, for rules it
+    cannot express (a store-limited user and a store that has been deactivated).
+    """
+    principal = current_principal()
+    if isinstance(principal, UserPrincipal):
+        _record_denied(
+            principal, "access.denied_store", permission=permission, store_id=str(store_id)
         )
     raise _not_found()
 
@@ -388,6 +417,7 @@ def _revoke(record: SessionRecord) -> None:
 def _after(response: Response) -> Response:
     db = g.pop("db", None)
     callbacks: list[Callable[[], object]] = g.pop("on_commit", [])
+    undo: list[Callable[[], object]] = g.pop("on_rollback", [])
     if db is None:
         return response
     committed = False
@@ -405,19 +435,28 @@ def _after(response: Response) -> Response:
         db.close()
     if committed:
         _run_after_commit(callbacks)
+    else:
+        _run_callbacks(undo, "a callback run after rollback failed")
     return response
 
 
 def _run_after_commit(callbacks: list[Callable[[], object]]) -> None:
+    _run_callbacks(callbacks, "a callback run after commit failed")
+
+
+def _run_callbacks(callbacks: list[Callable[[], object]], failure: str) -> None:
     for callback in callbacks:
         try:
             callback()
         except Exception:
-            log.exception("a callback run after commit failed")
+            log.exception(failure)
 
 
 def _teardown(exc: BaseException | None) -> None:
     g.pop("on_commit", None)  # never run for a request that did not finish normally
+    undo: list[Callable[[], object]] = g.pop("on_rollback", [])
     db = g.pop("db", None)
     if db is not None:
         db.close()  # rolls back anything not committed
+    # Only here when the request ended without passing through ``_after``: nothing committed.
+    _run_callbacks(undo, "a callback run after rollback failed")

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BOS API — Platform Foundation (M0)
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Contract for milestone M0, revision 2 (one business per user; review fixes of 2026-11-10).
     All paths are under /api/v1 on the same origin as the web app.
@@ -24,7 +24,9 @@ info:
       permission returns 403 `forbidden`.
     - Errors: `{ "error": { "code": string, "message": string, "fields": {name: code} } }`.
       `code` values are stable; the web app translates them.
-    - Timestamps are ISO 8601 in UTC. Money is a decimal string with a separate currency.
+    - Timestamps are ISO 8601 in UTC. Money is a decimal string with a separate currency:
+      ASCII digits and at most one dot, at most 2 decimals; JSON numbers, thousands separators,
+      exponents and non-Latin digits are refused with field code `invalid`.
     - Field codes inside `fields` of a 400 `validation_failed`: `required`, `invalid_phone`,
       `invalid_email`, `invalid` (wrong type, unknown enum value, malformed or out-of-range
       value) and `too_long`. Field names are the request's own property names.
@@ -201,13 +203,14 @@ paths:
             schema: { $ref: '#/components/schemas/BusinessSettingsUpdate' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Business' } } } }
-        '400': { description: "`validation_failed`" }
+        '400': { description: "`validation_failed` — `usd_lbp_rate` must be > 0 and at most 10000000; `default_delivery_fee` ≥ 0 and at most 100000000; both decimal strings (see conventions)" }
         '403': { description: "`forbidden`" }
 
   /stores:
     get:
       tags: [stores]
       summary: Stores the caller may access (permission store.view, store-scoped)
+      description: Owners and managers see every store, inactive ones included. Everyone else sees only their active permitted stores (the same list as `GET /me`).
       responses:
         '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Store' } } } } }
     post:
@@ -220,13 +223,20 @@ paths:
             schema: { $ref: '#/components/schemas/StoreInput' }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
-        '400': { description: "`validation_failed` (fields: `whatsapp_number: invalid_phone`)" }
-        '409': { description: "`whatsapp_number_in_use` or `store_name_in_use`" }
+        '400': { description: "`validation_failed` — fields `name` (`required`, `too_long`), `whatsapp_number` (`invalid_phone`)" }
+        '403': { description: "`forbidden`" }
+        '409': { description: "`whatsapp_number_in_use` or `store_name_in_use` (among active stores; names compared case-insensitively)" }
   /stores/{storeId}:
     patch:
       tags: [stores]
       summary: Edit name or WhatsApp number, activate or deactivate (permission store.manage)
-      description: Deactivating returns 409 `confirmation_required` with the affected employees unless `confirm` is true.
+      description: |
+        Deactivating returns 409 `confirmation_required` unless `confirm` is true. The error
+        body then also carries `affected`: everyone who would lose their only access to an
+        active store — active store-limited employees (`kind: employee`) and pending
+        store-limited invitations (`kind: invitation`) — as
+        `[{ "kind", "id", "name", "roles" }]` (no phone or email). Their store assignments are
+        kept, so reactivating restores access. Reactivating re-checks the name and number rules.
       parameters: [{ $ref: '#/components/parameters/storeId' }]
       requestBody:
         content:
@@ -238,8 +248,10 @@ paths:
                   properties: { status: { enum: [active, inactive] }, confirm: { type: boolean } }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '400': { description: "`validation_failed` — fields `name`, `whatsapp_number`, `status`, `confirm`" }
+        '403': { description: "`forbidden`" }
         '404': { description: "`not_found`" }
-        '409': { description: "`confirmation_required`, `last_active_store`, `whatsapp_number_in_use`, `store_name_in_use`" }
+        '409': { description: "`last_active_store`, `whatsapp_number_in_use`, `store_name_in_use`, `confirmation_required` — the body then also carries the list of affected people described above" }
   /stores/{storeId}/logo:
     put:
       tags: [stores]
@@ -252,7 +264,9 @@ paths:
             schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
-        '400': { description: "`file_too_large` or `file_not_image`" }
+        '400': { description: "`file_too_large` (over 2 MB, or over 40 megapixels), `file_not_image` (anything but a decodable PNG, JPEG or WebP), or `validation_failed` with `file: required`" }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
     get:
       tags: [stores]
       summary: Download the logo (permission store.view, store-scoped)
@@ -266,6 +280,8 @@ paths:
       parameters: [{ $ref: '#/components/parameters/storeId' }]
       responses:
         '204': { description: Removed }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
 
   /staff:
     get:

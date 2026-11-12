@@ -226,7 +226,7 @@ never received the first).
 | actor_id | uuid, nullable | |
 | event | text | from the fixed list below |
 | target_type, target_id | text, uuid, nullable | |
-| data | jsonb | before/after values; never passwords, tokens or links |
+| data | jsonb | before/after values (for `store.updated`: only the changed fields among `name`, `whatsapp_number`, `logo_file_id`); never passwords, tokens or links |
 | ip | inet, nullable | |
 | at | timestamptz | indexed `(tenant_id, at desc)` |
 
