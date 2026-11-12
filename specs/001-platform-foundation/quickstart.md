@@ -46,7 +46,7 @@ never appears in the command line or shell history.
 | API | http://localhost:3000/api/v1 (proxied; the API and database publish no ports of their own) |
 | Captured email (Mailpit) | http://localhost:8025 |
 
-Demo sign-ins are listed in `.env.example` (one user per role in the demo business).
+Demo sign-ins are listed in the root `README.md` ("Demo data and demo sign-ins": one user per role in the demo business; the password is `BOS_DEMO_PASSWORD` from your `.env`).
 
 ## Automated checks
 

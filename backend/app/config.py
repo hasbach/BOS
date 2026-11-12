@@ -28,6 +28,13 @@ def _bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _hops(name: str) -> int:
+    raw = os.environ.get(name, "").strip() or "0"
+    if not raw.isdigit() or int(raw) > 5:
+        raise ConfigError(f"{name} must be a number of proxies from 0 to 5")
+    return int(raw)
+
+
 def _csv(name: str) -> frozenset[str]:
     raw = os.environ.get(name, "")
     return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
@@ -35,9 +42,11 @@ def _csv(name: str) -> frozenset[str]:
 
 @dataclass(frozen=True)
 class Config:
-    secret_key: str
-    database_url: str
-    migration_database_url: str
+    # Secrets (and URLs holding database passwords) stay out of repr(), so a logged or
+    # printed Config, or a test failure showing it, does not reveal them.
+    secret_key: str = field(repr=False)
+    database_url: str = field(repr=False)
+    migration_database_url: str = field(repr=False)
     public_base_url: str
     cookie_secure: bool
     operator_emails: frozenset[str]
@@ -48,6 +57,9 @@ class Config:
     smtp_password: str = field(repr=False)
     smtp_from: str
     testing: bool = False
+    # How many reverse proxies in front of the API may be trusted to set X-Forwarded-For
+    # (the Next.js rewrite or the production proxy: 1). 0 = use the connecting address.
+    trusted_proxy_hops: int = 0
 
     @classmethod
     def from_env(cls, *, testing: bool = False) -> Config:
@@ -73,4 +85,5 @@ class Config:
             smtp_password=os.environ.get("BOS_SMTP_PASSWORD", ""),
             smtp_from=os.environ.get("BOS_SMTP_FROM", "BOS <no-reply@example.test>"),
             testing=testing,
+            trusted_proxy_hops=_hops("BOS_TRUSTED_PROXY_HOPS"),
         )

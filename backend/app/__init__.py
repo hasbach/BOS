@@ -8,6 +8,7 @@ import uuid
 
 from flask import Flask, Response, g, jsonify, request
 from flask.typing import ResponseReturnValue
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import Config
 from app.core.db import init_engine
@@ -30,6 +31,12 @@ def create_app(config: Config | None = None) -> Flask:
     app.config["PROPAGATE_EXCEPTIONS"] = False
     app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024  # hard cap; logos are limited to 2 MB
     app.extensions["bos_config"] = cfg
+    if cfg.trusted_proxy_hops:
+        # Behind the web app's rewrite (or the production proxy) every request comes from the
+        # proxy: without this, the per-address sign-in limit would count all users together.
+        app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
+            app.wsgi_app, x_for=cfg.trusted_proxy_hops, x_proto=cfg.trusted_proxy_hops
+        )
 
     _configure_logging(app)
     register_error_handlers(app)
@@ -79,6 +86,10 @@ def _register_request_logging(app: Flask) -> None:
     @app.after_request
     def _finish(response: Response) -> Response:
         response.headers["X-Request-ID"] = g.get("request_id", "")
+        # API answers hold personal data and, once, one-time links: never stored by a browser
+        # or a shared cache (a view may still choose its own Cache-Control, as logos do).
+        response.headers.setdefault("Cache-Control", "no-store")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
         started = g.get("request_started")
         elapsed_ms = (time.perf_counter() - started) * 1000 if started else 0.0
         # Path only: query strings and bodies may hold personal data or tokens.

@@ -22,6 +22,9 @@ def make_engine(database_url: str) -> Engine:
     return create_engine(
         database_url,
         pool_pre_ping=True,
+        # Error messages (and so logged tracebacks) must not carry bound values: they include
+        # password hashes, token hashes, phone numbers and emails.
+        hide_parameters=True,
         connect_args={"options": "-c statement_timeout=30000 -c lock_timeout=10000"},
     )
 

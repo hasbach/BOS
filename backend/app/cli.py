@@ -134,7 +134,20 @@ def create_operator(email: str, name: str | None) -> None:
                 "hash": password_hash,
             },
         ).one()
-    action = "created" if row.inserted else "updated (new password set)"
+        ended = 0
+        if not row.inserted:
+            # A new password ends every session signed in with the old one (as FR-009 does
+            # for business users), e.g. after the old password leaked.
+            ended = len(
+                db.execute(
+                    text(
+                        "UPDATE sessions SET revoked_at = now() "
+                        "WHERE operator_id = :id AND revoked_at IS NULL RETURNING id"
+                    ),
+                    {"id": row.id},
+                ).all()
+            )
+    action = "created" if row.inserted else f"updated (new password set, {ended} session(s) ended)"
     click.echo(f"Operator {row.id} {action} for {address}.")
 
 
