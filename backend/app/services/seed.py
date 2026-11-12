@@ -261,7 +261,7 @@ def _create_tenant(db: Session, demo: DemoTenant, operator_id: uuid.UUID, passwo
             event="store.created",
             target_type="store",
             target_id=store.id,
-            data={"name": store.name, "source": "seed-demo"},
+            data={"name": store.name, "whatsapp_number": store.whatsapp, "source": "seed-demo"},
         )
     for user in demo.users:
         db.execute(

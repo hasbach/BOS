@@ -73,7 +73,7 @@ describe("OfflineNotice", () => {
   it("shows the notice while offline", () => {
     onLine.mockReturnValue(false);
     renderWithIntl(<OfflineNotice />);
-    expect(screen.getByRole("status")).toHaveTextContent(en.ui.offline);
+    expect(screen.getByRole("status")).toHaveTextContent(en.ui.offlineTitle);
   });
 
   it("reacts when the connection drops and comes back", () => {
@@ -96,7 +96,7 @@ describe("OfflineNotice", () => {
   it("can be forced visible", () => {
     onLine.mockReturnValue(true);
     renderWithIntl(<OfflineNotice forceVisible />, "ar");
-    expect(screen.getByRole("status")).toHaveTextContent(ar.ui.offline);
+    expect(screen.getByRole("status")).toHaveTextContent(ar.ui.offlineTitle);
   });
 });
 

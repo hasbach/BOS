@@ -1,0 +1,35 @@
+.frame {
+  min-block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* The screen fills what the bar leaves; Screen reads --screen-min instead of the full viewport. */
+.content {
+  --screen-min: 0px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.notice,
+.install {
+  inline-size: 100%;
+  max-inline-size: 480px;
+  margin-inline: auto;
+}
+
+.notice:empty,
+.install:empty {
+  display: none;
+}
+
+.notice > div {
+  padding: 8px 16px 0;
+}
+
+.install:not(:empty) {
+  padding: 0 12px 12px;
+}

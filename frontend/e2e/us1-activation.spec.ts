@@ -5,6 +5,7 @@ import {
   expect,
   newApi,
   newBusinessDetails,
+  openTab,
   operatorSignInApi,
   operatorSignInUi,
   rebase,
@@ -92,10 +93,12 @@ test("operator sets up a business and the owner activates it", async ({ browser,
   await owner.getByRole("button", { name: t("auth.activate.submit") }).click();
 
   // ---- 5. Lands on the signed-in home in the chosen language -------------------------------------
-  await expect(owner).toHaveURL(new RegExp(`/${locale}/?$`));
-  await expect(owner.getByRole("heading", { name: t("shell.homeTitle") })).toBeVisible();
+  // The app opens on the start tab the server chose (Sales for an owner): a placeholder in M0.
+  await expect(owner).toHaveURL(new RegExp(`/${locale}/sales$`));
+  await expect(owner.getByRole("heading", { name: t("tabs.sales"), level: 1 })).toBeVisible();
   await expect(owner.getByText(details.businessName)).toBeVisible();
-  await expect(owner.getByText(details.ownerName)).toBeVisible();
+  await openTab(owner, t("tabs.more"));
+  await expect(owner.getByText(details.ownerName).first()).toBeVisible();
   await expect(owner.locator("html")).toHaveAttribute("lang", locale);
 
   // The token never appeared in any request URL (it travels in request bodies only).
@@ -113,7 +116,7 @@ test("operator sets up a business and the owner activates it", async ({ browser,
   // ---- 7. Signing in with the phone number in another format works -------------------------------
   const { context: signInContext, page: signIn } = await freshPage(browser, origin);
   await userSignInUi(signIn, locale, details.ownerPhoneInternational, PASSWORD);
-  await expect(signIn.getByRole("heading", { name: t("shell.homeTitle") })).toBeVisible();
+  await expect(signIn.getByRole("heading", { name: t("tabs.sales"), level: 1 })).toBeVisible();
   await expect(signIn.getByText(details.businessName)).toBeVisible();
   await signInContext.close();
 

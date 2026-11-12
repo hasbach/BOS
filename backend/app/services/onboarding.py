@@ -123,7 +123,7 @@ def create_business(
             "usd_lbp_rate": str(new.usd_lbp_rate),
         },
     )
-    record("store.created", "store", store_id, {"name": new.store_name})
+    record("store.created", "store", store_id, {"name": new.store_name, "whatsapp_number": None})
     record("invitation.created", "invitation", invitation_id, {"kind": "owner_activation"})
     return tenant_id, link
 
@@ -185,7 +185,7 @@ def set_business_status(
     enter_tenant_from_operator(db, tenant_id)
     event = "tenant.suspended" if status == "suspended" else "tenant.reactivated"
     _recorder(db, tenant_id, operator_id, ip)(
-        event, "tenant", tenant_id, {"from": current, "to": status}
+        event, "tenant", tenant_id, {"before": current, "after": status}
     )
 
 

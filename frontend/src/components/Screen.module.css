@@ -1,5 +1,6 @@
 .screen {
-  min-block-size: 100dvh;
+  flex: 1 0 auto;
+  min-block-size: var(--screen-min, 100dvh);
   inline-size: 100%;
   max-inline-size: 480px;
   margin-inline: auto;

@@ -1,36 +1,93 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 
 import { AppBar } from "@/components/AppBar";
 import { Card } from "@/components/Card";
-import { ChevronIcon, GearIcon, StoreIcon, UsersIcon } from "@/components/icons";
+import { ChevronIcon, ClockIcon, GearIcon, GlobeIcon, PhoneIcon, StoreIcon, UserIcon, UsersIcon } from "@/components/icons";
 import { Screen, ScreenBody, screenStyles } from "@/components/Screen";
 import { SignOutButton } from "@/components/SignOutButton";
 import { Link } from "@/i18n/navigation";
 import { useMe } from "@/lib/session";
 import { sortRoles } from "@/lib/staff";
+import { formatWhatsapp } from "@/lib/stores";
 
 import styles from "./employees/employees.module.css";
 
+interface Item {
+  key: string;
+  href: string;
+  label: string;
+  hint?: ReactNode;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+}
+
+function Group({ title, items }: { title: string; items: Item[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className={styles.group} aria-label={title}>
+      <h2 className={styles.groupLabel}>{title}</h2>
+      <Card>
+        <ul className={styles.list}>
+          {items.map((item) => (
+            <li key={item.key} className={styles.listItem}>
+              <Link href={item.href} className={styles.person} style={{ alignItems: "center" }}>
+                <item.Icon width={22} height={22} aria-hidden="true" />
+                <span className={styles.personText}>
+                  <span className={styles.name}>{item.label}</span>
+                  {item.hint ? <span className={styles.muted}>{item.hint}</span> : null}
+                </span>
+                <ChevronIcon className={styles.chevron} style={{ marginBlockStart: 0 }} width={18} height={18} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </section>
+  );
+}
+
 /**
- * Screens 18 and 74. Only the entries the user's permissions allow are shown; the server still
- * checks every page behind them. Entries for later stories (Catalog, Reports, History, Devices,
- * Language) get their own slot in the list below when those stories land.
+ * Screens 107 and 108. Only the entries the person's permissions allow are shown; the server still
+ * checks every page behind them. Profile, Devices and Language are for everyone.
  */
 export function MoreMenu() {
   const t = useTranslations();
+  const locale = useLocale();
   const me = useMe();
   const can = (permission: string) => me.permissions.includes(permission);
   const roles = sortRoles(me.user.roles)
     .map((role) => t(`staff.role.${role}`))
     .join(", ");
 
-  const setup: Array<{ key: string; href: string; label: string; Icon: typeof UsersIcon }> = [];
-  // Language and Devices come with US4 and the History screen (audit.view) with US7. They are not built yet.
-  if (can("store.view")) setup.push({ key: "stores", href: "/more/stores", label: t("more.stores"), Icon: StoreIcon });
-  if (can("staff.view")) setup.push({ key: "employees", href: "/more/employees", label: t("more.employees"), Icon: UsersIcon });
-  if (can("settings.manage")) setup.push({ key: "settings", href: "/more/settings", label: t("more.settings"), Icon: GearIcon });
+  const business: Item[] = [];
+  if (can("store.view")) business.push({ key: "stores", href: "/more/stores", label: t("more.stores"), hint: t("more.storeCount", { count: me.stores.length }), Icon: StoreIcon });
+  if (can("staff.view")) business.push({ key: "employees", href: "/more/employees", label: t("more.employees"), Icon: UsersIcon });
+  if (can("settings.manage")) business.push({ key: "settings", href: "/more/settings", label: t("more.settings"), Icon: GearIcon });
+  if (can("audit.view")) business.push({ key: "history", href: "/more/history", label: t("more.history"), hint: t("more.historyHint"), Icon: ClockIcon });
+
+  const account: Item[] = [
+    {
+      key: "profile",
+      href: "/more/profile",
+      label: t("more.profileLink"),
+      hint: (
+        <>
+          {me.user.name}
+          {me.user.phone ? (
+            <>
+              {" · "}
+              <bdi dir="ltr">{formatWhatsapp(me.user.phone)}</bdi>
+            </>
+          ) : null}
+        </>
+      ),
+      Icon: UserIcon,
+    },
+    { key: "devices", href: "/more/devices", label: t("more.devices"), Icon: PhoneIcon },
+    { key: "language", href: "/more/language", label: t("more.language"), hint: locale === "ar" ? "العربية" : "English", Icon: GlobeIcon },
+  ];
 
   return (
     <Screen>
@@ -42,29 +99,11 @@ export function MoreMenu() {
           </div>
           <div>
             <p className={screenStyles.title}>{me.business.name}</p>
-            <p className={screenStyles.muted}>{t("more.profile", { name: me.user.name, roles })}</p>
+            <p className={screenStyles.muted}>{t("more.signedIn", { name: me.user.name, roles })}</p>
           </div>
         </Card>
-        {setup.length > 0 ? (
-          <section className={styles.group} aria-label={t("more.setup")}>
-            <h2 className={styles.groupLabel}>{t("more.setup")}</h2>
-            <Card>
-              <ul className={styles.list}>
-                {setup.map((item) => (
-                  <li key={item.key} className={styles.listItem}>
-                    <Link href={item.href} className={styles.person} style={{ alignItems: "center" }}>
-                      <item.Icon width={22} height={22} aria-hidden="true" />
-                      <span className={styles.personText}>
-                        <span className={styles.name}>{item.label}</span>
-                      </span>
-                      <ChevronIcon className={styles.chevron} style={{ marginBlockStart: 0 }} width={18} height={18} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </section>
-        ) : null}
+        <Group title={t("more.business")} items={business} />
+        <Group title={t("more.account")} items={account} />
         <SignOutButton />
       </ScreenBody>
     </Screen>

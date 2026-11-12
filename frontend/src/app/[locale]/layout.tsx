@@ -12,6 +12,7 @@ import "@fontsource/ibm-plex-sans-arabic/700.css";
 import "@/styles/tokens.css";
 import "@/styles/base.css";
 
+import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import { dirFor, routing } from "@/i18n/routing";
 
 type Props = { children: ReactNode; params: Promise<{ locale: string }> };
@@ -24,12 +25,21 @@ export async function generateMetadata({ params }: Pick<Props, "params">): Promi
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) return {};
   const t = await getTranslations({ locale, namespace: "meta" });
-  return { title: t("title"), description: t("description") };
+  return {
+    title: t("title"),
+    description: t("description"),
+    manifest: "/manifest.webmanifest",
+    icons: { icon: "/icons/icon-192.png", apple: "/icons/icon-192.png" },
+    appleWebApp: { capable: true, title: "BOS", statusBarStyle: "default" },
+  };
 }
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Lets the tab bar sit above the phone home indicator (safe-area padding).
+  viewportFit: "cover",
+  themeColor: "#047857",
 };
 
 export default async function LocaleLayout({ children, params }: Props) {
@@ -41,6 +51,7 @@ export default async function LocaleLayout({ children, params }: Props) {
     <html lang={locale} dir={dirFor(locale)}>
       <body>
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

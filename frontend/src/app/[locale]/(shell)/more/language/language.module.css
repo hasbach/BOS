@@ -1,0 +1,55 @@
+.option {
+  inline-size: 100%;
+  min-block-size: 60px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border: 0;
+  border-block-end: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  text-align: start;
+}
+
+.option:last-child {
+  border-block-end: 0;
+}
+
+.option:disabled {
+  opacity: 0.7;
+}
+
+.radio {
+  flex: none;
+  inline-size: 22px;
+  block-size: 22px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.radioOn {
+  border-color: var(--accent);
+}
+
+.radioOn::after {
+  content: "";
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.text {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.note {
+  font-size: 13px;
+  color: var(--fg-2);
+}

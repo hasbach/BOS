@@ -2,7 +2,7 @@
 // (contracts/openapi.yaml); the text lives in messages/{en,ar}.json under "errors".
 // tests/errors.test.ts fails if a code in openapi.yaml is missing here or in either language.
 
-import { isApiError } from "./api";
+import { isApiError, isConnectionError } from "./api";
 
 export const ERROR_CODES = [
   // Raised by the web app itself
@@ -74,4 +74,12 @@ export function errorMessage(t: Translate, error: unknown): string {
 /** User-facing text for each entry of an ApiError's `fields` map. */
 export function fieldErrorMessages(t: Translate, fields: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(fields).map(([name, code]) => [name, t(fieldErrorMessageKey(code))]));
+}
+
+/**
+ * Text for a failed write (T083, screen 130). With no answer from the server it says plainly that
+ * nothing was saved and that what was typed is still there; any other failure uses its own message.
+ */
+export function writeFailureMessage(t: Translate, error: unknown): string {
+  return isConnectionError(error) ? t("ui.writeFailed") : errorMessage(t, error);
 }

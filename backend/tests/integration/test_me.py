@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Iterator
+from datetime import datetime
 from email.message import EmailMessage
 from typing import Any
 
@@ -408,11 +409,13 @@ def test_user_adds_a_phone_and_changes_their_email(
     assert (me["user"]["phone"], me["user"]["email"]) == ("+96171555444", "sales.new@example.test")
     [entry] = history(owner_engine, a.tenant_id, "auth.identifier_changed")
     assert (entry.actor_type, entry.actor_id, entry.target_id) == ("user", sales, sales)
+    # Never the full phone number or address: the last two digits and the domain only.
     assert entry.data == {
-        "phone": {"from": None, "to": "+96171555444"},
-        "email": {"from": "sales-a@example.test", "to": "sales.new@example.test"},
+        "before": {"phone": None, "email": "••@example.test"},
+        "after": {"phone": "••44", "email": "••@example.test"},
     }
     assert PASSWORD not in str(entry.data)
+    assert "555" not in str(entry.data) and "sales" not in str(entry.data)
 
 
 def test_user_can_remove_one_identifier_but_not_the_last(
@@ -520,8 +523,42 @@ def test_user_lists_their_own_devices(app: Flask, owner_engine: Engine, worlds: 
 
     assert len(devices) == 2
     assert [d["current"] for d in devices].count(True) == 1
-    assert any("Android" in d["device"] for d in devices)
-    assert all(set(d) == {"id", "device", "last_seen_at", "current"} for d in devices)
+    keys = {"id", "browser", "os", "created_at", "last_seen_at", "current"}
+    assert all(set(d) == keys for d in devices)
+    by_current = {d["current"]: d for d in devices}
+    assert (by_current[False]["os"], by_current[False]["browser"]) == ("Android", None)
+    assert by_current[True]["os"] is None and by_current[True]["browser"] is None  # test client
+    assert "Mozilla" not in str(devices) and "Phone" not in str(devices)
+
+
+def test_devices_show_plain_browser_and_system_names(
+    app: Flask, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    a = worlds.a
+    set_password(owner_engine, a.user_id)
+    agent = (
+        "Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-S918B) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36"
+    )
+    phone = app.test_client()
+    ok(
+        phone.post(
+            "/api/v1/auth/sign-in",
+            json={"identifier": a.email, "password": PASSWORD},
+            headers={**CSRF, "User-Agent": agent},
+        )
+    )
+
+    [device] = ok(phone.get("/api/v1/me/sessions"))
+
+    assert (device["browser"], device["os"], device["current"]) == (
+        "Samsung Internet",
+        "Android",
+        True,
+    )
+    created, seen = (datetime.fromisoformat(device[k]) for k in ("created_at", "last_seen_at"))
+    assert created <= seen
+    assert "SM-S918B" not in str(device) and "Mozilla" not in str(device)
 
 
 def test_user_ends_one_of_their_sessions(

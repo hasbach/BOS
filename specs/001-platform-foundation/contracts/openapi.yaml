@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BOS API — Platform Foundation (M0)
-  version: 0.5.0
+  version: 0.6.0
   description: |
     Contract for milestone M0, revision 2 (one business per user; review fixes of 2026-11-10).
     All paths are under /api/v1 on the same origin as the web app.
@@ -506,7 +506,19 @@ components:
         start_tab: { enum: [sales, packing, delivery, orders, more] }
     Session:
       type: object
-      properties: { id: { type: string, format: uuid }, device: { type: string }, last_seen_at: { type: string, format: date-time }, current: { type: boolean } }
+      description: |
+        `browser` and `os` are parsed on the server from the stored user agent into plain names
+        ("Chrome", "Safari", "Edge", "Firefox", "Samsung Internet"; "Android", "iPhone", "iPad",
+        "Windows", "macOS", "Linux"), or null when not recognised. The client composes the
+        translated label ("Chrome on Android" / "Chrome على Android") and shows a generic
+        "Unknown device" when both are null. The raw user agent is never returned.
+      properties:
+        id: { type: string, format: uuid }
+        browser: { type: [string, 'null'] }
+        os: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        current: { type: boolean }
     Business:
       type: object
       properties:
@@ -605,9 +617,29 @@ components:
               at: { type: string, format: date-time }
               event: { type: string }
               actor_type: { enum: [user, operator, system, anonymous] }
-              actor_name: { type: [string, 'null'] }
-              target: { type: [string, 'null'] }
-              data: { type: object }
+              actor_id: { type: [string, 'null'], format: uuid, description: Set only when actor_type is user }
+              actor_name: { type: [string, 'null'], description: "The user's current name; null for operator (shown as the Beta team), system and anonymous" }
+              target_type: { type: [string, 'null'], enum: [tenant, store, user, invitation, session, null] }
+              target_id: { type: [string, 'null'], format: uuid }
+              target_name: { type: [string, 'null'], description: "Current readable name of the target in the same business (business name for tenant targets, store name, user name, invitee name); null when there is none" }
+              data:
+                type: object
+                description: |
+                  Event details, never secrets, tokens, passwords or full contact details.
+                  Change events (`*.updated`, `*_changed`, `user.deactivated`,
+                  `user.reactivated`, `tenant.suspended`, `tenant.reactivated`,
+                  `tenant.settings_changed`) use `{ "before": …, "after": … }` where both sides
+                  have the same shape (an object of changed fields, a list of role codes, or a
+                  status string); they may carry named extra fields beside them
+                  (`user.deactivated`: `sessions_ended`; `store.deactivated`:
+                  `affected: [{kind, id}]`).
+                  `user.stores_changed` sides are `{ "all_stores": bool, "store_ids": [uuid] }`.
+                  `auth.identifier_changed` sides hold only the changed identifiers, masked:
+                  `phone` as "••" plus its last two digits, `email` as "••@domain", null when
+                  removed.
+                  Other events carry a few named fields (for example `store.created`:
+                  `name`, `whatsapp_number`; `email.sent` / `email.failed`: `purpose`).
+                  Clients render the shapes they know and fall back to the event name alone.
         next_cursor: { type: [string, 'null'] }
     OpsMe:
       type: object

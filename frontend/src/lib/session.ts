@@ -6,6 +6,8 @@ import { api } from "./api";
 import type { Me, OpsMe } from "./types";
 
 export const MeContext = createContext<Me | null>(null);
+/** Lets a screen replace the loaded person after a confirmed change (name, phone, email). */
+export const MeSetterContext = createContext<(me: Me) => void>(() => undefined);
 export const OpsMeContext = createContext<OpsMe | null>(null);
 
 /** The signed-in business user. Only valid below SessionGuard. */
@@ -13,6 +15,10 @@ export function useMe(): Me {
   const me = useContext(MeContext);
   if (!me) throw new Error("useMe must be used inside SessionGuard");
   return me;
+}
+
+export function useUpdateMe(): (me: Me) => void {
+  return useContext(MeSetterContext);
 }
 
 /** The signed-in operator. Only valid below OpsGuard. */

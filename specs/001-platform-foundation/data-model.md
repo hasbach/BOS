@@ -226,7 +226,7 @@ never received the first).
 | actor_id | uuid, nullable | |
 | event | text | from the fixed list below |
 | target_type, target_id | text, uuid, nullable | |
-| data | jsonb | before/after values (for `store.updated`: only the changed fields among `name`, `whatsapp_number`, `logo_file_id`); never passwords, tokens or links |
+| data | jsonb | the event's fields, listed per event below; change events use `{before, after}` with same-shaped sides; never passwords, hashes, tokens or links, and never a person's full phone number or email address |
 | ip | inet, nullable | |
 | at | timestamptz | indexed `(tenant_id, at desc)` |
 
@@ -246,14 +246,44 @@ Tenant rows are inserted in tenant context. Null-tenant rows can only be inserte
 | Refused cross-tenant or missing-permission request | the caller's tenant | user |
 | Email sent or failed | the recipient's tenant | system |
 
-Events: `auth.sign_in`, `auth.sign_in_failed`, `auth.sign_out`, `auth.session_revoked`,
-`auth.password_changed`, `auth.password_reset_issued`, `auth.identifier_changed`,
-`tenant.created`, `tenant.suspended`, `tenant.reactivated`, `tenant.settings_changed`,
-`invitation.created`, `invitation.accepted`, `invitation.revoked`, `invitation.resent`,
-`user.roles_changed`, `user.stores_changed`, `user.deactivated`, `user.reactivated`,
-`store.created`, `store.updated`, `store.deactivated`, `store.reactivated`,
-`access.denied_permission`, `access.denied_tenant`, `access.denied_store`,
-`email.sent`, `email.failed`, `operator.sign_in`, `maintenance.run`.
+Events: the fixed list, with each event's target and `data` fields. "Change" means
+`{"before": …, "after": …}` where both sides have the same shape. Contact details never
+appear in full: a person's phone number is reduced to its last two digits (`••56`) and an
+email address to its domain (`••@example.com`, or the bare domain for email events). A
+store's WhatsApp number is the business's own public number and is kept as entered.
+
+| Event | Target | `data` |
+|---|---|---|
+| `auth.sign_in` | user | `session_id`; `via: "invitation"` when signed in by accepting an invitation |
+| `auth.sign_in_failed` | user (known identifier) / none (platform) | `reason`: `wrong_password`, `inactive_user`, `business_suspended`, `business_pending`; platform rows: empty, or `area: "ops"` for the operator sign-in |
+| `auth.sign_out` | session | empty |
+| `auth.session_revoked` | session (one) / user (all others) | one: `scope: "one"`, `current` (bool); all others: `scope: "others"`, `ended` (count) |
+| `auth.password_changed` | user | `via`: `self` or `reset_link`; `sessions_ended` (count) |
+| `auth.password_reset_issued` | user | `channel`: `email`, `staff` or `operator` |
+| `auth.identifier_changed` | user | change; each side `{phone?, email?}` holding only the identifiers that changed, reduced as above (`null` when absent) |
+| `tenant.created` | tenant | `name`, `edition`, `default_currency`, `usd_lbp_rate` (operator); `name`, `edition`, `is_demo`, `source` (demo seed) |
+| `tenant.suspended` | tenant | change; sides are status strings |
+| `tenant.reactivated` | tenant | change; sides are status strings |
+| `tenant.settings_changed` | tenant | change; sides are objects of the changed settings (money as decimal strings) |
+| `invitation.created` | invitation | `kind`; for employees also `name` (invitee's name) and `roles` |
+| `invitation.accepted` | invitation | `kind`, `roles` |
+| `invitation.revoked` | invitation | `kind` |
+| `invitation.resent` | invitation (the new one) | `kind`, `previous_invitation_id`; `repeat: true` when an idempotent repeat refreshed the same invitation's link |
+| `user.roles_changed` | user | change; sides are lists of role codes |
+| `user.stores_changed` | user | change; sides are `{all_stores, store_ids}` |
+| `user.deactivated` | user | change; sides are status strings; plus `sessions_ended` (count) |
+| `user.reactivated` | user | change; sides are status strings |
+| `store.created` | store | `name`, `whatsapp_number` (demo seed adds `source`) |
+| `store.updated` | store | change; sides are objects of the changed fields among `name`, `whatsapp_number`, `logo_file_id` |
+| `store.deactivated` | store | change; sides are status strings; plus `affected`: list of `{kind, id}` left without an active store |
+| `store.reactivated` | store | change; sides are status strings |
+| `access.denied_permission` | the refused record, if any | `path`, `method`; `permission` when a permission was missing (absent for "cannot change yourself") |
+| `access.denied_tenant` | the record looked for, if known | `path`, `method` |
+| `access.denied_store` | none | `path`, `method`, `permission`, `store_id` |
+| `email.sent` | none | `purpose`, `domain` |
+| `email.failed` | none | `purpose`, `domain`, `error` (exception class name) |
+| `operator.sign_in` | none (platform) | empty |
+| `maintenance.run` | none (platform) | counts of what was expired or deleted |
 
 ## State transitions
 

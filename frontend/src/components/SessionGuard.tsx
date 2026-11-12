@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { ApiError, isApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
-import { MeContext, OpsMeContext, SIGN_IN_CODES, loadMe, loadOpsMe } from "@/lib/session";
+import { MeContext, MeSetterContext, OpsMeContext, SIGN_IN_CODES, loadMe, loadOpsMe } from "@/lib/session";
 import type { Me, OpsMe } from "@/lib/types";
 
 import { ErrorState } from "./ErrorState";
@@ -70,7 +70,9 @@ function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: s
     setAttempt((n) => n + 1);
   }, []);
 
-  return { state, retry };
+  const replace = useCallback((value: T) => setState({ k: "ready", value }), []);
+
+  return { state, retry, replace };
 }
 
 /**
@@ -82,7 +84,7 @@ export function SessionGuard({ children }: { children: ReactNode }) {
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
-  const { state, retry } = useIdentity<Me>(loadMe, "/sign-in", SIGN_IN_CODES);
+  const { state, retry, replace } = useIdentity<Me>(loadMe, "/sign-in", SIGN_IN_CODES);
 
   const savedLocale = state.k === "ready" ? state.value.user.locale : null;
   const mismatch = savedLocale !== null && savedLocale !== locale;
@@ -93,7 +95,11 @@ export function SessionGuard({ children }: { children: ReactNode }) {
 
   if (state.k === "error") return <ErrorState message={errorMessage(t, state.error)} onRetry={retry} />;
   if (state.k === "loading" || mismatch) return <Loading label={t("shell.checking")} />;
-  return <MeContext.Provider value={state.value}>{children}</MeContext.Provider>;
+  return (
+    <MeSetterContext.Provider value={replace}>
+      <MeContext.Provider value={state.value}>{children}</MeContext.Provider>
+    </MeSetterContext.Provider>
+  );
 }
 
 const OPS_REDIRECT: ReadonlySet<string> = new Set(["unauthenticated", "forbidden"]);

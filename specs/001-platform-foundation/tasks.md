@@ -188,24 +188,24 @@ Web application: `backend/` (Flask API) and `frontend/` (Next.js PWA) at the rep
 
 ### Design (approval needed before T078–T082)
 
-- [ ] T073 [US4] Design the missing screens for US4 in `design/bos-screens.html`: History, Devices, Language, Profile (name, phone, email), placeholder state, offline notice; English and Arabic; present for approval
+- [x] T073 [US4] Design the missing screens for US4 in `design/bos-screens.html`: History, Devices, Language, Profile (name, phone, email), placeholder state, offline notice; English and Arabic; present for approval
 
 ### Tests for User Story 4 (write first, confirm they fail)
 
-- [ ] T074 [P] [US4] Component tests in `frontend/tests/shell/`: bottom navigation shows exactly the tabs from `contracts/permissions.md` for each role combination; `start_tab` order honoured; placeholder state rendered for later-milestone areas; `dir` is `rtl` for `ar` and `ltr` for `en`; times render in Asia/Beirut regardless of the device time zone (FR-030)
-- [ ] T075 [P] [US4] Playwright scenario in `frontend/e2e/us4-shell.spec.ts` using seeded users: for owner, sales and packing users in `en` and `ar` at 360×740 — correct tabs and start tab; no horizontal scroll on any M0 screen (assert `scrollWidth <= clientWidth`); language switch applies immediately and persists after sign-out and sign-in in a fresh browser context; saved language wins over the pre-sign-in choice; with the network offline, saving shows the failure message and the value is not shown as saved
-- [ ] T076 [P] [US4] Test in `frontend/tests/pwa/manifest.test.ts` that the manifest is valid (name "BOS", `display: standalone`, icons 192 and 512, `start_url`) and the service worker caches only static shell assets, never `/api/`
-- [ ] T077 [P] [US4] End-to-end history check in `backend/tests/integration/test_audit_completeness.py`: run one of every action from stories 1–3 and assert every event in data-model.md appears once with the correct actor and time (SC-008)
+- [x] T074 [P] [US4] Component tests in `frontend/tests/shell/`: bottom navigation shows exactly the tabs from `contracts/permissions.md` for each role combination; `start_tab` order honoured; placeholder state rendered for later-milestone areas; `dir` is `rtl` for `ar` and `ltr` for `en`; times render in Asia/Beirut regardless of the device time zone (FR-030)
+- [x] T075 [P] [US4] Playwright scenario in `frontend/e2e/us4-shell.spec.ts` using seeded users: for owner, sales and packing users in `en` and `ar` at 360×740 — correct tabs and start tab; no horizontal scroll on any M0 screen (assert `scrollWidth <= clientWidth`); language switch applies immediately and persists after sign-out and sign-in in a fresh browser context; saved language wins over the pre-sign-in choice; with the network offline, saving shows the failure message and the value is not shown as saved
+- [x] T076 [P] [US4] Test in `frontend/tests/pwa/manifest.test.ts` that the manifest is valid (name "BOS", `display: standalone`, icons 192 and 512, `start_url`) and the service worker caches only static shell assets, never `/api/`
+- [x] T077 [P] [US4] End-to-end history check in `backend/tests/integration/test_audit_completeness.py`: run one of every action from stories 1–3 and assert every event in data-model.md appears once with the correct actor and time (SC-008)
 
 ### Implementation for User Story 4
 
-- [ ] T078 [US4] Build the shell layout in `frontend/src/app/[locale]/(shell)/layout.tsx` and `frontend/src/components/BottomNav.tsx` per design screens 02 and 18: five tabs filtered by `me.tabs`, redirect to `me.start_tab` on entry, safe-area padding, active tab indicated by icon weight + label (not color alone)
-- [ ] T079 [P] [US4] Build tab pages with placeholder states in `frontend/src/app/[locale]/(shell)/{sales,packing,delivery,orders}/page.tsx` and the More menu in `frontend/src/app/[locale]/(shell)/more/page.tsx` showing only permitted items (Employees, Stores, Settings, History, Devices, Profile, Language, Sign out)
-- [ ] T080 [P] [US4] Build Language and Profile screens in `frontend/src/app/[locale]/(shell)/more/language/page.tsx` and `more/profile/page.tsx` (`PATCH /me`; changing phone or email asks for the current password)
-- [ ] T081 [P] [US4] Build History and Devices screens in `frontend/src/app/[locale]/(shell)/more/history/page.tsx` (translated event names, Beirut time, load more) and `more/devices/page.tsx` (list own sessions, end one, end all others)
-- [ ] T082 [P] [US4] Add PWA assets: `frontend/public/manifest.webmanifest`, icons in `frontend/public/icons/`, minimal service worker in `frontend/src/app/sw.ts` (static shell cache + offline notice only), registration in `frontend/src/app/[locale]/layout.tsx`
-- [ ] T083 [US4] Add global connection and error handling in `frontend/src/components/OfflineNotice.tsx` and `frontend/src/lib/api.ts`: no optimistic success anywhere; failed writes show a clear message and keep the user's input
-- [ ] T084 [US4] Run T074–T077 and the route-coverage and contract tests; confirm all pass; record output in `specs/001-platform-foundation/checklists/us4.md`
+- [x] T078 [US4] Build the shell layout in `frontend/src/app/[locale]/(shell)/layout.tsx` and `frontend/src/components/BottomNav.tsx` per design screens 02 and 18: five tabs filtered by `me.tabs`, redirect to `me.start_tab` on entry, safe-area padding, active tab indicated by icon weight + label (not color alone)
+- [x] T079 [P] [US4] Build tab pages with placeholder states in `frontend/src/app/[locale]/(shell)/{sales,packing,delivery,orders}/page.tsx` and the More menu in `frontend/src/app/[locale]/(shell)/more/page.tsx` showing only permitted items (Employees, Stores, Settings, History, Devices, Profile, Language, Sign out)
+- [x] T080 [P] [US4] Build Language and Profile screens in `frontend/src/app/[locale]/(shell)/more/language/page.tsx` and `more/profile/page.tsx` (`PATCH /me`; changing phone or email asks for the current password)
+- [x] T081 [P] [US4] Build History and Devices screens in `frontend/src/app/[locale]/(shell)/more/history/page.tsx` (translated event names, Beirut time, load more) and `more/devices/page.tsx` (list own sessions, end one, end all others)
+- [x] T082 [P] [US4] Add PWA assets: `frontend/public/manifest.webmanifest`, icons in `frontend/public/icons/`, minimal service worker in `frontend/src/app/sw.ts` (static shell cache + offline notice only), registration in `frontend/src/app/[locale]/layout.tsx`
+- [x] T083 [US4] Add global connection and error handling in `frontend/src/components/OfflineNotice.tsx` and `frontend/src/lib/api.ts`: no optimistic success anywhere; failed writes show a clear message and keep the user's input
+- [x] T084 [US4] Run T074–T077 and the route-coverage and contract tests; confirm all pass; record output in `specs/001-platform-foundation/checklists/us4.md`
 
 **Checkpoint (approval point)**: All four stories work together in both languages on a phone.
 

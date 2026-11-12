@@ -34,6 +34,11 @@ export function isApiError(value: unknown): value is ApiError {
   return value instanceof ApiError;
 }
 
+/** True when the request got no answer at all (offline, server unreachable): nothing was saved. */
+export function isConnectionError(value: unknown): boolean {
+  return value instanceof ApiError && value.code === "network_error";
+}
+
 export type QueryValue = string | number | boolean | undefined;
 
 export interface RequestOptions {

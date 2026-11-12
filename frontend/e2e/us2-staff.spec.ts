@@ -4,6 +4,7 @@ import {
   me,
   newApi,
   newContext,
+  openTab,
   operatorSignInApi,
   rebase,
   test,
@@ -93,9 +94,10 @@ test("owner invites a sales agent, changes the role, deactivates", async ({ brow
   await agent.getByLabel(t("auth.activate.password"), { exact: true }).fill(AGENT_PASSWORD);
   await agent.getByLabel(t("auth.activate.confirm"), { exact: true }).fill(AGENT_PASSWORD);
   await agent.getByRole("button", { name: t("auth.activate.submit") }).click();
-  await expect(agent).toHaveURL(new RegExp(`/${locale}/?$`));
-  await expect(agent.getByRole("heading", { name: t("shell.homeTitle") })).toBeVisible();
-  await expect(agent.getByText(agentName)).toBeVisible();
+  await expect(agent).toHaveURL(new RegExp(`/${locale}/(sales|packing|delivery)$`));
+  await expect(agent.getByRole("navigation", { name: t("tabs.aria") })).toBeVisible();
+  await openTab(agent, t("tabs.more"));
+  await expect(agent.getByText(agentName).first()).toBeVisible();
 
   // ---- 5. No Employees entry in the agent's More menu; the page itself refuses -------------------
   await agent.goto(`/${locale}/more`);

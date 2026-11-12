@@ -180,3 +180,12 @@ export async function me(page: Page): Promise<{ status: number; body: MeBody | n
   const response = await page.request.get("/api/v1/me");
   return { status: response.status(), body: response.ok() ? ((await response.json()) as MeBody) : null };
 }
+
+/**
+ * Opens a bottom-bar tab. The click is dispatched on the link itself: in a right-to-left page the last
+ * tab sits in the bottom-left corner, where the Next.js development indicator (a test-server only overlay)
+ * covers it and swallows real pointer clicks.
+ */
+export async function openTab(page: Page, label: string): Promise<void> {
+  await page.getByRole("navigation").getByRole("link", { name: label }).dispatchEvent("click");
+}

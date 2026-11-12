@@ -18,7 +18,7 @@ describe("More menu entries", () => {
   it("shows Stores and Settings to an owner and a manager", () => {
     for (const kind of ["owner", "manager"] as const) {
       const view = renderAs(<MoreMenu />, kind);
-      expect(screen.getByRole("link", { name: "Stores" })).toHaveAttribute("href", "/more/stores");
+      expect(screen.getByRole("link", { name: /^Stores/ })).toHaveAttribute("href", "/more/stores");
       expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/more/settings");
       view.unmount();
     }
@@ -26,14 +26,14 @@ describe("More menu entries", () => {
 
   it("shows a sales agent Stores but not Settings or Employees", () => {
     renderAs(<MoreMenu />, "sales");
-    expect(screen.getByRole("link", { name: "Stores" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Stores/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Employees/ })).not.toBeInTheDocument();
   });
 
   it("is in Arabic with the same entries", () => {
     renderAs(<MoreMenu />, "owner", "ar");
-    expect(screen.getByRole("link", { name: "المتاجر" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^المتاجر/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "الإعدادات" })).toBeInTheDocument();
   });
 });

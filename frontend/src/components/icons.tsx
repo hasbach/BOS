@@ -128,6 +128,62 @@ export const ImageIcon = (props: SVGProps<SVGSVGElement>) => (
     <path d="m21 16-5-5-8 8" />
   </svg>
 );
+export const CartIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <circle cx="9" cy="20" r="1.4" />
+    <circle cx="18" cy="20" r="1.4" />
+    <path d="M2 3h3l2.6 12.2a1 1 0 0 0 1 .8h9.3a1 1 0 0 0 1-.8L20.5 7H6" />
+  </svg>
+);
+export const BoxIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" />
+    <path d="m3 8 9 5 9-5M12 13v8" />
+  </svg>
+);
+export const TruckIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <path d="M2 6h11v10H2zM13 9h4l4 4v3h-8z" />
+    <circle cx="6.5" cy="17.5" r="1.8" />
+    <circle cx="17" cy="17.5" r="1.8" />
+  </svg>
+);
+export const ListIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <rect x="4" y="3" width="16" height="18" rx="2" />
+    <path d="M8 8h8M8 12h8M8 16h5" />
+  </svg>
+);
+export const MenuIcon = draw("M4 6h16M4 12h16M4 18h16");
+export const PhoneIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <rect x="7" y="2" width="10" height="20" rx="2" />
+    <path d="M11 18h2" />
+  </svg>
+);
+export const LaptopIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <rect x="4" y="5" width="16" height="11" rx="1.5" />
+    <path d="M2 19h20" />
+  </svg>
+);
+export const GlobeIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+  </svg>
+);
+export const FilterIcon = draw("M3 5h18l-7 8v6l-4-2v-4L3 5Z");
+export const EditIcon = draw("M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4");
+export const FlagIcon = draw("M5 21V4M5 4h13l-2.5 4.5L18 13H5");
+export const SearchIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.8-3.8" />
+  </svg>
+);
+export const SyncIcon = draw("M20 11a8 8 0 0 0-14.5-4M4 4v4h4M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4");
+export const DownloadIcon = draw("M12 4v12M7 11l5 5 5-5M4 20h16");
 export const UploadIcon = draw("M12 16V4M7 9l5-5 5 5M4 20h16");
 export const GearIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg {...base} {...props}>

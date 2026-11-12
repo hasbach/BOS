@@ -1,4 +1,4 @@
-/** A calendar date with Latin digits in both languages (for example "18 Nov 2026" / "18 نوفمبر 2026"). */
+/** A calendar date in Beirut with Latin digits in both languages (for example "18 Nov 2026" / "18 نوفمبر 2026"). */
 export function formatDate(iso: string, locale: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
@@ -6,5 +6,6 @@ export function formatDate(iso: string, locale: string): string {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Beirut",
   }).format(date);
 }

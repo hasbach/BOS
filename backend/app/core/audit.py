@@ -70,6 +70,23 @@ _PLATFORM = text(
 )
 
 
+MASK = "••"
+
+
+def phone_hint(phone: str | None) -> str | None:
+    """A phone number as history may hold it: only its last two digits ("••56")."""
+    if phone is None:
+        return None
+    return MASK + phone[-2:]
+
+
+def email_hint(email: str | None) -> str | None:
+    """An email address as history may hold it: only its domain ("••@example.com")."""
+    if email is None:
+        return None
+    return MASK + "@" + email.rpartition("@")[2]
+
+
 def _check_event(event: str) -> None:
     if event not in EVENTS:
         raise ValueError(f"unknown audit event: {event}")

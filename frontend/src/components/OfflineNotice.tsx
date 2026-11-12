@@ -3,8 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useSyncExternalStore } from "react";
 
-import { WifiOffIcon } from "./icons";
-import styles from "./States.module.css";
+import { Banner } from "./Banner";
 
 function subscribe(onChange: () => void) {
   window.addEventListener("online", onChange);
@@ -30,9 +29,12 @@ export function OfflineNotice({ forceVisible = false }: OfflineNoticeProps) {
   if (online && !forceVisible) return null;
 
   return (
-    <div className={styles.banner} role="status" aria-live="polite">
-      <WifiOffIcon width={18} height={18} />
-      <span>{t("offline")}</span>
+    <div role="status" aria-live="polite">
+      <Banner tone="info" icon="wifioff">
+        <span>
+          <b>{t("offlineTitle")}</b> {t("offlineText")}
+        </span>
+      </Banner>
     </div>
   );
 }

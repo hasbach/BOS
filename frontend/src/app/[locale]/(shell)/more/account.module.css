@@ -1,0 +1,225 @@
+/* Shared by the account screens: History, Devices, Profile. Logical properties only. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.list {
+  margin: 0;
+  padding: 0 12px;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-block: 12px;
+  border-block-end: 1px solid var(--border);
+  min-block-size: 56px;
+}
+
+.row:last-child {
+  border-block-end: 0;
+}
+
+.avatar {
+  flex: none;
+  inline-size: 40px;
+  block-size: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--fg-2);
+  border: 1px solid var(--border);
+}
+
+.text {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.between {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  font-size: 13px;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+
+.small {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.time {
+  flex: none;
+  font-size: 12px;
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill {
+  min-block-size: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  max-inline-size: 100%;
+}
+
+.pillOn {
+  background: var(--ink);
+  color: var(--on-ink);
+  border-color: var(--ink);
+}
+
+.radioRow {
+  inline-size: 100%;
+  min-block-size: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-block: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  text-align: start;
+}
+
+.radio {
+  flex: none;
+  inline-size: 22px;
+  block-size: 22px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.radioOn {
+  border-color: var(--accent);
+}
+
+.radioOn::after {
+  content: "";
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.option {
+  min-block-size: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.optionOn {
+  background: var(--ink);
+  color: var(--on-ink);
+  border-color: var(--ink);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2));
+  background-size: 200% 100%;
+  border-radius: 8px;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+.center {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+  padding-block: 24px;
+}
+
+.emptyCircle {
+  inline-size: 64px;
+  block-size: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--fg-2);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-block-start: 4px;
+}
+
+.sheetScroll {
+  max-block-size: 60dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

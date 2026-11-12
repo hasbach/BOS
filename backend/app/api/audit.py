@@ -25,13 +25,26 @@ from app.core.request_context import current_user, request_db
 bp = Blueprint("audit", __name__, url_prefix="/api/v1")
 
 PAGE_SIZE = 50
-OPERATOR_NAME = "BOS support"  # operators are never named to merchants
 
+# Names are read now, so a renamed store or user shows its current name. Every lookup is one
+# join in this single query (no query per entry), and every join is narrowed to the entry's
+# own business on top of row-level security: an id of another business (for example one a
+# refused request probed for) never resolves to a name.
 _QUERY = text(
     "SELECT e.id, e.at, e.event, e.actor_type, e.actor_id, e.target_type, e.target_id, e.data, "
-    "u.name AS user_name "
+    "actor.name AS actor_name, "
+    "COALESCE(tu.name, ts.name, ti.invitee_name, tt.name) AS target_name "
     "FROM audit_entries e "
-    "LEFT JOIN users u ON e.actor_type = 'user' AND u.id = e.actor_id "
+    "LEFT JOIN users actor ON e.actor_type = 'user' AND actor.id = e.actor_id "
+    "     AND actor.tenant_id = e.tenant_id "
+    "LEFT JOIN users tu ON e.target_type = 'user' AND tu.id = e.target_id "
+    "     AND tu.tenant_id = e.tenant_id "
+    "LEFT JOIN stores ts ON e.target_type = 'store' AND ts.id = e.target_id "
+    "     AND ts.tenant_id = e.tenant_id "
+    "LEFT JOIN invitations ti ON e.target_type = 'invitation' AND ti.id = e.target_id "
+    "     AND ti.tenant_id = e.tenant_id "
+    "LEFT JOIN tenants tt ON e.target_type = 'tenant' AND tt.id = e.target_id "
+    "     AND tt.id = e.tenant_id "
     "WHERE e.tenant_id = :tenant_id "
     "AND (CAST(:event AS text) IS NULL OR e.event = CAST(:event AS text)) "
     "AND (CAST(:actor_id AS uuid) IS NULL OR e.actor_id = CAST(:actor_id AS uuid)) "
@@ -76,22 +89,18 @@ def history() -> ResponseReturnValue:
 
 
 def _item(row: Any) -> dict[str, Any]:
-    if row.actor_type == "user":
-        actor_name = row.user_name
-    elif row.actor_type == "operator":
-        actor_name = OPERATOR_NAME
-    else:
-        actor_name = None
-    target = None
-    if row.target_type is not None:
-        target = row.target_type if row.target_id is None else f"{row.target_type}:{row.target_id}"
+    # Operators are never identified to merchants: no id, no name (the client shows the team).
+    is_user = row.actor_type == "user"
     return {
         "id": str(row.id),
         "at": iso(row.at),
         "event": row.event,
         "actor_type": row.actor_type,
-        "actor_name": actor_name,
-        "target": target,
+        "actor_id": str(row.actor_id) if is_user and row.actor_id is not None else None,
+        "actor_name": row.actor_name if is_user else None,
+        "target_type": row.target_type,
+        "target_id": str(row.target_id) if row.target_id is not None else None,
+        "target_name": row.target_name,
         "data": row.data,
     }
 

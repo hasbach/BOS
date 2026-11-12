@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ShellHome } from "@/app/[locale]/(shell)/ShellHome";
+import { SignOutButton } from "@/components/SignOutButton";
+import { useMe } from "@/lib/session";
 import { SessionGuard } from "@/components/SessionGuard";
 
 import { ME, apiError, mockApi, networkFailure, reply } from "../helpers/fetch";
@@ -13,9 +14,21 @@ vi.mock("@/i18n/navigation", async () => (await import("../helpers/navigation"))
 beforeEach(() => resetNavigation("/"));
 afterEach(() => vi.unstubAllGlobals());
 
+// Stands in for any signed-in screen: names the business and the person and offers Sign out.
+function TestHome() {
+  const me = useMe();
+  return (
+    <div>
+      <p>{me.business.name}</p>
+      <p>{me.user.name}</p>
+      <SignOutButton />
+    </div>
+  );
+}
+
 const guarded = () => (
   <SessionGuard>
-    <ShellHome />
+    <TestHome />
   </SessionGuard>
 );
 

@@ -23,7 +23,7 @@ from app.api.common import (
     text_field,
     validation_failed,
 )
-from app.core import audit, sessions
+from app.core import audit, sessions, user_agent
 from app.core.identifiers import InvalidIdentifier, normalize_email, normalize_phone
 from app.core.permissions import authenticated
 from app.core.request_context import current_user, not_found_in_tenant, request_db
@@ -101,6 +101,8 @@ def update_me() -> ResponseReturnValue:
                 raise identifier_unavailable() from None
             raise
     if identifiers:
+        # Never the full phone number or address: the last digits and the domain only.
+        hint = {"phone": audit.phone_hint, "email": audit.email_hint}
         audit.record(
             db,
             tenant_id=user.tenant_id,
@@ -109,7 +111,10 @@ def update_me() -> ResponseReturnValue:
             event="auth.identifier_changed",
             target_type="user",
             target_id=user.user_id,
-            data={kind: {"from": before[kind], "to": value} for kind, value in identifiers.items()},
+            data={
+                "before": {kind: hint[kind](before[kind]) for kind in identifiers},
+                "after": {kind: hint[kind](value) for kind, value in identifiers.items()},
+            },
             ip=client_ip(),
         )
     return jsonify(build_me(db, user.user_id, user.tenant_id))
@@ -155,17 +160,21 @@ def change_password() -> ResponseReturnValue:
 @authenticated(self_only=True)
 def list_sessions() -> ResponseReturnValue:
     user = current_user()
-    return jsonify(
-        [
-            {
-                "id": str(record.id),
-                "device": record.user_agent,
-                "last_seen_at": iso(record.last_seen_at),
-                "current": record.id == user.session_id,
-            }
-            for record in sessions.list_for_user(request_db(), user.user_id)
-        ]
-    )
+    records = sessions.list_for_user(request_db(), user.user_id)
+    return jsonify([_session_json(record, user.session_id) for record in records])
+
+
+def _session_json(record: sessions.SessionRecord, current_id: uuid.UUID) -> dict[str, Any]:
+    """Plain browser and system names only: the raw user agent is never returned."""
+    device = user_agent.parse(record.user_agent)
+    return {
+        "id": str(record.id),
+        "browser": device.browser,
+        "os": device.os,
+        "created_at": iso(record.created_at),
+        "last_seen_at": iso(record.last_seen_at),
+        "current": record.id == current_id,
+    }
 
 
 @bp.delete("/me/sessions")

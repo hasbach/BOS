@@ -4,13 +4,13 @@ import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
 
-import { ShellHome } from "./ShellHome";
+import { StartRedirect } from "./StartRedirect";
 
-// Minimal home for now: who and where you are, and Sign out. The tab bar arrives with the tabs (US4).
+// The entry point: moves to the tab the server chose for this person.
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
-  return <ShellHome />;
+  return <StartRedirect />;
 }

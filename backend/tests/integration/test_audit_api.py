@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from flask import Flask
 from flask.testing import FlaskClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 
 from app.config import Config
 from tests.dbsupport import TwoTenants, insert
@@ -107,20 +107,90 @@ def test_history_is_the_callers_business_only_newest_first(
     by_id = {item["id"]: item for item in page["items"]}
     assert by_id[str(first)]["actor_name"] == "Owner a"
     assert by_id[str(first)]["actor_type"] == "user"
+    assert by_id[str(first)]["actor_id"] == str(a.user_id)
     assert by_id[str(second)]["actor_type"] == "operator"
-    assert by_id[str(second)]["actor_name"] == "BOS support"
+    # Operators are never identified to merchants: neither their name nor their id.
+    assert (by_id[str(second)]["actor_id"], by_id[str(second)]["actor_name"]) == (None, None)
     assert worlds.operator_email not in str(page)
-    assert by_id[str(second)]["target"] == f"tenant:{a.tenant_id}"
+    assert str(worlds.operator_id) not in str(page)
+    assert by_id[str(second)]["target_type"] == "tenant"
+    assert by_id[str(second)]["target_id"] == str(a.tenant_id)
+    assert by_id[str(second)]["target_name"] == "Tenant a"
     assert by_id[str(third)]["actor_name"] is None
+    assert by_id[str(third)]["target_name"] == "Owner a"
     assert set(by_id[str(third)]) == {
         "id",
         "at",
         "event",
         "actor_type",
+        "actor_id",
         "actor_name",
-        "target",
+        "target_type",
+        "target_id",
+        "target_name",
         "data",
     }
+    assert by_id[str(first)]["target_type"] is None
+    assert by_id[str(first)]["target_id"] is None
+    assert by_id[str(first)]["target_name"] is None
+
+
+def test_target_names_are_current_and_only_from_the_callers_business(
+    user_client: UserClient, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    a, b = worlds.a, worlds.b
+    own_store = _entry(owner_engine, a.tenant_id, "store.updated", 1, target=("store", a.store_id))
+    own_invite = _entry(
+        owner_engine, a.tenant_id, "invitation.created", 2, target=("invitation", a.invitation_id)
+    )
+    own_user = _entry(
+        owner_engine, a.tenant_id, "user.roles_changed", 3, target=("user", a.user("sales"))
+    )
+    session = _entry(
+        owner_engine, a.tenant_id, "auth.session_revoked", 4, target=("session", uuid.uuid4())
+    )
+    # Rows of business a that name records of business b, as a refused request would.
+    probes = {
+        _entry(owner_engine, a.tenant_id, "access.denied_tenant", 5 + i, target=target)
+        for i, target in enumerate(
+            [
+                ("store", b.store_id),
+                ("user", b.user_id),
+                ("invitation", b.invitation_id),
+                ("tenant", b.tenant_id),
+            ]
+        )
+    }
+    with owner_engine.begin() as conn:
+        conn.execute(
+            text("UPDATE stores SET name = 'Renamed a' WHERE id = :id"), {"id": a.store_id}
+        )
+
+    by_id = {item["id"]: item for item in _page(_owner(user_client, worlds))["items"]}
+
+    assert by_id[str(own_store)]["target_name"] == "Renamed a"
+    assert by_id[str(own_invite)]["target_name"] == "Invitee a"
+    assert by_id[str(own_user)]["target_name"] == "sales a"
+    assert by_id[str(session)]["target_name"] is None
+    for probe in probes:
+        item = by_id[str(probe)]
+        assert item["target_id"] is not None
+        assert item["target_name"] is None
+    assert "Store b" not in str(by_id) and "Owner b" not in str(by_id)
+    assert "Invitee b" not in str(by_id) and "Tenant b" not in str(by_id)
+
+
+def test_actor_name_of_another_business_never_resolves(
+    user_client: UserClient, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    crafted = _entry(
+        owner_engine, worlds.a.tenant_id, "store.updated", 1, actor_id=worlds.b.user_id
+    )
+
+    [item] = [i for i in _page(_owner(user_client, worlds))["items"] if i["id"] == str(crafted)]
+
+    assert item["actor_id"] == str(worlds.b.user_id)
+    assert item["actor_name"] is None
 
 
 def test_history_is_paginated_with_an_opaque_cursor(

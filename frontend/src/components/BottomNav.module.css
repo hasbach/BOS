@@ -1,0 +1,59 @@
+/* Screens 103 to 105. Logical properties only; the bar sits above the phone's home indicator. */
+.nav {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-block-start: 1px solid var(--border);
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+}
+
+.inner {
+  display: grid;
+  max-inline-size: 480px;
+  margin-inline: auto;
+  padding: 4px 4px 8px;
+}
+
+.tab {
+  min-block-size: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 10px;
+  color: var(--fg-2);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.plate {
+  inline-size: 56px;
+  block-size: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.tab svg {
+  stroke-width: 1.8;
+}
+
+.on {
+  color: var(--fg);
+}
+
+.on .plate {
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+}
+
+.on svg {
+  stroke-width: 2.6;
+}
+
+.on .label {
+  font-weight: 700;
+}

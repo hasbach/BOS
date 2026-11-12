@@ -17,17 +17,17 @@ describe("More menu", () => {
   it("shows Employees to an owner and a manager", () => {
     for (const kind of ["owner", "manager"] as const) {
       const view = renderAs(<MoreMenu />, kind);
-      expect(screen.getByRole("link", { name: /Employees and roles/ })).toHaveAttribute("href", "/more/employees");
+      expect(screen.getByRole("link", { name: /Employees/ })).toHaveAttribute("href", "/more/employees");
       expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
       view.unmount();
     }
   });
 
-  it("shows a sales agent no Employees or Settings entry, only Stores and Sign out", () => {
+  it("shows a sales agent no Employees, Settings or History entry, only Stores and their own account screens", () => {
     renderAs(<MoreMenu />, "sales");
     expect(screen.queryByText(/Employees/)).not.toBeInTheDocument();
     expect(screen.queryByText("Settings")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/more/stores"]);
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/more/stores", "/more/profile", "/more/devices", "/more/language"]);
     expect(screen.getByText("Dana Demo · Sales")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
@@ -50,7 +50,7 @@ describe("More menu", () => {
 
   it("is available in Arabic with the confirmed role names", () => {
     renderAs(<MoreMenu />, "owner", "ar");
-    expect(screen.getByText("الموظفون والأدوار")).toBeInTheDocument();
+    expect(screen.getByText("الموظفون")).toBeInTheDocument();
     expect(screen.getByText(/Samer Demo · مالك/)).toBeInTheDocument();
   });
 });

@@ -1,0 +1,48 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.logo {
+  flex: none;
+  inline-size: 44px;
+  block-size: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.text {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.muted {
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.buttons > :only-child {
+  grid-column: 1 / -1;
+}
