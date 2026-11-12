@@ -3,8 +3,11 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
+import { titleFrom } from "@/lib/metadata";
 
 import { SettingsForm } from "./SettingsForm";
+
+export const generateMetadata = titleFrom("settings.title");
 
 export default async function SettingsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

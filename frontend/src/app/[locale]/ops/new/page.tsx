@@ -3,8 +3,11 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
+import { titleFrom } from "@/lib/metadata";
 
 import { OpsNewBusiness } from "./OpsNewBusiness";
+
+export const generateMetadata = titleFrom("ops.new.title");
 
 export default async function OpsNewBusinessPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

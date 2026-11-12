@@ -1,7 +1,8 @@
 {
   "meta": {
     "title": "BOS — Beta Orders Solutions",
-    "description": "منصة التجارة عبر المحادثات وإدارة الطلبات"
+    "description": "منصة التجارة عبر المحادثات وإدارة الطلبات",
+    "activate": "تفعيل حسابك"
   },
   "home": {
     "name": "Beta Orders Solutions",

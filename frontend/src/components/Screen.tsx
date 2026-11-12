@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { CheckIcon, ClockIcon, InfoIcon, LockIcon, SendIcon, WifiOffIcon } from "./icons";
 import styles from "./Screen.module.css";
 
-/** Phone-width page column shared by every signed-out and operator screen. */
+/** Phone-width page column shared by every screen; it is the page's main landmark. */
 export function Screen({ children }: { children: ReactNode }) {
-  return <div className={styles.screen}>{children}</div>;
+  return <main className={styles.screen}>{children}</main>;
 }
 
 export function ScreenBody({ children, center = false }: { children: ReactNode; center?: boolean }) {
@@ -37,17 +37,20 @@ export interface StatusHeaderProps {
   icon: keyof typeof STATUS_ICONS;
   title: string;
   text: string;
+  /** 1 only when the screen has no app bar; under an app bar (which holds the h1) it is a sub-heading. */
+  level?: 1 | 2;
 }
 
 /** Big round icon, a heading and one sentence: the top of the status screens (30, 31, 32, 43, 44). */
-export function StatusHeader({ tone, icon, title, text }: StatusHeaderProps) {
+export function StatusHeader({ tone, icon, title, text, level = 2 }: StatusHeaderProps) {
   const Icon = STATUS_ICONS[icon];
+  const Heading = level === 1 ? "h1" : "h2";
   return (
     <div className={styles.status}>
       <div className={`${styles.statusIcon} ${styles[tone]}`}>
         <Icon width={28} height={28} />
       </div>
-      <h1 className={styles.statusTitle}>{title}</h1>
+      <Heading className={styles.statusTitle}>{title}</Heading>
       <p className={styles.statusText}>{text}</p>
     </div>
   );

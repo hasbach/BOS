@@ -16,6 +16,7 @@ const SAMPLE_ID = "00000000-0000-4000-8000-000000000000";
 const ROUTES = [
   "/sign-in",
   "/activate",
+  "/reset",
   "/ops/sign-in",
   "/ops",
   "/ops/new",
@@ -37,6 +38,7 @@ const ROUTES = [
   "/more/employees",
   "/more/employees/invite",
   `/more/employees/${SAMPLE_ID}`,
+  `/more/employees/invitations/${SAMPLE_ID}`,
 ];
 
 const LOCALES = ["en", "ar"];

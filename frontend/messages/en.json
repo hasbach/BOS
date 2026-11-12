@@ -1,7 +1,8 @@
 {
   "meta": {
     "title": "BOS — Beta Orders Solutions",
-    "description": "Social Commerce & Order Management Platform"
+    "description": "Social Commerce & Order Management Platform",
+    "activate": "Activate your account"
   },
   "home": {
     "name": "Beta Orders Solutions",

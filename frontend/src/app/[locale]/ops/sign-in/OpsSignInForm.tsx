@@ -17,6 +17,7 @@ import { Screen, ScreenBody, screenStyles } from "@/components/Screen";
 import { useRouter } from "@/i18n/navigation";
 import { api, isApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { useFocusFirstInvalid } from "@/lib/focus";
 import type { OpsMe } from "@/lib/types";
 
 import styles from "../ops.module.css";
@@ -30,12 +31,14 @@ export function OpsSignInForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [missing, setMissing] = useState(false);
+  const { formRef, flagInvalid } = useFocusFirstInvalid();
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
     if (email.trim() === "" || password === "") {
       setMissing(true);
+      flagInvalid();
       return;
     }
     setMissing(false);
@@ -66,7 +69,7 @@ export function OpsSignInForm() {
       <ScreenBody>
         <LanguageSwitch />
         <OfflineNotice />
-        <form onSubmit={onSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form ref={formRef} onSubmit={onSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {error && !wrong ? (
             <Banner tone="bad" icon="alert" alert>
               {errorMessage(t, error)}

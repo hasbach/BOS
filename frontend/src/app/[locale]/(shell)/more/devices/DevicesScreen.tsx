@@ -165,7 +165,7 @@ export function DevicesScreen() {
       {others.length > 0 ? (
         <ScreenFooter>
           <Button variant="danger" onClick={() => setConfirm(true)}>
-            <LogoutIcon width={18} height={18} /> {t("devices.signOutOthers")}
+            <LogoutIcon className={styles.flipRtl} width={18} height={18} /> {t("devices.signOutOthers")}
           </Button>
         </ScreenFooter>
       ) : null}

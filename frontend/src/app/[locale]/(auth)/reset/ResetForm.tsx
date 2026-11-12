@@ -15,6 +15,7 @@ import { PasswordField } from "@/components/PasswordField";
 import { Screen, ScreenBody, ScreenFooter, StatusHeader, screenStyles } from "@/components/Screen";
 import { api, isApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { useFocusFirstInvalid } from "@/lib/focus";
 import { useFragmentToken } from "@/lib/fragment";
 import { checkNewPassword } from "@/lib/password";
 
@@ -39,6 +40,7 @@ function RequestReset() {
   const t = useTranslations();
   const [email, setEmail] = useState("");
   const [fieldError, setFieldError] = useState<string>();
+  const { formRef, flagInvalid } = useFocusFirstInvalid();
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -47,8 +49,11 @@ function RequestReset() {
     event.preventDefault();
     if (busy) return;
     const value = email.trim();
-    if (value === "") return setFieldError(t("fieldErrors.required"));
-    if (!EMAIL.test(value)) return setFieldError(t("auth.reset.emailInvalid"));
+    if (value === "" || !EMAIL.test(value)) {
+      setFieldError(value === "" ? t("fieldErrors.required") : t("auth.reset.emailInvalid"));
+      flagInvalid();
+      return;
+    }
     setFieldError(undefined);
     setError(null);
     setBusy(true);
@@ -90,7 +95,7 @@ function RequestReset() {
   return (
     <Screen>
       <AppBar title={t("auth.reset.requestTitle")} backHref="/sign-in" backLabel={t("common.back")} />
-      <form onSubmit={onSubmit} noValidate style={{ display: "contents" }}>
+      <form ref={formRef} onSubmit={onSubmit} noValidate style={{ display: "contents" }}>
         <ScreenBody>
           <p className={screenStyles.muted}>{t("auth.reset.intro")}</p>
           {error ? (
@@ -128,6 +133,7 @@ function SetNewPassword({ token }: { token: string }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [errors, setErrors] = useState<{ password?: string; confirm?: string }>({});
+  const { formRef, flagInvalid } = useFocusFirstInvalid();
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<"form" | "done" | "invalid">("form");
@@ -140,7 +146,10 @@ function SetNewPassword({ token }: { token: string }) {
       password: problems.password ? t("password.tooShort") : undefined,
       confirm: problems.confirm ? t("password.mismatch") : undefined,
     });
-    if (problems.password || problems.confirm) return;
+    if (problems.password || problems.confirm) {
+      flagInvalid();
+      return;
+    }
 
     setError(null);
     setBusy(true);
@@ -150,6 +159,7 @@ function SetNewPassword({ token }: { token: string }) {
     } catch (caught) {
       if (isApiError(caught) && caught.code === "weak_password") {
         setErrors({ password: t("errors.weak_password") });
+        flagInvalid();
       } else if (isApiError(caught) && caught.code === "link_invalid") {
         setState("invalid");
       } else {
@@ -179,7 +189,7 @@ function SetNewPassword({ token }: { token: string }) {
   return (
     <Screen>
       <AppBar title={t("auth.reset.newTitle")} />
-      <form onSubmit={onSubmit} noValidate style={{ display: "contents" }}>
+      <form ref={formRef} onSubmit={onSubmit} noValidate style={{ display: "contents" }}>
         <ScreenBody>
           <p className={screenStyles.muted}>{t("auth.reset.newIntro")}</p>
           {error ? (

@@ -86,7 +86,7 @@ export function LogoField({ store, version = 0, chosen, uploading, error, disabl
         <p className={styles.name} role="status">
           {t("uploading", { file: uploading.file })}
         </p>
-        <div className={styles.progress} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploading.percent}>
+        <div className={styles.progress} role="progressbar" aria-label={t("label")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploading.percent}>
           <i style={{ inlineSize: `${uploading.percent}%` }} />
         </div>
         <p className={styles.muted}>

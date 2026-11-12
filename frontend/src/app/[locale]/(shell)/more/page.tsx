@@ -3,8 +3,11 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
+import { titleFrom } from "@/lib/metadata";
 
 import { MoreMenu } from "./MoreMenu";
+
+export const generateMetadata = titleFrom("more.title");
 
 export default async function MorePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

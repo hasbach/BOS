@@ -39,7 +39,7 @@ export function PasswordField({ label, helper, error, id, className, ...rest }: 
             .filter(Boolean)
             .join(" ")}
           aria-invalid={error ? true : undefined}
-          aria-describedby={[helperId, errorId].filter(Boolean).join(" ") || undefined}
+          aria-describedby={[rest["aria-describedby"], helperId, errorId].filter(Boolean).join(" ") || undefined}
         />
         <button type="button" className={styles.toggle} aria-pressed={shown} onClick={() => setShown((value) => !value)}>
           <Icon width={16} height={16} />

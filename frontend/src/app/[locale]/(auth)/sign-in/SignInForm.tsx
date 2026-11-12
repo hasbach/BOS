@@ -16,6 +16,7 @@ import { PasswordField } from "@/components/PasswordField";
 import { useRouter } from "@/i18n/navigation";
 import { api, isApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { useFocusFirstInvalid } from "@/lib/focus";
 import type { Me } from "@/lib/types";
 
 type Problem = "wrong" | "suspended" | "pending" | "offline" | { other: unknown } | null;
@@ -40,12 +41,14 @@ export function SignInForm() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem>(null);
   const [missing, setMissing] = useState(false);
+  const { formRef, flagInvalid } = useFocusFirstInvalid();
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
     if (identifier.trim() === "" || password === "") {
       setMissing(true);
+      flagInvalid();
       return;
     }
     setMissing(false);
@@ -56,7 +59,9 @@ export function SignInForm() {
       // The saved language always wins after sign-in (FR-027a).
       router.replace("/", { locale: me.user.locale });
     } catch (error) {
-      setProblem(classify(error));
+      const next = classify(error);
+      setProblem(next);
+      if (next === "wrong") flagInvalid();
       setBusy(false);
     }
   }
@@ -67,7 +72,7 @@ export function SignInForm() {
         <LanguageSwitch />
         <BrandHeader name={t("home.name")} tagline={t("home.tagline")} />
         <OfflineNotice />
-        <form onSubmit={onSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form ref={formRef} onSubmit={onSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {problem === "suspended" ? (
             <Banner tone="warn" icon="lock" alert>
               <span>{t("auth.signIn.suspended")}</span>

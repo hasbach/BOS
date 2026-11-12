@@ -18,6 +18,7 @@ import { UserIcon } from "@/components/icons";
 import { useRouter } from "@/i18n/navigation";
 import { api, isApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { useFocusFirstInvalid } from "@/lib/focus";
 import { useFragmentToken } from "@/lib/fragment";
 import { checkNewPassword } from "@/lib/password";
 import type { InvitationPreview, Locale, Me } from "@/lib/types";
@@ -51,6 +52,7 @@ export function ActivateForm() {
   const [confirm, setConfirm] = useState("");
   const [errors, setErrors] = useState<{ password?: string; confirm?: string }>({});
   const [formError, setFormError] = useState<unknown>(null);
+  const { formRef, flagInvalid } = useFocusFirstInvalid();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -83,7 +85,10 @@ export function ActivateForm() {
       password: problems.password ? t("password.tooShort") : undefined,
       confirm: problems.confirm ? t("password.mismatch") : undefined,
     });
-    if (problems.password || problems.confirm) return;
+    if (problems.password || problems.confirm) {
+      flagInvalid();
+      return;
+    }
 
     setFormError(null);
     setBusy(true);
@@ -95,6 +100,7 @@ export function ActivateForm() {
       setBusy(false);
       if (isApiError(error) && error.code === "weak_password") {
         setErrors({ password: t("errors.weak_password") });
+        flagInvalid();
       } else if (isApiError(error) && error.code === "identifier_unavailable") {
         setView({ k: "identifier" });
       } else {
@@ -120,7 +126,7 @@ export function ActivateForm() {
   const { preview } = view;
   return (
     <Screen>
-      <form onSubmit={onSubmit} noValidate style={{ display: "contents" }}>
+      <form ref={formRef} onSubmit={onSubmit} noValidate style={{ display: "contents" }}>
         <ScreenBody>
           <BrandHeader name={t("home.name")} />
           <Card>

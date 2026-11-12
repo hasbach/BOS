@@ -24,7 +24,7 @@ export function LinkInvalidScreen() {
     <Screen>
       <ScreenBody>
         <LanguageSwitch />
-        <StatusHeader tone="warn" icon="clock" title={t("invalidTitle")} text={t("invalidText")} />
+        <StatusHeader level={1} tone="warn" icon="clock" title={t("invalidTitle")} text={t("invalidText")} />
         <Card>
           <p className={screenStyles.label}>{t("whoToAsk")}</p>
           <ul className={screenStyles.stack} style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>
@@ -64,7 +64,7 @@ export function LinkUsedScreen() {
     <Screen>
       <ScreenBody>
         <LanguageSwitch />
-        <StatusHeader tone="accent" icon="check" title={t("usedTitle")} text={t("usedText")} />
+        <StatusHeader level={1} tone="accent" icon="check" title={t("usedTitle")} text={t("usedText")} />
       </ScreenBody>
       <ScreenFooter>
         <LinkButton href="/sign-in">{common("signIn")}</LinkButton>
@@ -95,7 +95,7 @@ export function IdentifierUnavailableScreen() {
     <Screen>
       <ScreenBody>
         <LanguageSwitch />
-        <StatusHeader tone="info" icon="info" title={t("identifierTitle")} text={t("identifierText")} />
+        <StatusHeader level={1} tone="info" icon="info" title={t("identifierTitle")} text={t("identifierText")} />
         <Card>
           <p className={screenStyles.label}>{t("whatToDo")}</p>
           <p className={screenStyles.muted} style={{ margin: "4px 0 8px" }}>

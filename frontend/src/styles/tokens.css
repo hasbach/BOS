@@ -3,6 +3,8 @@
 :root{
   --bg:#F8FAFC; --surface:#FFFFFF; --surface-2:#F1F5F9; --fg:#0F172A; --fg-2:#475569;
   --border:#E2E8F0; --border-strong:#CBD5E1;
+  /* Outline of a form control (text field, tick box, radio): at least 3:1 against --surface and --bg (WCAG 1.4.11). */
+  --control-border:#7C8BA1;
   --ink:#1E293B; --on-ink:#FFFFFF;
   --accent:#047857; --on-accent:#FFFFFF; --accent-soft:#D1FAE5; --accent-fg:#065F46;
   --warn-soft:#FEF3C7; --warn-fg:#92400E;
@@ -16,7 +18,7 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0B1220; --surface:#131C2E; --surface-2:#1C2740; --fg:#F1F5F9; --fg-2:#A3B0C4;
-    --border:#2A3650; --border-strong:#3B4A68;
+    --border:#2A3650; --border-strong:#3B4A68; --control-border:#64748B;
     --ink:#E2E8F0; --on-ink:#0F172A;
     --accent:#34D399; --on-accent:#052E1F; --accent-soft:#0F3B2E; --accent-fg:#6EE7B7;
     --warn-soft:#3F2E0B; --warn-fg:#FCD34D;
@@ -29,7 +31,7 @@
 }
 :root[data-theme="dark"]{
   --bg:#0B1220; --surface:#131C2E; --surface-2:#1C2740; --fg:#F1F5F9; --fg-2:#A3B0C4;
-  --border:#2A3650; --border-strong:#3B4A68;
+  --border:#2A3650; --border-strong:#3B4A68; --control-border:#64748B;
   --ink:#E2E8F0; --on-ink:#0F172A;
   --accent:#34D399; --on-accent:#052E1F; --accent-soft:#0F3B2E; --accent-fg:#6EE7B7;
   --warn-soft:#3F2E0B; --warn-fg:#FCD34D;

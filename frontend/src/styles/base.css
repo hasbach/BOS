@@ -6,6 +6,9 @@
 }
 
 html {
+  /* The tab bar and the screen footers stick to the bottom: an element scrolled into view by focus
+     stops above them instead of underneath (WCAG 2.4.11 focus not obscured). */
+  scroll-padding-block-end: 96px;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }

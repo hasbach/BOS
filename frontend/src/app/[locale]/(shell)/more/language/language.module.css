@@ -26,7 +26,7 @@
   block-size: 22px;
   display: grid;
   place-items: center;
-  border: 2px solid var(--border-strong);
+  border: 2px solid var(--control-border);
   border-radius: 50%;
 }
 

@@ -26,7 +26,8 @@ export async function generateMetadata({ params }: Pick<Props, "params">): Promi
   if (!hasLocale(routing.locales, locale)) return {};
   const t = await getTranslations({ locale, namespace: "meta" });
   return {
-    title: t("title"),
+    // Each page names itself (lib/metadata.ts); the tab reads "<screen> · BOS".
+    title: { template: "%s · BOS", default: t("title") },
     description: t("description"),
     manifest: "/manifest.webmanifest",
     icons: { icon: "/icons/icon-192.png", apple: "/icons/icon-192.png" },

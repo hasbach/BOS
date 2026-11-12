@@ -14,6 +14,11 @@
   border-block-end-color: var(--ink);
 }
 
+/* The accent focus ring is under 3:1 against the dark bar; the bar's own text colour is not. */
+.ops :focus-visible {
+  outline-color: var(--on-ink);
+}
+
 .heading {
   flex: 1;
   min-inline-size: 0;
