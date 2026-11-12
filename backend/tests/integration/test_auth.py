@@ -445,7 +445,8 @@ def test_invitation_service_refuses_a_member_of_the_same_business(
 
     assert (same_user.value.status, same_user.value.code) == (409, "already_member")
     assert (pending.value.status, pending.value.code) == (409, "already_member")
-    assert (no_store.value.status, no_store.value.fields) == (400, {"stores": "required"})
+    # Another business's store is refused exactly like a made-up one.
+    assert (no_store.value.status, no_store.value.fields) == (400, {"store_ids": "invalid"})
 
 
 def test_invitation_service_creates_resends_and_revokes(

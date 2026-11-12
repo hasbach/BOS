@@ -6,7 +6,7 @@ from flask import Flask
 
 
 def register_blueprints(app: Flask) -> None:
-    from app.api import audit, auth, me, ops
+    from app.api import audit, auth, me, ops, staff
 
-    for module in (auth, me, audit, ops):
+    for module in (auth, me, staff, audit, ops):
         app.register_blueprint(module.bp)

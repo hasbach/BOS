@@ -143,6 +143,39 @@ def not_found_in_tenant(
     raise _not_found()
 
 
+RefusalCode = Literal["forbidden", "cannot_modify_self"]
+
+_REFUSAL_MESSAGES: dict[str, str] = {
+    "forbidden": "Not allowed",
+    "cannot_modify_self": "You cannot change your own access",
+}
+
+
+def refuse(
+    code: RefusalCode,
+    *,
+    target_type: str | None = None,
+    target_id: uuid.UUID | None = None,
+    **data: Any,
+) -> NoReturn:
+    """Refuse an action on a visible record that a rule forbids: 403 with ``code``.
+
+    For checks a route's declared permission cannot express (a manager acting on an owner,
+    anyone acting on themselves). Recorded as ``access.denied_permission`` with ``data`` (for
+    example the permission that was missing), like a refusal by the declared permission.
+    """
+    principal = current_principal()
+    if isinstance(principal, UserPrincipal):
+        _record_denied(
+            principal,
+            "access.denied_permission",
+            target_type=target_type,
+            target_id=target_id,
+            **data,
+        )
+    raise ApiError(403, code, _REFUSAL_MESSAGES[code])
+
+
 # ---- lifecycle --------------------------------------------------------------------------------
 
 

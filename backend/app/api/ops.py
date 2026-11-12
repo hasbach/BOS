@@ -17,6 +17,7 @@ from flask.typing import ResponseReturnValue
 from app.api.common import (
     clear_cookie,
     client_ip,
+    identifier_field,
     json_body,
     jsonable,
     link_result,
@@ -27,7 +28,7 @@ from app.api.common import (
 )
 from app.core.db import get_engine
 from app.core.idempotency import idempotent
-from app.core.identifiers import InvalidIdentifier, normalize_email, normalize_phone
+from app.core.identifiers import normalize_email, normalize_phone
 from app.core.permissions import operator_only, public
 from app.core.request_context import current_operator, not_found_in_tenant, request_db
 from app.core.sessions import OPERATOR_COOKIE
@@ -127,8 +128,8 @@ def _new_business(body: dict[str, Any]) -> onboarding.NewBusiness:
     if currency not in ("USD", "LBP"):
         errors["default_currency"] = "invalid"
     rate = _rate(body.get("usd_lbp_rate"), errors)
-    phone = _identifier(body, "owner_phone", normalize_phone, errors)
-    email = _identifier(body, "owner_email", normalize_email, errors)
+    phone = identifier_field(body, "owner_phone", normalize_phone, errors)
+    email = identifier_field(body, "owner_email", normalize_email, errors)
     if phone is None and email is None and not {"owner_phone", "owner_email"} & errors.keys():
         errors["owner_phone"] = "required"  # or owner_email; one is needed
     if errors:
@@ -163,22 +164,6 @@ def _rate(value: object, errors: dict[str, str]) -> Decimal | None:
         errors["usd_lbp_rate"] = "invalid"
         return None
     return rate
-
-
-def _identifier(
-    body: dict[str, Any], name: str, normalize: Any, errors: dict[str, str]
-) -> str | None:
-    value = body.get(name)
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return None
-    if not isinstance(value, str):
-        errors[name] = "invalid"
-        return None
-    try:
-        return str(normalize(value))
-    except InvalidIdentifier as exc:
-        errors[name] = exc.code
-        return None
 
 
 @bp.patch("/businesses/<uuid:business_id>")

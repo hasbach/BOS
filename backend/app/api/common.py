@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 from flask import Response, current_app, request
 
 from app.core import sessions
+from app.core.identifiers import InvalidIdentifier
 from app.errors import ApiError
 from app.services.common import IssuedLink
 
@@ -51,6 +53,23 @@ def text_field(
         errors[name] = "too_long"
         return None
     return value
+
+
+def identifier_field(
+    body: dict[str, Any], name: str, normalize: Callable[[str], str], errors: dict[str, str]
+) -> str | None:
+    """An optional phone number or email, normalized; absent or blank gives ``None``."""
+    value = body.get(name)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if not isinstance(value, str):
+        errors[name] = "invalid"
+        return None
+    try:
+        return normalize(value)
+    except InvalidIdentifier as exc:
+        errors[name] = exc.code
+        return None
 
 
 def iso(moment: datetime) -> str:

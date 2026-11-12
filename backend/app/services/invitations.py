@@ -139,19 +139,15 @@ def create_employee_invitation(
     if not roles or not set(roles) <= {role.value for role in Role}:
         fields["roles"] = "invalid"
     if phone is None and email is None:
-        fields["identifier"] = "required"
+        fields["phone"] = "required"  # or email; one is needed
     management = bool(MANAGEMENT_ROLES & set(roles))
-    stores: list[uuid.UUID] = []
-    if not (all_stores or management):
-        stores = _active_stores(db, store_ids)
-        if not stores:
-            fields["stores"] = "required"
+    stores = checked_stores(db, store_ids, fields)
+    if not (all_stores or management or stores or "store_ids" in fields):
+        fields["store_ids"] = "required"
     if fields:
-        raise ApiError(400, "validation_failed", "Invalid invitation", fields=fields)
-    if _already_member(db, phone, email):
-        raise ApiError(
-            409, "already_member", "This person already belongs to or is invited to this business"
-        )
+        raise ApiError(400, "validation_failed", "Some fields are not valid", fields=fields)
+    if already_member(db, phone, email):
+        raise already_member_error()
     invitation_id, link = insert_invitation(
         db,
         tenant_id=tenant_id,
@@ -186,7 +182,28 @@ def _active_stores(db: Session, store_ids: Sequence[uuid.UUID]) -> list[uuid.UUI
     return [store_id for store_id in dict.fromkeys(store_ids) if store_id in found]
 
 
-def _already_member(db: Session, phone: str | None, email: str | None) -> bool:
+def checked_stores(
+    db: Session, store_ids: Sequence[uuid.UUID], fields: dict[str, str]
+) -> list[uuid.UUID]:
+    """The given stores, each an active store of this business; else ``store_ids: invalid``.
+
+    A store of another business is invisible here (row-level security), so it is refused
+    exactly like a made-up id: nothing tells the caller it exists.
+    """
+    stores = _active_stores(db, store_ids)
+    if len(stores) != len(set(store_ids)):
+        fields["store_ids"] = "invalid"
+        return []
+    return stores
+
+
+def already_member_error() -> ApiError:
+    return ApiError(
+        409, "already_member", "This person already belongs to or is invited to this business"
+    )
+
+
+def already_member(db: Session, phone: str | None, email: str | None) -> bool:
     """A user, or a live pending invitation, of this business has the phone or email."""
     params = {"phone": phone, "email": email}
     match_invitation = (
@@ -249,7 +266,9 @@ def resend(
 ) -> tuple[uuid.UUID, IssuedLink]:
     """Issue a new link for a pending or expired invitation; the old link stops working.
 
-    Raises ``NotFound`` or 409 ``invitation_closed`` (accepted or revoked).
+    Raises ``NotFound``, 409 ``invitation_closed`` (accepted or revoked), or 409
+    ``already_member`` when, since an invitation expired, its person joined the business or
+    was invited again.
     """
     old = _locked(db, invitation_id)
     status = _expire_if_due(db, old)
@@ -257,6 +276,8 @@ def resend(
         raise _invitation_closed()
     if status == "pending":
         db.execute(text("UPDATE invitations SET status = 'revoked' WHERE id = :id"), {"id": old.id})
+    elif already_member(db, old.invitee_phone_e164, old.invitee_email):
+        raise already_member_error()
     new_id, link = insert_invitation(
         db,
         tenant_id=tenant_id,
@@ -284,6 +305,44 @@ def resend(
         ip=ip,
     )
     return new_id, link
+
+
+def reissue_link(
+    db: Session,
+    tenant_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    *,
+    actor_type: ActorType,
+    actor_id: uuid.UUID,
+    ip: str | None = None,
+) -> IssuedLink:
+    """A fresh link for the *same* pending invitation; the earlier link stops working.
+
+    For an idempotent repeat of the request that created the invitation (research R25): the
+    client never received the first link. The invitation keeps its id and expiry; only the
+    token changes. Raises ``NotFound`` or 409 ``invitation_closed`` if it is no longer
+    pending.
+    """
+    row = _locked(db, invitation_id)
+    if _expire_if_due(db, row) != "pending":
+        raise _invitation_closed()
+    token, token_hash = new_token()
+    db.execute(
+        text("UPDATE invitations SET token_hash = :hash WHERE id = :id"),
+        {"hash": token_hash, "id": row.id},
+    )
+    audit.record(
+        db,
+        tenant_id=tenant_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        event="invitation.resent",
+        target_type="invitation",
+        target_id=row.id,
+        data={"kind": row.kind, "previous_invitation_id": str(row.id), "repeat": True},
+        ip=ip,
+    )
+    return IssuedLink(token=token, expires_at=row.expires_at, page="activate")
 
 
 def revoke(
