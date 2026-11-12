@@ -21,12 +21,14 @@ export interface OneTimeLinkProps {
   validity: string;
   note?: string;
   lost: string;
+  /** Dark operator app bar (default). Business screens pass false. */
+  ops?: boolean;
   onDone: () => void;
 }
 
 // Screens 38 and 47. The link is shown once: leaving loses it for good, so Done is the only way out
 // and the browser asks before the page is closed or reloaded.
-export function OneTimeLink({ title, subtitle, okText, label, link, validity, note, lost, onDone }: OneTimeLinkProps) {
+export function OneTimeLink({ title, subtitle, okText, label, link, validity, note, lost, onDone, ops = true }: OneTimeLinkProps) {
   const t = useTranslations("ops");
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
 
@@ -63,7 +65,7 @@ export function OneTimeLink({ title, subtitle, okText, label, link, validity, no
 
   return (
     <Screen>
-      <AppBar ops title={title} subtitle={subtitle} />
+      <AppBar ops={ops} title={title} subtitle={subtitle} />
       <ScreenBody>
         <Banner tone="ok" icon="check">
           {okText}

@@ -43,11 +43,12 @@
     "already_member": "This person is already in your business or has a pending invitation.",
     "invitation_closed": "This invitation is no longer open.",
     "cannot_modify_self": "You can't do this to your own account.",
-    "last_owner": "A business needs at least one owner.",
+    "last_owner": "A business must keep at least one active owner. Make someone else an owner first.",
     "idempotency_conflict": "This request was already sent with different details. Reload the page and try again.",
     "invalid_idempotency_key": "This request could not be processed. Please try again.",
     "owner_has_email": "This owner has an email. Use the email reset instead.",
-    "unknown": "Something went wrong. Please try again."
+    "unknown": "Something went wrong. Please try again.",
+    "user_inactive": "This person is deactivated. Reactivate them first."
   },
   "fieldErrors": {
     "required": "Required",
@@ -304,5 +305,161 @@
     "emptyAction": "Add an order",
     "errorBody": "The server did not answer.",
     "offline": "Offline notice"
+  },
+  "more": {
+    "title": "More",
+    "setup": "Setup",
+    "employees": "Employees and roles",
+    "profile": "{name} · {roles}"
+  },
+  "staff": {
+    "title": "Employees",
+    "invite": "Invite someone",
+    "you": "You",
+    "stores": "Stores",
+    "allStores": "All stores",
+    "noEmail": "No email",
+    "expires": "Expires {date}",
+    "expiredOn": "Expired on {date}",
+    "backToMore": "Back to More",
+    "backToEmployees": "Back to employees",
+    "loading": "Loading employees…",
+    "groups": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "pending": "Pending invitations",
+      "expired": "Expired invitations"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "pending": "Pending",
+      "expired": "Expired"
+    },
+    "role": {
+      "owner": "Owner",
+      "manager": "Manager",
+      "sales": "Sales",
+      "packing": "Packing",
+      "dispatch": "Dispatch"
+    },
+    "roleFull": {
+      "owner": "Owner",
+      "manager": "Manager",
+      "sales": "Sales agent",
+      "packing": "Packing agent",
+      "dispatch": "Dispatch / collections agent"
+    },
+    "roleDesc": {
+      "owner": "Full access. Can manage other owners.",
+      "manager": "Runs the business day to day. Always has all stores.",
+      "sales": "Creates and confirms orders.",
+      "packing": "Packs orders.",
+      "dispatch": "Handles couriers and cash collection."
+    },
+    "loadError": {
+      "title": "Couldn’t load employees",
+      "text": "Check your connection and try again. Nothing was changed."
+    },
+    "empty": {
+      "title": "It’s just you so far",
+      "text": "Invite your team so each person can use BOS on their own phone, with only the access you choose."
+    },
+    "notFound": {
+      "title": "Not found",
+      "text": "This employee or invitation is no longer in your business. Go back to refresh the list."
+    },
+    "notAllowed": {
+      "title": "You can’t open Employees",
+      "text": "Only owners and managers can see this page. If you need something changed, ask your manager."
+    },
+    "form": {
+      "subtitle": "They get a link and choose their own password",
+      "name": "Name",
+      "namePlaceholder": "Full name",
+      "phone": "Phone",
+      "email": "Email",
+      "contactHint": "Phone, email or both. At least one is required.",
+      "roles": "Roles",
+      "rolesHint": "Choose one or more.",
+      "ownerOnly": "Only an owner can invite another owner.",
+      "stores": "Stores",
+      "storesHint": "Choose All stores, or one or more stores.",
+      "forcedStores": "Owners and managers always have all stores.",
+      "passwordNote": "They choose their own password when they accept. You will not see it.",
+      "submit": "Create invitation",
+      "submitting": "Creating…",
+      "fix": "{count, plural, one {1 thing to fix before you continue.} other {{count} things to fix before you continue.}}",
+      "notCreated": "The invitation was not created."
+    },
+    "fe": {
+      "name": "Enter the person’s name.",
+      "contact": "Enter a phone number or an email.",
+      "roles": "Choose at least one role.",
+      "phone": "This phone number is not valid. Example: +961 70 000 025",
+      "email": "This email is not valid. Example: name@demo.example",
+      "stores": "Choose at least one store, or All stores.",
+      "storesInvalid": "One of the chosen stores is not available. Choose again.",
+      "duplicate": "Someone in your business already uses this phone number or email, or has a pending invitation for it. Use a different phone number or email."
+    },
+    "link": {
+      "inviteTitle": "Invitation ready",
+      "inviteOk": "Invitation created for {name}. It stays Pending until they accept.",
+      "inviteLabel": "Invitation link for {name}",
+      "inviteNote": "{name} chooses their own password when they open the link. You will not see it.",
+      "inviteLost": "Lost it? Open the invitation and tap Resend link. That makes a new link and the old one stops working.",
+      "resentTitle": "New link ready",
+      "resentOk": "New link created for {name}. The old link no longer works.",
+      "resentLabel": "New invitation link for {name}",
+      "resentNote": "The invitation is Pending again and expires 7 days from now.",
+      "resentLost": "Lost it? Resend again. Each new link replaces the last one.",
+      "resetTitle": "Reset link ready",
+      "resetOk": "Reset link created for {name}.",
+      "resetLabel": "Password reset link for {name}",
+      "resetNote": "When used, {name} is signed out on all devices. This is recorded in the business’s history.",
+      "resetLost": "Lost it? Issue a new one from the employee’s page."
+    },
+    "detail": {
+      "subtitle": "Employee",
+      "fix": "{count, plural, one {1 thing to fix before saving.} other {{count} things to fix before saving.}}",
+      "inactiveBanner": "Inactive. This person cannot sign in.",
+      "rolesReadOnly": "Roles · read only",
+      "storesReadOnly": "Stores · read only",
+      "nextAction": "Changes take effect on their next action.",
+      "saved": "Changes saved. They take effect on their next action.",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "account": "Account",
+      "deactivateText": "They are signed out on every device at once and cannot sign in until you reactivate them.",
+      "deactivate": "Deactivate",
+      "reactivateText": "Reactivating lets them sign in again straight away.",
+      "reactivate": "Reactivate",
+      "reactivated": "{name} can sign in again.",
+      "deactivated": "{name} is deactivated and signed out everywhere.",
+      "resetText": "Gives you a link once to send to them. It works once, within 1 hour.",
+      "reset": "Issue password-reset link",
+      "self": "You can’t change your own roles, stores or status. Ask another owner.",
+      "selfOnlyOwner": "You are the only owner. To step down, first make someone else an owner.",
+      "selfPassword": "To change your own password, use Change password in your account.",
+      "managerOwner": "Only an owner can change an owner’s access or reset their password.",
+      "onlyOwnerDeactivate": "This is the only active owner, so they can’t be deactivated. Make someone else an owner first.",
+      "onlyOwnerRole": "The only active owner can’t lose the Owner role. Make someone else an owner first.",
+      "deactivateTitle": "Deactivate {name}?",
+      "deactivateBody": "They will be signed out on every device right away and cannot sign in until you reactivate them. Nothing is deleted.",
+      "cancel": "Cancel"
+    },
+    "invitation": {
+      "subtitle": "Invitation",
+      "closed": "This invitation is no longer open. It was accepted, cancelled or has expired, so nothing was changed.",
+      "pendingHint": "The link was shown only once. Resend to get a new link to send. The old link stops working.",
+      "expiredHint": "The link has expired. Resend to create a new one that works once, within 7 days.",
+      "ownerOnly": "Only an owner can resend or revoke an invitation for an owner.",
+      "resend": "Resend link",
+      "revoke": "Revoke invitation",
+      "revokeTitle": "Revoke the invitation for {name}?",
+      "revokeBody": "The link stops working at once. You can invite them again later.",
+      "keep": "Keep invitation",
+      "revokeConfirm": "Revoke"
+    }
   }
 }

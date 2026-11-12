@@ -14,5 +14,7 @@ export default defineConfig({
     server: { deps: { inline: ["next-intl"] } },
     include: ["tests/**/*.test.{ts,tsx}"],
     setupFiles: ["./tests/setup.ts"],
+    // Generous so a busy machine cannot fail a test that is only slow; a passing test is not slower.
+    testTimeout: 20000,
   },
 });

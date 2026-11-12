@@ -1,0 +1,176 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.groupLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.list {
+  margin: 0;
+  padding: 0 12px;
+  list-style: none;
+}
+
+.listItem {
+  border-block-end: 1px solid var(--border);
+}
+
+.listItem:last-child {
+  border-block-end: 0;
+}
+
+.person {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-block: 12px;
+  color: var(--fg);
+  text-decoration: none;
+  min-block-size: 56px;
+}
+
+.avatar {
+  flex: none;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--fg-2);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.avatarLarge {
+  inline-size: 52px;
+  block-size: 52px;
+}
+
+.personText {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.between {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.chevron {
+  flex: none;
+  margin-block-start: 12px;
+  color: var(--fg-2);
+}
+
+.check {
+  inline-size: 100%;
+  min-block-size: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border: 0;
+  border-block-end: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  text-align: start;
+}
+
+.check:last-child {
+  border-block-end: 0;
+}
+
+.check[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.box {
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  border: 2px solid var(--border-strong);
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: transparent;
+}
+
+.boxOn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.checkText {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.invalidBox {
+  border-color: var(--danger);
+}
+
+.fieldBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.error {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--danger-fg);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.divider {
+  border-block-start: 1px solid var(--border);
+  padding-block-start: 10px;
+}
+
+[dir="rtl"] .chevron {
+  transform: scaleX(-1);
+}

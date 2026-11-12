@@ -1,36 +1,16 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
 
 import { AppBar } from "@/components/AppBar";
-import { Banner } from "@/components/Banner";
-import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Screen, ScreenBody, screenStyles } from "@/components/Screen";
-import { useRouter } from "@/i18n/navigation";
-import { errorMessage } from "@/lib/errors";
-import { signOut, useMe } from "@/lib/session";
+import { SignOutButton } from "@/components/SignOutButton";
+import { useMe } from "@/lib/session";
 
 export function ShellHome() {
   const t = useTranslations();
-  const router = useRouter();
   const me = useMe();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-
-  async function onSignOut() {
-    setBusy(true);
-    setError(null);
-    try {
-      await signOut();
-      router.replace("/sign-in");
-    } catch (caught) {
-      // Still signed in: say so instead of pretending.
-      setError(caught);
-      setBusy(false);
-    }
-  }
 
   return (
     <Screen>
@@ -46,14 +26,7 @@ export function ShellHome() {
           </p>
           <p className={screenStyles.title}>{me.user.name}</p>
         </Card>
-        {error ? (
-          <Banner tone="bad" icon="alert" alert>
-            {errorMessage(t, error)}
-          </Banner>
-        ) : null}
-        <Button variant="ghost" onClick={onSignOut} loading={busy}>
-          {busy ? t("shell.signingOut") : t("shell.signOut")}
-        </Button>
+        <SignOutButton />
       </ScreenBody>
     </Screen>
   );

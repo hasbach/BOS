@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BOS API — Platform Foundation (M0)
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Contract for milestone M0, revision 2 (one business per user; review fixes of 2026-11-10).
     All paths are under /api/v1 on the same origin as the web app.
@@ -271,8 +271,10 @@ paths:
     get:
       tags: [staff]
       summary: Employees, plus pending and expired invitations (permission staff.view)
+      description: Lists only employee invitations, never owner activations. `store_ids` is empty whenever `all_stores` is true.
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StaffList' } } } }
+        '403': { description: "`forbidden`" }
   /staff/invitations:
     post:
       tags: [staff]
@@ -285,9 +287,9 @@ paths:
             schema: { $ref: '#/components/schemas/InviteRequest' }
       responses:
         '201': { description: Invited, content: { application/json: { schema: { $ref: '#/components/schemas/InviteResult' } } } }
-        '400': { description: "`validation_failed` (for example `stores: required`, `phone: invalid_phone`)" }
+        '400': { description: "`validation_failed` — fields `name`, `phone`, `email`, `roles`, `all_stores`, `store_ids` (for example `phone: required` when neither phone nor email is given, `phone: invalid_phone`, `store_ids: required`, `store_ids: invalid` for an unknown, inactive or foreign store)" }
         '403': { description: "`forbidden`" }
-        '409': { description: "`already_member` — the identifier belongs to a user or pending invitation in this business. An identifier used in another business is NOT reported here." }
+        '409': { description: "`already_member` — the identifier belongs to a user or pending invitation in this business. An identifier used in another business is NOT reported here. Also `idempotency_conflict`." }
   /staff/invitations/{invitationId}/resend:
     post:
       tags: [staff]
@@ -295,8 +297,9 @@ paths:
       parameters: [{ $ref: '#/components/parameters/invitationId' }]
       responses:
         '201': { description: New link, content: { application/json: { schema: { $ref: '#/components/schemas/InviteResult' } } } }
+        '403': { description: "`forbidden` — including a manager acting on an invitation that carries the Owner role" }
         '404': { description: "`not_found`" }
-        '409': { description: "`invitation_closed` — already accepted or revoked" }
+        '409': { description: "`invitation_closed` — already accepted or revoked; `already_member` — an expired invitation whose person has since joined or been invited again" }
   /staff/invitations/{invitationId}:
     delete:
       tags: [staff]
@@ -304,6 +307,7 @@ paths:
       parameters: [{ $ref: '#/components/parameters/invitationId' }]
       responses:
         '204': { description: Revoked }
+        '403': { description: "`forbidden` — including a manager acting on an invitation that carries the Owner role" }
         '404': { description: "`not_found`" }
         '409': { description: "`invitation_closed` — already accepted, revoked or expired" }
   /staff/{userId}:
@@ -318,6 +322,7 @@ paths:
             schema: { $ref: '#/components/schemas/StaffUpdate' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StaffMember' } } } }
+        '400': { description: "`validation_failed` — fields `roles`, `all_stores`, `store_ids`, `status`" }
         '403': { description: "`forbidden` — a manager changing an owner or granting owner; `cannot_modify_self`" }
         '404': { description: "`not_found`" }
         '409': { description: "`last_owner`" }
@@ -331,6 +336,7 @@ paths:
         '201': { description: Link, content: { application/json: { schema: { $ref: '#/components/schemas/LinkResult' } } } }
         '403': { description: "`forbidden` — managers cannot reset an owner; `cannot_modify_self` (use change password)" }
         '404': { description: "`not_found`" }
+        '409': { description: "`user_inactive` — reactivate the employee first" }
 
   /audit:
     get:

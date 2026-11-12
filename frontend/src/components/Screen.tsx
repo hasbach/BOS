@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { CheckIcon, ClockIcon, InfoIcon, SendIcon } from "./icons";
+import { CheckIcon, ClockIcon, InfoIcon, LockIcon, SendIcon, WifiOffIcon } from "./icons";
 import styles from "./Screen.module.css";
 
 /** Phone-width page column shared by every signed-out and operator screen. */
@@ -30,7 +30,7 @@ export function BrandHeader({ name, tagline }: { name: string; tagline?: string 
   );
 }
 
-const STATUS_ICONS = { clock: ClockIcon, check: CheckIcon, info: InfoIcon, send: SendIcon };
+const STATUS_ICONS = { clock: ClockIcon, check: CheckIcon, info: InfoIcon, send: SendIcon, lock: LockIcon, wifioff: WifiOffIcon };
 
 export interface StatusHeaderProps {
   tone: "accent" | "warn" | "info";

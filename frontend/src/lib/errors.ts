@@ -35,6 +35,7 @@ export const ERROR_CODES = [
   "link_invalid",
   "owner_has_email",
   "store_name_in_use",
+  "user_inactive",
   "weak_password",
   "whatsapp_number_in_use",
   "wrong_password",
