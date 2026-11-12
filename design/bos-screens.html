@@ -1196,6 +1196,138 @@ pair('74 · More — sales agent','74 · المزيد — موظف مبيعات'
   <button class="btn ghost">${x('Sign out','تسجيل الخروج')}</button>
 </div><nav class="nav" style="grid-template-columns:repeat(3,1fr)">${[[0,'cart',0],[3,'list',0],[4,'more',1]].map(t=>`<a class="${t[2]?'on':''}" ${t[2]?'aria-current="page"':''}>${ic(t[1])}<span>${L[l][t[0]]}</span></a>`).join('')}</nav>`;});
 
+/* ================= M0 — Stores and settings (T062) ================= */
+add('M0 — Stores and settings','US-03. Owners and managers add stores, give each its own name, WhatsApp number and logo, deactivate and reactivate them, and set business defaults. Every screen in English and Arabic side by side. Screens 75–77 are the entry points and the list; 78–87 add and edit a store, including every error; 88–90 deactivate and reactivate; 91–95 business settings; 96–99 what a sales agent sees; 100–102 states. Sample data is fake.');
+S[S.length-1].cls='pairs';
+
+const SD={A:{w:'+961 70 000 031',logo:1,c:'c1',st:'active'},B:{w:'+961 70 000 032',logo:1,c:'c2',st:'active'},C:{w:null,logo:0,st:'inactive'}};
+const sNm=(l,k)=>k==='C'?(l==='ar'?'المتجر ج':'Store C'):SN(l,k);
+const sIni=(l,k)=>sNm(l,k).split(' ').map(w=>w[0]).join('');
+const wn=s=>`<bdi dir="ltr" class="num">${s}</bdi>`;
+const lgShape=(l,cls,big,round,label)=>`<div class="th ${big?'lg':''} ${cls}" role="img" aria-label="${label}"><span style="width:52%;height:52%;border-radius:${round?'50%':'6px'};background:currentColor;opacity:.6"></span></div>`;
+const sLogo=(l,k,big)=>{const s=SD[k];return s.logo?lgShape(l,s.c,big,k==='A',T(l)('Logo of ','شعار ')+sNm(l,k)):`<div class="th ${big?'lg':''}" aria-hidden="true">${sIni(l,k)}</div>`;};
+const srow=(l,k)=>{const s=SD[k],x=T(l);return `<div class="li" style="padding:12px 0;align-items:flex-start">${sLogo(l,k)}<div class="grow" style="display:flex;flex-direction:column;gap:4px"><div class="t">${sNm(l,k)}</div><div class="m">${s.w?wn(s.w):x('No WhatsApp number','بلا رقم واتساب')}</div><div>${pst(l,s.st)}</div></div><span style="margin-top:14px">${ic('chev','flip')}</span></div>`;};
+const sBar=l=>ebar(l,T(l)('Stores','المتاجر'),{back:1,sub:'Demo Denim House Group'});
+const addFoot=l=>`<div class="footer"><button class="btn primary">${ic('plus')} ${T(l)('Add store','إضافة متجر')}</button></div>`;
+const stList=(l,keys,o={})=>{const x=T(l);return `${sBar(l)}<div class="body">${o.banner||''}<div class="label">${x('Stores','المتاجر')} · <span class="num">${keys.length}</span></div><div class="card" style="padding:0 12px"><div class="list">${keys.map(k=>srow(l,k)).join('')}</div></div>${o.note||''}</div>${o.nofoot?'':addFoot(l)}`;};
+const SM=l=>{const x=T(l);return {
+ name:x('Enter a store name.','أدخل اسم المتجر.'),
+ nameUsed:x('Another store in your business already has this name. Use a different name.','يوجد متجر آخر في نشاطك بهذا الاسم. استخدم اسماً مختلفاً.'),
+ waUsed:x('Another store in your business already uses this WhatsApp number. Each store needs its own number.','يستخدم متجر آخر في نشاطك رقم واتساب هذا. لكل متجر رقمه الخاص.'),
+ phone:x('This phone number is not valid. Example: <bdi dir="ltr">+961 70 000 031</bdi>','رقم الهاتف غير صالح. مثال: <bdi dir="ltr">+961 70 000 031</bdi>'),
+ big:x('This image is larger than 2 MB. Choose a smaller one.','حجم هذه الصورة أكبر من 2 ميغابايت. اختر صورة أصغر.'),
+ img:x('This file is not a PNG, JPEG or WebP image. Choose another file.','هذا الملف ليس صورة بصيغة PNG أو JPEG أو WebP. اختر ملفاً آخر.')};};
+const logoBlock=(l,o={})=>{const x=T(l);const st=o.st||'none';const has=st==='set'||st==='chosen'||st==='up';
+ const prev=has?lgShape(l,o.cls||'c1',1,o.round,x('Logo preview','معاينة الشعار')):`<div class="th lg" style="border-style:dashed" aria-hidden="true">${ic('image','lg')}</div>`;
+ const fn=`<bdi dir="ltr">${o.file||'store-logo.png'}</bdi>`;
+ const mid=st==='up'?`<div class="t" role="status">${x('Uploading','جارٍ رفع')} ${fn}</div><div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="60" style="margin:6px 0"><i style="width:60%"></i></div><div class="xs"><span class="num">60%</span> · ${x('Wait for the upload to finish before saving.','انتظر انتهاء الرفع قبل الحفظ.')}</div>`
+  :`<div class="t">${st==='none'?x('No logo yet','لا يوجد شعار بعد'):st==='chosen'?fn:x('Current logo','الشعار الحالي')}</div><div class="xs">${st==='none'?x('Without a logo, the store’s initials are shown.','بدون شعار تظهر الأحرف الأولى من اسم المتجر.'):st==='chosen'?x('Uploads when you save the store.','يُرفع عند حفظ المتجر.'):''}</div>`;
+ const btns=st==='up'?`<button class="btn ghost sm">${ic('x','sm')} ${x('Cancel upload','إلغاء الرفع')}</button>`:`<button class="btn ghost sm">${ic('upload','sm')} ${has?x('Change logo','تغيير الشعار'):x('Choose logo','اختيار شعار')}</button>${has?`<button class="btn ghost sm">${ic('x','sm')} ${x('Remove logo','إزالة الشعار')}</button>`:''}`;
+ return `<div class="field"><label>${x('Logo (optional)','الشعار (اختياري)')}</label><div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="row" style="align-items:flex-start">${prev}<div class="grow">${mid}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${btns}</div></div>${o.err?ferr(o.err):`<div class="xs">${x('PNG, JPEG or WebP, up to 2 MB. We resize it to fit 512 × 512.','PNG أو JPEG أو WebP، حتى 2 ميغابايت. نغيّر حجمها لتناسب 512 × 512.')}</div>`}</div>`;};
+const waHint=x=>x('Any common format works, such as 70 000 031, 070 000 031 or +961 70 000 031. We save it with the country code.','تصلح أي صيغة شائعة، مثل <bdi dir="ltr">70 000 031</bdi> أو <bdi dir="ltr">070 000 031</bdi> أو <bdi dir="ltr">+961 70 000 031</bdi>. نحفظه مع رمز الدولة.');
+const stStatus=(l,k)=>{const x=T(l);const inact=SD[k].st==='inactive';
+ return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="between"><div class="label">${x('Store status','حالة المتجر')}</div>${pst(l,SD[k].st)}</div>${inact?`<div class="m">${x('Reactivating makes the store available again. Employees assigned to it get their access back.','تعيد إعادة التفعيل المتجر إلى العمل. ويستعيد الموظفون المعيّنون له وصولهم.')}</div><button class="btn primary">${ic('check','sm')} ${x('Reactivate store','إعادة تفعيل المتجر')}</button>`:`<div class="m">${x('Employees limited to this store lose access to it. Nothing is deleted, and you can reactivate it later.','يفقد الموظفون المقتصرون على هذا المتجر وصولهم إليه. لا يُحذف أي شيء ويمكنك إعادة تفعيله لاحقاً.')}</div><button class="btn danger">${ic('ban','sm')} ${x('Deactivate store','إلغاء تفعيل المتجر')}</button>`}</div>`;};
+const storeForm=(l,o={})=>{const x=T(l),e=o.e||{};const add=o.mode==='add';const k=o.k||'B';
+ const nm=o.name!==undefined?o.name:(add?'':sNm(l,k));
+ const wa=o.wa!==undefined?o.wa:(add?'':SD[k].w);
+ const foot=o.busy?`<button class="btn primary" disabled>${ic('sync','sm')} ${o.busy}</button>`:`<button class="btn primary">${add?x('Save store','حفظ المتجر'):x('Save changes','حفظ التغييرات')}</button>`;
+ return `${ebar(l,add?x('Add store','إضافة متجر'):x('Edit store','تعديل المتجر'),{back:1,sub:add?'Demo Denim House Group':sNm(l,k)})}
+<div class="body">
+  ${o.sum?dBanner(l,'bad','alert',o.sum):''}
+  ${o.warn?dBanner(l,'warn','alert',o.warn):''}
+  ${o.ok?dBanner(l,'ok','check',o.ok):''}
+  ${fld(x('Store name','اسم المتجر'),nm||x('For example: Store B','مثال: المتجر ب'),{ph:!nm,err:e.name})}
+  ${fld(x('WhatsApp number (optional)','رقم واتساب (اختياري)'),wa||'+961 70 000 000',{ltr:1,ph:!wa,err:e.wa,hint:e.wa?'':waHint(x)})}
+  ${logoBlock(l,{st:o.logo||(add?'none':'set'),cls:SD[k].c,round:k==='A',file:o.file,err:e.logo})}
+  ${add?dBanner(l,'info','info',x('After you save, you can assign employees to this store from Employees.','بعد الحفظ يمكنك تعيين موظفين لهذا المتجر من صفحة الموظفين.')):stStatus(l,k)}
+</div>
+<div class="footer">${foot}</div>`;};
+const skS=()=>`<div class="li" style="padding:12px 0"><div class="sk" style="width:52px;height:52px;border-radius:10px;flex:none"></div><div class="grow" style="display:flex;flex-direction:column;gap:8px"><div class="sk" style="height:14px;width:45%"></div><div class="sk" style="height:12px;width:65%"></div><div class="sk" style="height:12px;width:30%"></div></div></div>`;
+
+/* ---- 75 More ---- */
+pair('75 · More — owner or manager','75 · المزيد — مالك أو مدير','Stores and Settings sit under Setup. This replaces “Currency and rate” on screen 18 with a Settings entry that also holds the business name and default delivery fee. A sales agent sees neither Settings nor the Setup group (screen 74).',l=>{const x=T(l);
+ const rows=[['store',x('Stores','المتاجر'),`<span class="num">3</span> ${x('stores','متاجر')}`],['users',x('Employees','الموظفون'),`<span class="num">5</span> ${x('people','أشخاص')}`],['gear',x('Settings','الإعدادات'),`USD · 1 USD = <bdi dir="ltr" class="num">89,500</bdi> LBP`],['globe',x('Language','اللغة'),x('English','العربية')]];
+ return `${ebar(l,x('More','المزيد'))}
+<div class="body">
+  <div class="card row"><div class="logo" style="width:48px;height:48px;border-radius:12px;font-size:15px">BOS</div><div class="grow"><div class="t">Demo Denim House Group</div><div class="m">Samer Demo · ${x('Owner','المالك')}</div></div></div>
+  <div class="label">${x('Setup','الإعداد')}</div>
+  <div class="card"><div class="list">${rows.map(r=>`<div class="li">${ic(r[0])}<div class="grow"><div class="t">${r[1]}</div><div class="m">${r[2]}</div></div>${ic('chev','flip')}</div>`).join('')}</div></div>
+  <button class="btn ghost">${x('Sign out','تسجيل الخروج')}</button>
+</div>${nav(4,l)}`;});
+
+/* ---- Lists ---- */
+pair('76 · Stores','76 · المتاجر','From More → Stores. Each store shows its logo (or initials), name, WhatsApp number as saved, and status as a word with an icon. Add store is for owners and managers. Tapping a row opens Edit store.',l=>stList(l,['A','B','C']));
+pair('77 · Stores — one store','77 · المتاجر — متجر واحد','A business always has at least one store, so the list is never empty. With one store the screen works the same and says how to add another.',l=>{const x=T(l);return stList(l,['A'],{note:`<div class="card" style="display:grid;place-items:center;text-align:center;gap:8px;padding:20px 16px"><div style="width:64px;height:64px;border-radius:50%;background:var(--surface-2);color:var(--fg-2);display:grid;place-items:center">${ic('store','lg')}</div><div class="big">${x('One store so far','متجر واحد حتى الآن')}</div><div class="m" style="max-width:280px">${x('Add a second store if you sell from another WhatsApp number. Each store has its own name, number and logo.','أضف متجراً ثانياً إذا كنت تبيع من رقم واتساب آخر. لكل متجر اسمه ورقمه وشعاره.')}</div></div>`});});
+
+/* ---- Add / edit ---- */
+pair('78 · Add store','78 · إضافة متجر','Only what the API takes: name, WhatsApp number (optional) and logo (optional). The logo is chosen here and sent right after the store is created.',l=>storeForm(l,{mode:'add'}));
+pair('79 · Add store — filled in','79 · إضافة متجر — بعد التعبئة','A number typed in a local format is accepted as typed. A chosen logo shows a preview and can be removed before saving.',l=>storeForm(l,{mode:'add',k:'B',name:sNm(l,'B'),wa:'070 000 032',logo:'chosen',file:'store-b-logo.png'}));
+pair('80 · Add store — already in use','80 · إضافة متجر — مستخدم مسبقاً','store_name_in_use and whatsapp_number_in_use (409). Only another store in the same business can clash. Each message sits next to its field and nothing is saved.',l=>{const m=SM(l);return storeForm(l,{mode:'add',k:'A',name:sNm(l,'A'),wa:'+961 70 000 031',sum:T(l)('The store was not saved.','لم يُحفظ المتجر.'),e:{name:m.nameUsed,wa:m.waUsed}});});
+pair('81 · Add store — invalid number','81 · إضافة متجر — رقم غير صالح','validation_failed with whatsapp_number: invalid_phone (400). The message gives a working example.',l=>{const m=SM(l);return storeForm(l,{mode:'add',k:'B',name:sNm(l,'B'),wa:'12 345',sum:T(l)('1 thing to fix before you continue.','أمر واحد يحتاج إلى تصحيح قبل المتابعة.'),e:{wa:m.phone}});});
+pair('82 · Add store — created, logo not saved','82 · إضافة متجر — أُنشئ والشعار لم يُحفظ','The store is created first, then the logo is sent. If the logo is refused the store still exists. The screen becomes Edit store, says so, and shows the logo error next to the logo.',l=>{const x=T(l),m=SM(l);const n=sNm(l,'B');return storeForm(l,{mode:'edit',k:'B',warn:x(n+' was created, but its logo was not saved. Choose the logo again.','أُنشئ '+n+'، لكن لم يُحفظ شعاره. اختر الشعار مرة أخرى.'),logo:'none',e:{logo:m.img}});});
+pair('83 · Edit store','83 · تعديل المتجر','Each store shows its own name, number and logo. Status and Deactivate sit at the bottom with what they do. Name and number are saved with the button; the logo changes as soon as its upload finishes.',l=>storeForm(l,{mode:'edit',k:'B'}));
+pair('84 · Edit store — logo upload in progress','84 · تعديل المتجر — رفع الشعار جارٍ','Progress bar with a percentage and the file name. Save is unavailable until the upload ends, and Cancel upload is offered.',l=>storeForm(l,{mode:'edit',k:'B',logo:'up',file:'new-logo.webp',busy:T(l)('Waiting for the upload…','بانتظار انتهاء الرفع…')}));
+pair('85 · Edit store — logo too large','85 · تعديل المتجر — الشعار كبير جداً','file_too_large (400). The previous logo stays and nothing changed. The size limit is shown in the message.',l=>{const m=SM(l);return storeForm(l,{mode:'edit',k:'B',e:{logo:m.big}});});
+pair('86 · Edit store — logo is not an image','86 · تعديل المتجر — الملف ليس صورة','file_not_image (400). The previous logo stays and nothing changed.',l=>{const m=SM(l);return storeForm(l,{mode:'edit',k:'B',e:{logo:m.img}});});
+pair('87 · Edit store — saved','87 · تعديل المتجر — تم الحفظ','Success is shown only after the server answers. A number typed as 070 000 032 now appears in its saved form, and the message says so.',l=>{const x=T(l);return storeForm(l,{mode:'edit',k:'B',ok:x('Saved. The WhatsApp number was saved as +961 70 000 032.','تم الحفظ. حُفظ رقم واتساب بالصيغة <bdi dir="ltr">+961 70 000 032</bdi>.')});});
+
+/* ---- Deactivate ---- */
+const affected=l=>{const x=T(l);return [['Hadi Demo',x('Sales agent','موظف مبيعات')],['Lina Demo',x('Packing agent','موظف تجهيز')]].map(p=>`<div class="li" style="min-height:52px;padding:6px 0"><div class="av" style="width:36px;height:36px;font-size:12px">${p[0].split(' ').map(w=>w[0]).join('')}</div><div class="grow"><div class="t">${p[0]}</div><div class="xs">${p[1]}</div></div></div>`).join('');};
+pair('88 · Confirm deactivate store','88 · تأكيد إلغاء تفعيل المتجر','The first Deactivate gets 409 confirmation_required with the affected employees. The sheet lists the people limited to this store and says what they lose. With no affected employees the list is left out. Confirming sends the request again with confirm.',l=>{const x=T(l);const n=sNm(l,'B');
+ return sheetOver(l,storeForm(l,{mode:'edit',k:'B'}),
+  x('Deactivate '+n+'?','إلغاء تفعيل '+n+'؟'),
+  `${x('These employees can use only this store. They will lose access to it and will have no store to work in until you give them another:','هؤلاء الموظفون يعملون في هذا المتجر فقط. سيفقدون وصولهم إليه ولن يبقى لهم متجر يعملون فيه حتى تعيّن لهم متجراً آخر:')}<div class="list" style="margin:6px 0">${affected(l)}</div>${x('Owners, managers and anyone with other stores keep their access. Nothing is deleted, and you can reactivate the store later.','يحتفظ المالكون والمديرون ومن لديه متاجر أخرى بوصولهم. لا يُحذف أي شيء ويمكنك إعادة تفعيل المتجر لاحقاً.')}`,
+  `<button class="btn ghost">${x('Cancel','إلغاء')}</button><button class="btn danger">${ic('ban','sm')} ${x('Deactivate','إلغاء التفعيل')}</button>`);});
+pair('89 · Deactivate — last active store','89 · إلغاء التفعيل — آخر متجر نشط','last_active_store (409): a business must keep one active store. Nothing changed, and the message says what to do first.',l=>{const x=T(l);return storeForm(l,{mode:'edit',k:'A',sum:x('A business must keep at least one active store. Add or reactivate another store first.','يجب أن يبقى في النشاط متجر نشط واحد على الأقل. أضف متجراً آخر أو أعد تفعيل متجر أولاً.')});});
+pair('90 · Edit store — inactive','90 · تعديل المتجر — غير نشط','An inactive store says so in words, and the main action becomes Reactivate. Reactivating needs no confirmation.',l=>{const x=T(l);return storeForm(l,{mode:'edit',k:'C',warn:x('Inactive. Employees can’t use this store.','غير نشط. لا يستطيع الموظفون استخدام هذا المتجر.'),name:sNm(l,'C'),wa:'',logo:'none'});});
+
+/* ---- Business settings ---- */
+const curSeg=(l,sel)=>`<div class="seg" role="radiogroup">${['USD','LBP'].map(c=>`<span role="radio" aria-checked="${sel===c}" class="${sel===c?'on':''}" style="min-height:44px">${c}</span>`).join('')}</div>`;
+const setForm=(l,o={})=>{const x=T(l),e=o.e||{};const dis=o.busy?'opacity:.6':'';
+ return `${ebar(l,x('Settings','الإعدادات'),{back:1,sub:'Demo Denim House Group'})}
+<div class="body"${o.busy?' aria-busy="true"':''}>
+  ${o.sum?dBanner(l,'bad','alert',o.sum):''}
+  ${o.ok?dBanner(l,'ok','check',o.ok):''}
+  <div style="display:flex;flex-direction:column;gap:12px;${dis}">
+  ${fld(x('Business name','اسم النشاط'),o.name!==undefined?o.name:'Demo Denim House Group',{err:e.name,ph:o.name===''})}
+  <div class="field"><label>${x('Default currency','العملة الافتراضية')}</label>${curSeg(l,'USD')}</div>
+  ${fld(x('Exchange rate: LBP for 1 USD','سعر الصرف: ليرة لبنانية مقابل 1 دولار'),o.rate!==undefined?o.rate:'89,500',{ltr:1,err:e.rate,end:'<span class="m">LBP</span>',hint:e.rate?'':x('Digits 0–9 only. Use a dot for decimals.','أرقام 0–9 فقط. استخدم النقطة للكسور العشرية.')})}
+  <div class="field"><label>${x('Default delivery fee','رسم التوصيل الافتراضي')}</label>
+    <div class="row" style="align-items:flex-start"><div class="grow"><div class="input ${e.fee?'err':''}"><span class="grow"><bdi dir="ltr" class="num">${o.fee!==undefined?o.fee:'3.00'}</bdi></span></div></div><div style="width:136px;flex:none">${curSeg(l,'USD')}</div></div>
+    ${e.fee?ferr(e.fee):`<div class="xs">${x('Used when an order has delivery and no other fee is set. Use 0 for free delivery.','يُستخدم عند وجود توصيل للطلب دون رسم آخر. اكتب 0 للتوصيل المجاني.')}</div>`}</div>
+  </div>
+  ${dBanner(l,'info','info',x('Changes apply from now on. Orders and records you already made keep their old values.','تسري التغييرات من الآن فصاعداً. الطلبات والسجلات التي أُنشئت سابقاً تبقى بقيمها القديمة.'))}
+  <div class="xs">${ic('clock','sm')} ${x('Last changed by','آخر تعديل بواسطة')} Samer Demo · <bdi dir="ltr" class="num">${o.when||'10 Nov 2026, 16:20'}</bdi></div>
+</div>
+<div class="footer">${o.busy?`<button class="btn primary" disabled>${ic('sync','sm')} ${o.busy}</button>`:o.retry?`<button class="btn primary">${ic('sync','sm')} ${x('Try again','إعادة المحاولة')}</button>`:`<button class="btn primary">${x('Save changes','حفظ التغييرات')}</button>`}</div>`;};
+pair('91 · Business settings','91 · إعدادات النشاط','From More → Settings, for owners and managers. Business name, default currency (USD or LBP), the USD to LBP rate, and the default delivery fee with its own currency. Numbers use Latin digits. It says who changed it last and when.',l=>setForm(l));
+pair('92 · Settings — field errors','92 · الإعدادات — أخطاء الحقول','validation_failed on save. Each message sits next to its field. Nothing is saved until all are fixed.',l=>{const x=T(l);return setForm(l,{name:'',rate:'abc',fee:'3.555',sum:x('3 things to fix before saving.','3 أمور تحتاج إلى تصحيح قبل الحفظ.'),e:{name:x('Enter a business name.','أدخل اسم النشاط.'),rate:x('Enter the rate as a number above 0, with a dot for decimals. Example: 89500','أدخل السعر رقماً أكبر من 0، والنقطة للكسور العشرية. مثال: 89500'),fee:x('Enter an amount with up to 2 decimals. Example: 3.50','أدخل مبلغاً بكسرين عشريين على الأكثر. مثال: 3.50')}});});
+pair('93 · Settings — saving','93 · الإعدادات — جارٍ الحفظ','While the request is out the form is dimmed and the button says Saving. No success message appears yet.',l=>setForm(l,{rate:'90,000',busy:T(l)('Saving…','جارٍ الحفظ…')}));
+pair('94 · Settings — saved','94 · الإعدادات — تم الحفظ','Shown only after the server answers. The new value is on screen and the “last changed” line now shows who and when.',l=>{const x=T(l);return setForm(l,{rate:'90,000',when:'12 Nov 2026, 09:41',ok:x('Saved. The new values apply from now on.','تم الحفظ. تسري القيم الجديدة من الآن فصاعداً.')});});
+pair('95 · Settings — could not save','95 · الإعدادات — تعذّر الحفظ','No answer from the server. The screen says nothing was saved, keeps what was typed, and offers Try again. It never shows success.',l=>{const x=T(l);return setForm(l,{rate:'90,000',retry:1,sum:x('Not saved. We couldn’t reach the server. Check your connection and try again. What you typed is still here.','لم يُحفظ شيء. تعذّر الوصول إلى الخادم. تحقّق من الاتصال وحاول مرة أخرى. ما كتبته ما زال هنا.')});});
+
+/* ---- Sales agent ---- */
+pair('96 · Stores — sales agent','96 · المتاجر — موظف مبيعات','store.view is for everyone but only for their own stores. Hadi works in one store, so only that one appears. There is no Add store, and rows open a read-only page.',l=>{const x=T(l);return stList(l,['B'],{nofoot:1,banner:dBanner(l,'info','lock',x('You see only the stores you work in. Only owners and managers can add or change stores.','ترى فقط المتاجر التي تعمل فيها. المالك والمدير وحدهما يستطيعان إضافة المتاجر أو تغييرها.'))});});
+pair('97 · Store detail — read only','97 · تفاصيل المتجر — للقراءة فقط','The same facts as the edit screen, as plain text: no fields, no logo buttons, no Deactivate.',l=>{const x=T(l);return `${ebar(l,sNm(l,'B'),{back:1,sub:x('Store','متجر')})}
+<div class="body">
+  ${dBanner(l,'info','lock',x('You can look but not change. Ask an owner or manager to change this store.','يمكنك الاطلاع دون التعديل. اطلب من المالك أو المدير تغيير هذا المتجر.'))}
+  <div class="card" style="display:flex;flex-direction:column;gap:12px"><div class="row">${sLogo(l,'B',1)}<div class="grow"><div class="t" style="font-size:17px">${sNm(l,'B')}</div><div style="margin-top:4px">${pst(l,'active')}</div></div></div>
+   <div><div class="label">${x('WhatsApp number','رقم واتساب')}</div><div class="t">${wn(SD.B.w)}</div></div></div>
+</div>
+<div class="footer"><button class="btn ghost">${x('Back to stores','العودة إلى المتاجر')}</button></div>`;});
+pair('98 · Stores — not allowed','98 · المتاجر — غير مسموح','forbidden: what a sales, packing or dispatch user sees if they open Add store or Edit store anyway (for example from an old link).',l=>{const x=T(l);return spage(l,{bar:ebar(l,x('Stores','المتاجر'),{back:1}),lsw:false,tone:'info',icon:'lock',title:x('You can’t change stores','لا يمكنك تغيير المتاجر'),text:x('Only owners and managers can add or change stores. If you need something changed, ask your manager.','المالك والمدير فقط يستطيعان إضافة المتاجر أو تغييرها. إن احتجت إلى تغيير ما، اطلب من مديرك.'),btns:`<button class="btn primary">${x('Back to stores','العودة إلى المتاجر')}</button>`});});
+pair('99 · Settings — not allowed','99 · الإعدادات — غير مسموح','A sales, packing or dispatch user has no Settings entry (screen 74). If they reach the page anyway they get this, and nothing is shown or changed.',l=>{const x=T(l);return spage(l,{bar:ebar(l,x('Settings','الإعدادات'),{back:1}),lsw:false,tone:'info',icon:'lock',title:x('You can’t open Settings','لا يمكنك فتح الإعدادات'),text:x('Only owners and managers can see and change the business settings. If you need something changed, ask your manager.','المالك والمدير فقط يستطيعان رؤية إعدادات النشاط وتغييرها. إن احتجت إلى تغيير ما، اطلب من مديرك.'),btns:`<button class="btn primary">${x('Back to More','العودة إلى المزيد')}</button>`});});
+
+/* ---- States ---- */
+pair('100 · Stores — loading','100 · المتاجر — جارٍ التحميل','Placeholder rows with a visible “Loading” line. Add store is shown but unavailable until the list arrives.',l=>{const x=T(l);return `${sBar(l)}
+<div class="body" aria-busy="true">
+  <div class="row m" role="status">${ic('sync','sm')} ${x('Loading stores…','جارٍ تحميل المتاجر…')}</div>
+  <div class="card" style="padding:0 12px"><div class="list">${skS()}${skS()}${skS()}</div></div>
+</div>
+<div class="footer"><button class="btn primary" disabled>${ic('plus')} ${x('Add store','إضافة متجر')}</button></div>`;});
+pair('101 · Stores — could not load','101 · المتاجر — تعذّر التحميل','Error with a retry. Says nothing was changed.',l=>{const x=T(l);return spage(l,{bar:sBar(l),lsw:false,tone:'warn',icon:'wifioff',title:x('Couldn’t load stores','تعذّر تحميل المتاجر'),text:x('Check your connection and try again. Nothing was changed.','تحقّق من الاتصال وحاول مرة أخرى. لم يتغيّر شيء.'),btns:`<button class="btn primary">${ic('sync','sm')} ${x('Try again','إعادة المحاولة')}</button><button class="btn ghost">${x('Back to More','العودة إلى المزيد')}</button>`});});
+pair('102 · Store not found','102 · المتجر غير موجود','not_found (404): the store was opened but is no longer there, or belongs to another business.',l=>{const x=T(l);return spage(l,{bar:ebar(l,x('Stores','المتاجر'),{back:1}),lsw:false,tone:'info',icon:'search',title:x('Not found','غير موجود'),text:x('This store is no longer in your business. Go back to refresh the list.','لم يعد هذا المتجر موجوداً في نشاطك. عد لتحديث القائمة.'),btns:`<button class="btn primary">${x('Back to stores','العودة إلى المتاجر')}</button>`});});
+
 document.getElementById('out').innerHTML=S.map(s=>`<h2 class="sec">${s.sec}</h2><p class="sec-sub">${s.sub}</p><div class="grid${s.cls?' '+s.cls:''}">${s.items.map(i=>`<figure>${i.html}<figcaption><b>${i.name}</b>${i.cap}</figcaption></figure>`).join('')}</div>`).join('');
 
 document.getElementById('themeBtn').addEventListener('click',()=>{

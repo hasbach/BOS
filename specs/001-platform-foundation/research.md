@@ -408,3 +408,23 @@ parts of R2, R5, R7, R10 and R13).
 - **Arabic role names** (confirmed by the product owner): مالك (Owner), مدير (Manager),
   موظف مبيعات (Sales agent), موظف تجهيز (Packing agent), موظف توصيل وتحصيل
   (Dispatch/collections); Deactivate = إلغاء التفعيل.
+
+## R36. Stores and settings (2026-11-12)
+
+- **Approved designs**: screens 75–102 in `design/bos-screens.html` (section "M0 — Stores and
+  settings"), approved by the product owner on 2026-11-12.
+- **More menu**: "Currency and rate" becomes **Settings** (business name, currency, rate,
+  default delivery fee).
+- **Money input**: people may type thousands separators (`89,500`); the app strips them and
+  sends a plain decimal string. The API accepts ASCII decimal strings only, at most 2 decimals;
+  JSON numbers, commas, exponents and non-Latin digits are refused (`invalid`). Rate > 0 and at
+  most 10,000,000; delivery fee ≥ 0 and at most 100,000,000.
+- **Deactivating a store**: the warning lists everyone who would lose their only access —
+  active store-limited employees and pending store-limited invitations — by name and roles
+  only. Their store assignments are kept, so reactivating restores access. A store-limited
+  user whose only store is inactive sees no stores.
+- **Store visibility**: owners and managers see every store, inactive included; other users
+  see only their active permitted stores.
+- **Logos**: new files are written before the database change and removed if the request rolls
+  back; replaced files are removed only after commit. Images over 40 megapixels count as
+  `file_too_large`.
