@@ -23,10 +23,11 @@ describe("More menu", () => {
     }
   });
 
-  it("shows a sales agent no Employees entry, only Sign out", () => {
+  it("shows a sales agent no Employees or Settings entry, only Stores and Sign out", () => {
     renderAs(<MoreMenu />, "sales");
     expect(screen.queryByText(/Employees/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByText("Settings")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/more/stores"]);
     expect(screen.getByText("Dana Demo · Sales")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
@@ -119,7 +120,7 @@ describe("employees list", () => {
     fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Dana Demo")).toBeInTheDocument();
-    expect(calls).toHaveLength(2);
+    expect(calls.filter((c) => c.url === "/api/v1/staff")).toHaveLength(2);
   });
 
   it("shows the not-allowed screen when the server answers forbidden", async () => {

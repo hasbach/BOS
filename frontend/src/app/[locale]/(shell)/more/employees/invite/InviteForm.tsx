@@ -10,11 +10,11 @@ import { Button } from "@/components/Button";
 import { Field } from "@/components/Field";
 import { OneTimeLink } from "@/components/OneTimeLink";
 import { Screen, ScreenBody, ScreenFooter } from "@/components/Screen";
+import { StoresProvider, useStoreChoices } from "@/components/StoresProvider";
 import { useRouter } from "@/i18n/navigation";
 import { api, isApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
-import { useMe } from "@/lib/session";
 import { ROLES, forcesAllStores, newIdempotencyKey, sortRoles } from "@/lib/staff";
 import type { InviteResult, Role } from "@/lib/staff";
 
@@ -27,14 +27,18 @@ type Errors = Record<string, string>;
 export function InviteForm() {
   const access = useStaffAccess();
   if (!access.manage) return <NotAllowedScreen />;
-  return <Form />;
+  return (
+    <StoresProvider>
+      <Form />
+    </StoresProvider>
+  );
 }
 
 function Form() {
   const t = useTranslations();
   const locale = useLocale();
   const router = useRouter();
-  const me = useMe();
+  const stores = useStoreChoices();
   const access = useStaffAccess();
 
   const [name, setName] = useState("");
@@ -51,7 +55,7 @@ function Form() {
   const attempt = useRef<{ key: string; body: string } | null>(null);
 
   const forced = forcesAllStores(roles);
-  const activeStores = me.stores.filter((store) => store.status === "active");
+  const activeStores = stores.filter((store) => store.status === "active");
   const roleOptions = ROLES.filter((role) => role !== "owner" || access.manageOwners);
 
   function toggleRole(role: Role) {

@@ -1,5 +1,5 @@
 import { expect, request as playwrightRequest, test as base } from "@playwright/test";
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Browser, BrowserContext, Locator, Page } from "@playwright/test";
 
 import ar from "../messages/ar.json";
 import en from "../messages/en.json";
@@ -149,3 +149,34 @@ export const test = base.extend<{ env: E2eEnv; locale: Locale }>({
     await provide(testInfo.project.name === "ar" ? "ar" : "en");
   },
 });
+
+// ---- Shared by the staff and store scenarios -------------------------------------------------------
+
+export interface MeBody {
+  user: { id: string; roles: string[] };
+  stores: Array<{ id: string; name: string; whatsapp_number?: string | null }>;
+  tabs: string[];
+  permissions: string[];
+}
+
+/** A fresh browser context for one person; every request it makes is recorded in `requests`. */
+export async function newContext(browser: Browser, baseURL: string, requests: string[]): Promise<BrowserContext> {
+  const context = await browser.newContext({
+    baseURL,
+    extraHTTPHeaders: CSRF,
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
+  context.on("request", (request) => requests.push(request.url()));
+  return context;
+}
+
+/** A role or store tick box: its name starts with the label and goes on with the description. */
+export function tick(page: Page, label: string): Locator {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return page.getByRole("checkbox", { name: new RegExp(`^${escaped}`) });
+}
+
+export async function me(page: Page): Promise<{ status: number; body: MeBody | null }> {
+  const response = await page.request.get("/api/v1/me");
+  return { status: response.status(), body: response.ok() ? ((await response.json()) as MeBody) : null };
+}

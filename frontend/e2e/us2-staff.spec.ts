@@ -1,58 +1,30 @@
-import type { Browser, BrowserContext, Locator, Page } from "@playwright/test";
-
 import {
   createBusinessApi,
   expect,
+  me,
   newApi,
+  newContext,
   operatorSignInApi,
   rebase,
   test,
+  tick,
   text,
   unique,
   uniquePhone,
   userSignInUi,
 } from "./fixtures";
-import type { Locale } from "./fixtures";
+import type { Locale, MeBody } from "./fixtures";
 
 // User Story 2 (T058, quickstart scenario 3): the owner invites a Sales agent limited to a store, the
 // agent accepts and sees only what the role allows, a role change shows on the agent's next request
 // without signing in again, and deactivation sends the agent to sign-in. Runs once per language
 // project (en, ar), each time on a business of its own (created through the operator API).
 //
-// There is no store API yet, so the business has only its first store: the agent is limited to that
-// one store and the "cannot see the other store" part waits for User Story 3.
+// This business has only its first store, so the agent is limited to that one store; the "cannot see
+// the other store" part is in the User Story 3 scenario (us3-stores-settings.spec.ts).
 
 const OWNER_PASSWORD = "e2e-Owner-pass-9071";
 const AGENT_PASSWORD = "e2e-Agent-pass-4417";
-const CSRF = { "X-BOS-CSRF": "1" };
-
-interface MeBody {
-  user: { id: string; roles: string[] };
-  stores: Array<{ id: string; name: string }>;
-  tabs: string[];
-  permissions: string[];
-}
-
-async function newContext(browser: Browser, baseURL: string, requests: string[]): Promise<BrowserContext> {
-  const context = await browser.newContext({
-    baseURL,
-    extraHTTPHeaders: CSRF,
-    permissions: ["clipboard-read", "clipboard-write"],
-  });
-  context.on("request", (request) => requests.push(request.url()));
-  return context;
-}
-
-/** A role or store tick box: its name starts with the label and goes on with the description. */
-function tick(page: Page, label: string): Locator {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return page.getByRole("checkbox", { name: new RegExp(`^${escaped}`) });
-}
-
-async function me(page: Page): Promise<{ status: number; body: MeBody | null }> {
-  const response = await page.request.get("/api/v1/me");
-  return { status: response.status(), body: response.ok() ? ((await response.json()) as MeBody) : null };
-}
 
 test("owner invites a sales agent, changes the role, deactivates", async ({ browser, baseURL, env, locale }) => {
   const origin = baseURL ?? "";

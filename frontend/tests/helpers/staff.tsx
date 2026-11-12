@@ -16,8 +16,8 @@ export const STORES: Me["stores"] = [
   { id: "st-b", name: "Store B", whatsapp_number: null, has_logo: false, status: "active" },
 ];
 
-const OWNER_PERMISSIONS = ["business.view", "store.view", "staff.view", "staff.manage", "staff.manage_owners", "settings.manage", "audit.view"];
-const MANAGER_PERMISSIONS = ["business.view", "store.view", "staff.view", "staff.manage", "settings.manage"];
+const OWNER_PERMISSIONS = ["business.view", "store.view", "store.manage", "staff.view", "staff.manage", "staff.manage_owners", "settings.manage", "audit.view"];
+const MANAGER_PERMISSIONS = ["business.view", "store.view", "store.manage", "staff.view", "staff.manage", "settings.manage"];
 const SALES_PERMISSIONS = ["business.view", "store.view"];
 
 type Kind = "owner" | "manager" | "sales";
@@ -91,6 +91,7 @@ export const LIST = (over: Partial<StaffList> = {}): StaffList => ({
 export function staffApi(list: StaffList, handler: (call: Call) => Response | Promise<Response> = () => reply(404)): Call[] {
   return mockApi((call) => {
     if (call.url === "/api/v1/staff" && call.method === "GET") return reply(200, list);
+    if (call.url === "/api/v1/stores" && call.method === "GET") return reply(200, STORES);
     return handler(call);
   });
 }

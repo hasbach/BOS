@@ -59,7 +59,7 @@ describe("invitation detail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Hadi Demo" })).toBeInTheDocument();
     expect(screen.queryByTestId("one-time-link")).not.toBeInTheDocument();
-    expect(calls.filter((c) => c.method === "GET")).toHaveLength(2);
+    expect(calls.filter((c) => c.method === "GET" && c.url === "/api/v1/staff")).toHaveLength(2);
   });
 
   it("resends an expired invitation too", async () => {

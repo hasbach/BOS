@@ -178,7 +178,8 @@ describe("invite form", () => {
 
   it("reuses the Idempotency-Key when the same invitation is retried, and uses a new one when the details change", async () => {
     let attempts = 0;
-    const calls = mockApi(() => {
+    const calls = mockApi((call) => {
+      if (call.method === "GET") return reply(404); // the store list: the form falls back to the stores from /me
       attempts += 1;
       if (attempts <= 2) return networkFailure();
       return reply(201, CREATED);

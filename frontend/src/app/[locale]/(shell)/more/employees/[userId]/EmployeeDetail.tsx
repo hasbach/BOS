@@ -14,6 +14,7 @@ import { LinkButton } from "@/components/LinkButton";
 import { OneTimeLink } from "@/components/OneTimeLink";
 import { Screen, ScreenBody, ScreenFooter } from "@/components/Screen";
 import { Sheet } from "@/components/Sheet";
+import { useStoreChoices } from "@/components/StoresProvider";
 import { api, isApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { useMe } from "@/lib/session";
@@ -125,6 +126,7 @@ function ReadOnly({ member, reason, you, onlyOwner }: { member: StaffMember; rea
 function Detail({ member, ctx }: { member: StaffMember; ctx: StaffContext }) {
   const t = useTranslations();
   const me = useMe();
+  const stores = useStoreChoices();
   const access = useStaffAccess();
 
   const [roles, setRoles] = useState<Role[]>(sortRoles(member.roles));
@@ -151,7 +153,7 @@ function Detail({ member, ctx }: { member: StaffMember; ctx: StaffContext }) {
 
   const forced = forcesAllStores(roles);
   const roleOptions = ROLES.filter((role) => role !== "owner" || access.manageOwners || member.roles.includes("owner"));
-  const activeStores = me.stores.filter((store) => store.status === "active" || member.store_ids.includes(store.id));
+  const activeStores = stores.filter((store) => store.status === "active" || member.store_ids.includes(store.id));
   const memberForced = forcesAllStores(member.roles);
   const dirty =
     !sameSet(roles, member.roles) ||

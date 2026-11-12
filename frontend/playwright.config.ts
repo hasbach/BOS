@@ -8,6 +8,8 @@ import { join } from "node:path";
 
 const WEB_PORT = 3200;
 const API_PORT = Number(process.env.BOS_E2E_API_PORT ?? 5100);
+// The test web server reaches the API through e2e/api-relay.mjs (see that file for why).
+const RELAY_PORT = Number(process.env.BOS_E2E_RELAY_PORT ?? 5180);
 const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`;
 const channel = process.env.BOS_E2E_BROWSER === "chrome" ? "chrome" : "msedge";
 
@@ -16,12 +18,17 @@ const nextBin = join("node_modules", "next", "dist", "bin", "next");
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 120_000,
+  // The dev server compiles each page on its first visit; on the slow development disk a
+  // whole story can then take over two minutes. Generous, because a hang still fails.
+  // global-setup.ts requests every route once first, so the stories themselves rarely compile.
+  timeout: 240_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,
   retries: 0,
   reporter: [["list"]],
+  // Runs after the web servers are up: compiles every route the stories visit before they start.
+  globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",
   use: {
     baseURL: WEB_ORIGIN,
@@ -45,12 +52,18 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
+      command: `"${process.execPath}" e2e/api-relay.mjs ${RELAY_PORT} ${API_PORT}`,
+      url: `http://127.0.0.1:${RELAY_PORT}/api/v1/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+    {
       command: `"${process.execPath}" ${nextBin} dev -H 127.0.0.1 -p ${WEB_PORT}`,
       url: `${WEB_ORIGIN}/en/sign-in`,
       reuseExistingServer: false,
       timeout: 240_000,
       env: {
-        BOS_API_INTERNAL_URL: `http://127.0.0.1:${API_PORT}`,
+        BOS_API_INTERNAL_URL: `http://127.0.0.1:${RELAY_PORT}`,
         // A separate build folder: two `next dev` servers cannot share one.
         BOS_NEXT_DIST_DIR: ".next-e2e",
       },

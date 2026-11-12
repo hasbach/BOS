@@ -11,6 +11,7 @@ import { AlertIcon, BanIcon, CheckIcon, ClockIcon, LockIcon, StoreIcon } from "@
 import { LinkButton } from "@/components/LinkButton";
 import { Loading } from "@/components/Loading";
 import { Screen, ScreenBody, ScreenFooter, StatusHeader } from "@/components/Screen";
+import { StoresProvider, useStoreChoices } from "@/components/StoresProvider";
 import { isApiError } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import { sortRoles, useStaffList } from "@/lib/staff";
@@ -65,7 +66,7 @@ export function RoleChips({ roles }: { roles: Role[] }) {
 /** "All stores" or the stores' own names, as typed. */
 export function StoreChips({ allStores, storeIds }: { allStores: boolean; storeIds: string[] }) {
   const t = useTranslations("staff");
-  const { stores } = useMe();
+  const stores = useStoreChoices();
   if (allStores) {
     return (
       <Chip>
@@ -281,7 +282,7 @@ function Loader({ children, loadingFooter }: { children: (context: StaffContext)
       </Screen>
     );
   }
-  return <>{children({ list: state.value, update, reload })}</>;
+  return <StoresProvider>{children({ list: state.value, update, reload })}</StoresProvider>;
 }
 
 /**

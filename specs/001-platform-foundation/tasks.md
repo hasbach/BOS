@@ -158,23 +158,23 @@ Web application: `backend/` (Flask API) and `frontend/` (Next.js PWA) at the rep
 
 ### Design (approval needed before T070–T071)
 
-- [ ] T062 [US3] Design the missing screens for US3 in `design/bos-screens.html`: stores list, store edit (name, WhatsApp number, logo upload, deactivate with affected-employees warning), business settings (currency, exchange rate, default delivery fee); English and Arabic; present for approval
+- [x] T062 [US3] Design the missing screens for US3 in `design/bos-screens.html`: stores list, store edit (name, WhatsApp number, logo upload, deactivate with affected-employees warning), business settings (currency, exchange rate, default delivery fee); English and Arabic; present for approval
 
 ### Tests for User Story 3 (write first, confirm they fail)
 
-- [ ] T063 [P] [US3] Integration tests for stores in `backend/tests/integration/test_stores.py`: add store; WhatsApp number normalised to E.164 from several input formats; duplicate number or name among active stores → 409; deactivate with assigned employees → 409 `confirmation_required` listing them, succeeds with `confirm`; last active store cannot be deactivated; very long and mixed Arabic/Latin names accepted up to the limit and rejected beyond it
-- [ ] T064 [P] [US3] Integration tests for logos in `backend/tests/integration/test_store_logo.py`: PNG/JPEG/WebP accepted and re-encoded to WebP ≤ 512×512; file over 2 MB → `file_too_large`; non-image and disguised file → `file_not_image`; path cannot be influenced by the client
-- [ ] T065 [P] [US3] Integration tests for business settings in `backend/tests/integration/test_business_settings.py`: owner and manager can change name, default currency, `usd_lbp_rate` (> 0) and default delivery fee (≥ 0); invalid values rejected with field errors; `tenant.settings_changed` contains old and new values; values handled as decimals
-- [ ] T066 [P] [US3] Isolation, permission and cross-store cases in `backend/tests/isolation/test_us3_routes.py`: sales/packing/dispatch refused on all manage routes; tenant B cannot read or change tenant A stores, logos or settings; a store-limited user gets 404 on another store's logo and does not see it in `GET /stores` (`access.denied_store` recorded)
-- [ ] T067 [P] [US3] Playwright scenario in `frontend/e2e/us3-stores-settings.spec.ts` (`en` and `ar`): add store with number typed as `70 000 111` → shown as `+961 70 000 111`; upload logo; change exchange rate; sign in as sales agent and confirm settings are not offered
+- [x] T063 [P] [US3] Integration tests for stores in `backend/tests/integration/test_stores.py`: add store; WhatsApp number normalised to E.164 from several input formats; duplicate number or name among active stores → 409; deactivate with assigned employees → 409 `confirmation_required` listing them, succeeds with `confirm`; last active store cannot be deactivated; very long and mixed Arabic/Latin names accepted up to the limit and rejected beyond it
+- [x] T064 [P] [US3] Integration tests for logos in `backend/tests/integration/test_store_logo.py`: PNG/JPEG/WebP accepted and re-encoded to WebP ≤ 512×512; file over 2 MB → `file_too_large`; non-image and disguised file → `file_not_image`; path cannot be influenced by the client
+- [x] T065 [P] [US3] Integration tests for business settings in `backend/tests/integration/test_business_settings.py`: owner and manager can change name, default currency, `usd_lbp_rate` (> 0) and default delivery fee (≥ 0); invalid values rejected with field errors; `tenant.settings_changed` contains old and new values; values handled as decimals
+- [x] T066 [P] [US3] Isolation, permission and cross-store cases in `backend/tests/isolation/test_us3_routes.py`: sales/packing/dispatch refused on all manage routes; tenant B cannot read or change tenant A stores, logos or settings; a store-limited user gets 404 on another store's logo and does not see it in `GET /stores` (`access.denied_store` recorded)
+- [x] T067 [P] [US3] Playwright scenario in `frontend/e2e/us3-stores-settings.spec.ts` (`en` and `ar`): add store with number typed as `70 000 111` → shown as `+961 70 000 111`; upload logo; change exchange rate; sign in as sales agent and confirm settings are not offered
 
 ### Implementation for User Story 3
 
-- [ ] T068 [P] [US3] Implement the storage interface and local-disk backend in `backend/app/core/storage.py` (server-generated path `tenant/<tenant_id>/<random>.webp`; Pillow decode + re-encode; 2 MB limit)
-- [ ] T069 [US3] Implement stores and settings services and APIs in `backend/app/services/stores.py`, `backend/app/services/settings.py`, `backend/app/api/stores.py`, `backend/app/api/business.py` per openapi.yaml: `GET/POST /stores`, `PATCH /stores/{id}`, `PUT/GET/DELETE /stores/{id}/logo`, `GET/PATCH /business`; audit `store.*` and `tenant.settings_changed` with before/after
-- [ ] T070 [US3] Build stores screens in `frontend/src/app/[locale]/(shell)/more/stores/` (`page.tsx`, `new/page.tsx`, `[storeId]/page.tsx`) with logo upload, client-side size/type pre-check, and the deactivation warning sheet
-- [ ] T071 [US3] Build business settings screen in `frontend/src/app/[locale]/(shell)/more/settings/page.tsx`; money inputs as decimal strings; save shows success only after the server responds
-- [ ] T072 [US3] Run T063–T067 and the route-coverage and contract tests; confirm all pass; record output in `specs/001-platform-foundation/checklists/us3.md`
+- [x] T068 [P] [US3] Implement the storage interface and local-disk backend in `backend/app/core/storage.py` (server-generated path `tenant/<tenant_id>/<random>.webp`; Pillow decode + re-encode; 2 MB limit)
+- [x] T069 [US3] Implement stores and settings services and APIs in `backend/app/services/stores.py`, `backend/app/services/settings.py`, `backend/app/api/stores.py`, `backend/app/api/business.py` per openapi.yaml: `GET/POST /stores`, `PATCH /stores/{id}`, `PUT/GET/DELETE /stores/{id}/logo`, `GET/PATCH /business`; audit `store.*` and `tenant.settings_changed` with before/after
+- [x] T070 [US3] Build stores screens in `frontend/src/app/[locale]/(shell)/more/stores/` (`page.tsx`, `new/page.tsx`, `[storeId]/page.tsx`) with logo upload, client-side size/type pre-check, and the deactivation warning sheet
+- [x] T071 [US3] Build business settings screen in `frontend/src/app/[locale]/(shell)/more/settings/page.tsx`; money inputs as decimal strings; save shows success only after the server responds
+- [x] T072 [US3] Run T063–T067 and the route-coverage and contract tests; confirm all pass; record output in `specs/001-platform-foundation/checklists/us3.md`
 
 **Checkpoint (approval point)**: Two-store businesses with separate WhatsApp numbers can be configured; settings are audited.
 

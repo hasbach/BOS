@@ -6,17 +6,27 @@ export const API_BASE = "/api/v1";
 
 export type FieldErrors = Record<string, string>;
 
+/** Someone who would lose their only store (409 confirmation_required carries a list of these). */
+export interface AffectedPerson {
+  kind: "employee" | "invitation";
+  id: string;
+  name: string;
+  roles: string[];
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly fields: FieldErrors;
+  readonly affected: AffectedPerson[];
 
-  constructor(init: { status: number; code: string; message?: string; fields?: FieldErrors }) {
+  constructor(init: { status: number; code: string; message?: string; fields?: FieldErrors; affected?: AffectedPerson[] }) {
     super(init.message ?? init.code);
     this.name = "ApiError";
     this.status = init.status;
     this.code = init.code;
     this.fields = init.fields ?? {};
+    this.affected = init.affected ?? [];
   }
 }
 
@@ -70,12 +80,35 @@ function readEnvelope(text: string, status: number): ApiError {
       if (typeof code === "string") fields[name] = code;
     }
   }
+  const affected: AffectedPerson[] = [];
+  if (Array.isArray(error.affected)) {
+    for (const entry of error.affected) {
+      if (!isRecord(entry) || typeof entry.id !== "string" || typeof entry.name !== "string") continue;
+      affected.push({
+        kind: entry.kind === "invitation" ? "invitation" : "employee",
+        id: entry.id,
+        name: entry.name,
+        roles: Array.isArray(entry.roles) ? entry.roles.filter((role): role is string => typeof role === "string") : [],
+      });
+    }
+  }
   return new ApiError({
     status,
     code: error.code,
     message: typeof error.message === "string" ? error.message : undefined,
     fields,
+    affected,
   });
+}
+
+/** The body of a 2xx answer; one that cannot be read is not a confirmed success. */
+function readSuccess<T>(status: number, text: string): T {
+  if (status === 204 || status === 205 || text.trim() === "") return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError({ status, code: "unexpected_response" });
+  }
 }
 
 export async function apiRequest<T = void>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -114,15 +147,71 @@ export async function apiRequest<T = void>(path: string, options: RequestOptions
 
   if (!response.ok) throw readEnvelope(text, response.status);
 
-  if (response.status === 204 || response.status === 205 || text.trim() === "") {
-    return undefined as T;
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    // A 2xx whose body we cannot read is not a confirmed success.
-    throw new ApiError({ status: response.status, code: "unexpected_response" });
-  }
+  return readSuccess<T>(response.status, text);
+}
+
+export interface UploadOptions {
+  method?: "PUT" | "POST";
+  /** Name of the multipart field; the logo endpoint reads `file`. */
+  field?: string;
+  /** Called with 0 to 100 while the file is sent. */
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Sends one file as multipart/form-data. fetch cannot report upload progress, so this uses
+ * XMLHttpRequest; the rules are the same as apiRequest: only a 2xx with a readable body is success,
+ * and the CSRF header is always sent. The browser sets the multipart Content-Type itself.
+ */
+export function apiUpload<T = void>(path: string, file: Blob, options: UploadOptions = {}): Promise<T> {
+  const method = options.method ?? "PUT";
+  return new Promise<T>((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, buildUrl(path));
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("X-BOS-CSRF", "1");
+    xhr.responseType = "text";
+
+    const onAbort = () => xhr.abort();
+    options.signal?.addEventListener("abort", onAbort);
+    const done = () => options.signal?.removeEventListener("abort", onAbort);
+
+    const report = options.onProgress;
+    if (report) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) report(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      };
+    }
+    xhr.onerror = () => {
+      done();
+      reject(new ApiError({ status: 0, code: "network_error" }));
+    };
+    xhr.ontimeout = xhr.onerror;
+    xhr.onabort = () => {
+      done();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    xhr.onload = () => {
+      done();
+      const text = typeof xhr.response === "string" ? xhr.response : "";
+      try {
+        if (xhr.status < 200 || xhr.status >= 300) throw readEnvelope(text, xhr.status);
+        resolve(readSuccess<T>(xhr.status, text));
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    const form = new FormData();
+    form.append(options.field ?? "file", file, file instanceof File ? file.name : "logo");
+    xhr.send(form);
+  });
 }
 
 type BodyOptions = Omit<RequestOptions, "method" | "body">;
@@ -137,4 +226,5 @@ export const api = {
     apiRequest<T>(path, { ...options, method: "PATCH", body }),
   delete: <T = void>(path: string, options?: BodyOptions) =>
     apiRequest<T>(path, { ...options, method: "DELETE" }),
+  upload: apiUpload,
 };

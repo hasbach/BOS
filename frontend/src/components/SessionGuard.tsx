@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { usePathname, useRouter } from "@/i18n/navigation";
-import { isApiError } from "@/lib/api";
+import { ApiError, isApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { MeContext, OpsMeContext, SIGN_IN_CODES, loadMe, loadOpsMe } from "@/lib/session";
 import type { Me, OpsMe } from "@/lib/types";
@@ -15,6 +15,13 @@ import { Loading } from "./Loading";
 
 type State<T> = { k: "loading" } | { k: "error"; error: unknown } | { k: "ready"; value: T };
 
+/**
+ * How long the guard waits for its identity endpoint before it gives up and offers Try again.
+ * A request that never answers (a stalled proxy, a dropped connection) must not leave the page on
+ * "Checking your session..." forever; it is treated like an unreachable server, never as success.
+ */
+export const IDENTITY_TIMEOUT_MS = 15_000;
+
 /** Loads one identity endpoint, sends unauthenticated visitors to `signInPath`, and offers retry on failure. */
 function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: string, redirectCodes: ReadonlySet<string>) {
   const router = useRouter();
@@ -23,10 +30,26 @@ function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: s
 
   useEffect(() => {
     const controller = new AbortController();
+    // Exactly one outcome per attempt: the answer, the error, the deadline or the cleanup.
+    let settled = false;
+    const settle = () => {
+      if (settled) return false;
+      settled = true;
+      clearTimeout(timer);
+      return true;
+    };
+    const timer = setTimeout(() => {
+      if (!settle()) return;
+      controller.abort();
+      setState({ k: "error", error: new ApiError({ status: 0, code: "network_error" }) });
+    }, IDENTITY_TIMEOUT_MS);
+
     load(controller.signal).then(
-      (value) => setState({ k: "ready", value }),
+      (value) => {
+        if (settle()) setState({ k: "ready", value });
+      },
       (error: unknown) => {
-        if (controller.signal.aborted) return;
+        if (!settle()) return;
         if (isApiError(error) && redirectCodes.has(error.code)) {
           router.replace(signInPath);
           return;
@@ -34,7 +57,10 @@ function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: s
         setState({ k: "error", error });
       },
     );
-    return () => controller.abort();
+    return () => {
+      settle();
+      controller.abort();
+    };
     // `load` and `redirectCodes` are module-level constants at every call site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt, router, signInPath]);

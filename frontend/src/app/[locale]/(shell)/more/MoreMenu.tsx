@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 
 import { AppBar } from "@/components/AppBar";
 import { Card } from "@/components/Card";
-import { ChevronIcon, UsersIcon } from "@/components/icons";
+import { ChevronIcon, GearIcon, StoreIcon, UsersIcon } from "@/components/icons";
 import { Screen, ScreenBody, screenStyles } from "@/components/Screen";
 import { SignOutButton } from "@/components/SignOutButton";
 import { Link } from "@/i18n/navigation";
@@ -15,8 +15,8 @@ import styles from "./employees/employees.module.css";
 
 /**
  * Screens 18 and 74. Only the entries the user's permissions allow are shown; the server still
- * checks every page behind them. Entries for later stories (Catalog, Reports, Stores, Settings,
- * History, Devices, Language) get their own slot in the lists below when those stories land.
+ * checks every page behind them. Entries for later stories (Catalog, Reports, History, Devices,
+ * Language) get their own slot in the list below when those stories land.
  */
 export function MoreMenu() {
   const t = useTranslations();
@@ -26,10 +26,11 @@ export function MoreMenu() {
     .map((role) => t(`staff.role.${role}`))
     .join(", ");
 
-  const setup: Array<{ key: string; href: string; label: string }> = [];
-  // US3 adds Stores (store.view) and Currency and rate (settings.manage); US4 adds Language and
-  // Devices; the History screen (audit.view) comes with US7. They are not built yet.
-  if (can("staff.view")) setup.push({ key: "employees", href: "/more/employees", label: t("more.employees") });
+  const setup: Array<{ key: string; href: string; label: string; Icon: typeof UsersIcon }> = [];
+  // Language and Devices come with US4 and the History screen (audit.view) with US7. They are not built yet.
+  if (can("store.view")) setup.push({ key: "stores", href: "/more/stores", label: t("more.stores"), Icon: StoreIcon });
+  if (can("staff.view")) setup.push({ key: "employees", href: "/more/employees", label: t("more.employees"), Icon: UsersIcon });
+  if (can("settings.manage")) setup.push({ key: "settings", href: "/more/settings", label: t("more.settings"), Icon: GearIcon });
 
   return (
     <Screen>
@@ -52,7 +53,7 @@ export function MoreMenu() {
                 {setup.map((item) => (
                   <li key={item.key} className={styles.listItem}>
                     <Link href={item.href} className={styles.person} style={{ alignItems: "center" }}>
-                      <UsersIcon width={22} height={22} aria-hidden="true" />
+                      <item.Icon width={22} height={22} aria-hidden="true" />
                       <span className={styles.personText}>
                         <span className={styles.name}>{item.label}</span>
                       </span>

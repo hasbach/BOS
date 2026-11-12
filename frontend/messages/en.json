@@ -310,7 +310,9 @@
     "title": "More",
     "setup": "Setup",
     "employees": "Employees and roles",
-    "profile": "{name} · {roles}"
+    "profile": "{name} · {roles}",
+    "stores": "Stores",
+    "settings": "Settings"
   },
   "staff": {
     "title": "Employees",
@@ -460,6 +462,144 @@
       "revokeBody": "The link stops working at once. You can invite them again later.",
       "keep": "Keep invitation",
       "revokeConfirm": "Revoke"
+    }
+  },
+  "stores": {
+    "title": "Stores",
+    "loading": "Loading stores…",
+    "add": "Add store",
+    "noWhatsapp": "No WhatsApp number",
+    "logoOf": "Logo of {name}",
+    "backToMore": "Back to More",
+    "backToStores": "Back to stores",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "one": {
+      "title": "One store so far",
+      "text": "Add a second store if you sell from another WhatsApp number. Each store has its own name, number and logo."
+    },
+    "agentNote": "You see only the stores you work in. Only owners and managers can add or change stores.",
+    "loadError": {
+      "title": "Couldn’t load stores",
+      "text": "Check your connection and try again. Nothing was changed."
+    },
+    "notAllowed": {
+      "title": "You can’t change stores",
+      "text": "Only owners and managers can add or change stores. If you need something changed, ask your manager."
+    },
+    "notFound": {
+      "title": "Not found",
+      "text": "This store is no longer in your business. Go back to refresh the list."
+    },
+    "detail": {
+      "subtitle": "Store",
+      "readOnly": "You can look but not change. Ask an owner or manager to change this store.",
+      "whatsapp": "WhatsApp number"
+    },
+    "form": {
+      "addTitle": "Add store",
+      "editTitle": "Edit store",
+      "name": "Store name",
+      "namePlaceholder": "For example: Store B",
+      "whatsapp": "WhatsApp number (optional)",
+      "whatsappHint": "Any common format works, such as 70 000 031, 070 000 031 or +961 70 000 031. We save it with the country code.",
+      "afterSave": "After you save, you can assign employees to this store from Employees.",
+      "save": "Save store",
+      "saveChanges": "Save changes",
+      "saving": "Saving…",
+      "waiting": "Waiting for the upload…",
+      "notSaved": "The store was not saved.",
+      "fix": "{count, plural, one {1 thing to fix before you continue.} other {{count} things to fix before you continue.}}",
+      "created": "{name} was created, but its logo was not saved. Choose the logo again.",
+      "saved": "Saved.",
+      "savedWhatsapp": "Saved. The WhatsApp number was saved as {number}.",
+      "inactiveBanner": "Inactive. Employees can’t use this store."
+    },
+    "logo": {
+      "label": "Logo (optional)",
+      "none": "No logo yet",
+      "noneHint": "Without a logo, the store’s initials are shown.",
+      "current": "Current logo",
+      "chosenHint": "Uploads when you save the store.",
+      "help": "PNG, JPEG or WebP, up to 2 MB. We resize it to fit 512 × 512.",
+      "choose": "Choose logo",
+      "change": "Change logo",
+      "remove": "Remove logo",
+      "cancel": "Cancel upload",
+      "uploading": "Uploading {file}",
+      "wait": "Wait for the upload to finish before saving.",
+      "preview": "Logo preview",
+      "removed": "The logo was removed."
+    },
+    "fe": {
+      "name": "Enter a store name.",
+      "nameTooLong": "Use at most 80 characters.",
+      "phone": "This phone number is not valid. Example: +961 70 000 031",
+      "nameUsed": "Another store in your business already has this name. Use a different name.",
+      "waUsed": "Another store in your business already uses this WhatsApp number. Each store needs its own number.",
+      "big": "This image is larger than 2 MB. Choose a smaller one.",
+      "img": "This file is not a PNG, JPEG or WebP image. Choose another file."
+    },
+    "state": {
+      "label": "Store status",
+      "activeText": "Employees limited to this store lose access to it. Nothing is deleted, and you can reactivate it later.",
+      "deactivate": "Deactivate store",
+      "inactiveText": "Reactivating makes the store available again. Employees assigned to it get their access back.",
+      "reactivate": "Reactivate store"
+    },
+    "deactivate": {
+      "title": "Deactivate {name}?",
+      "intro": "These employees can use only this store. They will lose access to it and will have no store to work in until you give them another:",
+      "invitation": "Invitation not accepted yet",
+      "outro": "Owners, managers and anyone with other stores keep their access. Nothing is deleted, and you can reactivate the store later.",
+      "nobody": "No employee is limited to this store. Nothing is deleted, and you can reactivate the store later.",
+      "cancel": "Cancel",
+      "confirm": "Deactivate",
+      "done": "{name} was deactivated.",
+      "lastActive": "A business must keep at least one active store. Add or reactivate another store first."
+    },
+    "reactivated": "{name} is active again.",
+    "none": {
+      "title": "No stores available",
+      "text": "You have no active store right now. Ask an owner or manager to give you access to a store."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "loading": "Loading settings…",
+    "name": "Business name",
+    "currency": "Default currency",
+    "rate": "Exchange rate: LBP for 1 USD",
+    "rateHint": "Digits 0–9 only. Use a dot for decimals.",
+    "fee": "Default delivery fee",
+    "feeCurrency": "Delivery fee currency",
+    "feeHint": "Used when an order has delivery and no other fee is set. Use 0 for free delivery.",
+    "info": "Changes apply from now on. Orders and records you already made keep their old values.",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "retry": "Try again",
+    "saved": "Saved. The new values apply from now on.",
+    "fix": "{count, plural, one {1 thing to fix before saving.} other {{count} things to fix before saving.}}",
+    "offline": "Not saved. We couldn’t reach the server. Check your connection and try again. What you typed is still here.",
+    "backToMore": "Back to More",
+    "loadError": {
+      "title": "Couldn’t load settings",
+      "text": "Check your connection and try again. Nothing was changed."
+    },
+    "notAllowed": {
+      "title": "You can’t open Settings",
+      "text": "Only owners and managers can see and change the business settings. If you need something changed, ask your manager."
+    },
+    "fe": {
+      "name": "Enter a business name.",
+      "nameTooLong": "Use at most 120 characters.",
+      "rate": "Enter the rate as a number above 0, with a dot for decimals. Example: 89500",
+      "rateMax": "The rate can’t be more than 10,000,000.",
+      "decimals": "Use at most 2 decimals. Example: 3.50",
+      "fee": "Enter an amount with up to 2 decimals. Example: 3.50",
+      "feeMax": "The fee can’t be more than 100,000,000."
     }
   }
 }
