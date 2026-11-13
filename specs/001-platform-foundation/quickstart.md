@@ -10,6 +10,8 @@ and [data-model.md](data-model.md).
 - Docker Desktop (Compose v2)
 - Git
 - Nothing else: Python and Node run inside containers.
+- Without Docker (development PC): follow "Run on the development PC without Docker" in the root
+  `README.md` instead of the Start section below; the scenarios are the same.
 
 ## Start
 
@@ -99,7 +101,7 @@ Run each on a phone-sized window (360 px wide), once in English and once in Arab
 3. As the "Test Merchant" owner, request those IDs directly.
 4. **Expect**: "not found" for every one, identical to a made-up ID. The demo owner's history
    shows nothing about "Test Merchant"; "Test Merchant" history shows `access.denied_tenant`.
-   (Until the History screen exists in User Story 4, read history through `GET /api/v1/audit`.)
+   (The History screen is under More, owners only; `GET /api/v1/audit` returns the same entries.)
 
 ### 3. Employees, roles and store access (User Story 2)
 
@@ -109,8 +111,9 @@ Run each on a phone-sized window (360 px wide), once in English and once in Arab
    on Packing and sees both stores. Neither sees Employees or Settings under More.
 3. As the sales agent, call the staff list endpoint directly. **Expect**: refused, and the
    refusal appears in the owner's history.
-4. As the owner, remove the sales role from the sales agent. Without refreshing, have the
-   sales agent tap anything. **Expect**: their tabs change on that next action.
+4. As the owner, change the sales agent's role from Sales to Packing (a person always keeps at
+   least one role, so Sales cannot simply be removed). Without refreshing, have the sales agent
+   do something that asks the server (open Devices, save a setting). **Expect**: their tabs change on that next action.
 5. Deactivate the packing agent. **Expect**: their next action sends them to sign-in.
 6. Try to deactivate the only owner. **Expect**: refused with an explanation.
 7. Sign in as a manager and try to change the owner's roles. **Expect**: refused.
