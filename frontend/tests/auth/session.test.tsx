@@ -93,6 +93,53 @@ describe("session guard", () => {
   });
 });
 
+describe("session guard seeded by the server (initialMe)", () => {
+  it("shows the shell at once and does not load /me again", async () => {
+    const calls = mockApi(() => reply(200, ME("en")));
+    renderWithIntl(
+      <SessionGuard initialMe={ME("en")}>
+        <TestHome />
+      </SessionGuard>,
+      "en",
+    );
+
+    expect(screen.getByText("Demo Denim House Group")).toBeInTheDocument();
+    expect(screen.queryByText("Checking your session…")).not.toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls.filter((call) => call.url === "/api/v1/me")).toHaveLength(0);
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("still moves to the saved language when the address has another one (FR-027a)", async () => {
+    nav.pathname = "/more";
+    mockApi(() => reply(200, ME("ar")));
+    renderWithIntl(
+      <SessionGuard initialMe={ME("ar")}>
+        <TestHome />
+      </SessionGuard>,
+      "en",
+    );
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/more", { locale: "ar" }));
+    expect(screen.queryByText("Demo Denim House Group")).not.toBeInTheDocument();
+  });
+
+  it("signs out and goes to sign-in as before", async () => {
+    const calls = mockApi(() => reply(204));
+    renderWithIntl(
+      <SessionGuard initialMe={ME("en")}>
+        <TestHome />
+      </SessionGuard>,
+      "en",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/sign-in"));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ url: "/api/v1/auth/sign-out", method: "POST" });
+  });
+});
+
 describe("home and sign out", () => {
   it("signs out with POST /auth/sign-out and goes to sign-in once the server answered", async () => {
     const calls = mockApi(({ url }) => (url.endsWith("/me") ? reply(200, ME()) : reply(204)));

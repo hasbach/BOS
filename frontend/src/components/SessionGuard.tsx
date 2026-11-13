@@ -90,12 +90,17 @@ function subscribe<T>(load: (signal: AbortSignal) => Promise<T>) {
 }
 
 /** Loads one identity endpoint, sends unauthenticated visitors to `signInPath`, and offers retry on failure. */
-function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: string, redirectCodes: ReadonlySet<string>) {
+function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: string, redirectCodes: ReadonlySet<string>, initial?: T) {
   const router = useRouter();
-  const [state, setState] = useState<State<T>>({ k: "loading" });
+  // `initial` is what the server already loaded for this page; only read when the guard mounts.
+  const [state, setState] = useState<State<T>>(() => (initial !== undefined ? { k: "ready", value: initial } : { k: "loading" }));
   const [attempt, setAttempt] = useState(0);
+  const [seeded] = useState(initial !== undefined);
 
   useEffect(() => {
+    // The server's answer stands for the first load; Try again (attempt > 0) always asks again.
+    if (seeded && attempt === 0) return;
+
     // Exactly one outcome per load: an answer, an error, or the last attempt's deadline. Answers to
     // an attempt that was already given up on (or to an unmounted effect) are ignored.
     let finished = false;
@@ -148,7 +153,7 @@ function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: s
     };
     // `load` and `redirectCodes` are module-level constants at every call site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attempt, router, signInPath]);
+  }, [attempt, router, signInPath, seeded]);
 
   const retry = useCallback(() => {
     setState({ k: "loading" });
@@ -162,14 +167,15 @@ function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: s
 
 /**
  * Guards every signed-in page: loads GET /me, sends visitors without a session to sign-in, and
- * moves the page to the user's saved language when the URL differs (FR-027a).
+ * moves the page to the user's saved language when the URL differs (FR-027a). `initialMe` is GET /me
+ * as the server already loaded it for this page (shell layout); the guard then does not load it again.
  */
-export function SessionGuard({ children }: { children: ReactNode }) {
+export function SessionGuard({ children, initialMe }: { children: ReactNode; initialMe?: Me }) {
   const t = useTranslations();
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
-  const { state, retry, replace } = useIdentity<Me>(loadMe, "/sign-in", SIGN_IN_CODES);
+  const { state, retry, replace } = useIdentity<Me>(loadMe, "/sign-in", SIGN_IN_CODES, initialMe);
 
   const savedLocale = state.k === "ready" ? state.value.user.locale : null;
   const mismatch = savedLocale !== null && savedLocale !== locale;

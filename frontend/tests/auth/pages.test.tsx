@@ -8,6 +8,8 @@ vi.mock("next-intl/server", () => ({
   getRequestConfig: (config: unknown) => config,
 }));
 vi.mock("@/i18n/navigation", async () => (await import("../helpers/navigation")).navigationMock);
+// The shell's server-side /me needs a request (cookies); here it "could not tell" (tests/shell/server-shell).
+vi.mock("@/lib/serverSession", () => ({ getServerMe: async () => ({ k: "unknown" }) }));
 
 beforeEach(() => setRequestLocale.mockClear());
 

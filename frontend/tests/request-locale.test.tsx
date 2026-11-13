@@ -11,6 +11,8 @@ vi.mock("next-intl/server", () => ({
   // The real helper returns the config function unchanged.
   getRequestConfig: (config: unknown) => config,
 }));
+// The home page's server-side /me needs a request (cookies); here it "could not tell".
+vi.mock("@/lib/serverSession", () => ({ getServerMe: async () => ({ k: "unknown" }) }));
 
 beforeEach(() => {
   setRequestLocale.mockClear();

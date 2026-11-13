@@ -33,5 +33,4 @@ export const loadOpsMe = (signal?: AbortSignal) => api.get<OpsMe>("/ops/me", { s
 export const signOut = () => api.post("/auth/sign-out");
 export const opsSignOut = () => api.post("/ops/auth/sign-out");
 
-/** Error codes on /me that mean "go to sign-in". */
-export const SIGN_IN_CODES: ReadonlySet<string> = new Set(["unauthenticated", "business_suspended", "business_pending"]);
+export { SIGN_IN_CODES } from "./identity";

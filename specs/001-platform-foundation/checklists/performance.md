@@ -1,6 +1,137 @@
 # M0 shell performance (T088, SC-009)
 
-**Date**: 2026-11-13
+**Date**: 2026-11-13 (two measurements the same day: the first with a `/me` preload, the second after the
+signed-in shell was rendered on the server; the second is the current state and comes first below)
+
+## Current results: server-rendered shell (second pass)
+
+### Change made
+
+- `frontend/src/app/[locale]/(shell)/layout.tsx` (server component) now asks the API for `GET /api/v1/me` while it
+  renders (`lib/serverMe.ts`, `lib/serverSession.ts`): it forwards only the `bos_session` cookie to
+  `BOS_API_INTERNAL_URL`, `cache: "no-store"`, 2 s timeout, one call per request (React `cache()`).
+  - Person found: the guard (`SessionGuard`, new `initialMe` prop) starts with it and does not ask again, so the
+    frame, the screen title and the tab bar (with the person's tabs) are in the HTML.
+  - No session cookie, or the API answers `unauthenticated` / `business_suspended` / `business_pending`: a
+    server redirect to `/{locale}/sign-in`, exactly where the client guard sends people.
+  - Anything else (API down, slow, 5xx, 404 for an operator session, an odd body, a business cookie together with
+    an operator cookie on a 401): the page renders as before and the client guard loads `/me` itself (loading,
+    silent retry, error with Try again). Only in this fallback is the earlier `preload("/api/v1/me")` still sent.
+- Home (`/{locale}`) redirects on the server to the person's start tab, in their saved language, so the
+  placeholder -> `/me` -> client redirect step is gone (the client `StartRedirect` stays as the fallback).
+- Signed-in pages are now dynamic (`ƒ` in the build) and answered with
+  `Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate`; the service worker still caches only
+  `/_next/static` and `/icons`.
+- Fonts were checked and left alone: the four Plex Arabic weights loaded (400, 500, 600, 700) are all used by the
+  styles; dropping subsets would change how Latin text looks in Arabic.
+
+Tried and reverted (no change beyond noise): preloading each screen's first data request (`/staff`, `/stores`,
+`/business`) from the page head when the server knows the person (employees en 3.18 s, ar 4.34 s on one run each).
+
+### Harness change
+
+Lighthouse is now given the session cookie in the browser's own cookie jar (puppeteer-core `Network.setCookies`
+on the launched Edge, then the Lighthouse node API on the same browser) instead of an `--extra-headers` Cookie.
+With server redirects the header method no longer works: Chrome sends its own jar on the redirected request
+(the first run of home landed on sign-in for that reason, and was discarded). Same Lighthouse 13.6.0, Edge 157,
+mobile form factor, simulated throttling, categories, 3 runs, medians, fresh business per language. CPU benchmark
+index 667 to 979 across runs.
+
+### Results (medians of 3, ms)
+
+| Page | Lang | FCP | LCP | TBT | CLS | Speed Index | TTI | Perf | LCP <= 3.0 s |
+|---|---|---|---|---|---|---|---|---|---|
+| Sign-in | en | 992 | **992** | 394 | 0 | 1204 | 3205 | 90 | pass |
+| Sign-in | ar | 1436 | **1436** | 326 | 0 | 1473 | 3789 | 93 | pass |
+| Home (server redirect to /sales) | en | 1158 | **1158** | 468 | 0 | 1528 | 3268 | 88 | pass |
+| Home (server redirect to /sales) | ar | 1240 | **1240** | 711 | 0 | 1446 | 4153 | 83 | pass |
+| Employees | en | 763 | **3219** | 758 | 0 | 1322 | 3349 | 75 | fail by 0.2 s |
+| Employees | ar | 902 | **4377** | 409 | 0 | 1483 | 4540 | 75 | fail by 1.4 s |
+| Stores | en | 768 | **3190** | 440 | 0 | 1157 | 3236 | 82 | fail by 0.2 s |
+| Stores | ar | 919 | **4338** | 284 | 0 | 1205 | 4567 | 79 | fail by 1.3 s |
+| Settings | en | 756 | **3248** | 442 | 0 | 1450 | 3248 | 82 | fail by 0.25 s |
+| Settings | ar | 912 | **4139** | 707 | 0 | 1627 | 4435 | 69 | fail by 1.1 s |
+
+LCP of each run: sign-in en 992/933/1183, sign-in ar 3484/1077/1436 (first run cold), home en 1158/1202/966,
+home ar 1310/1240/1193, employees en 3341/3189/3219, employees ar 4377/4363/4378, stores en 3240/3190/3030,
+stores ar 4338/4125/4380, settings en 3294/3200/3248, settings ar 4105/4139/4277. Accessibility and
+best-practices 100 on every run. No client `GET /api/v1/me` on any signed-in run (the network log shows only the
+screen's own data requests).
+
+### Before and after (LCP medians, ms)
+
+| Page | en first pass (preload) | en now | ar first pass (preload) | ar now |
+|---|---|---|---|---|
+| Sign-in | 943 | 992 | 1107 | 1436 (noise; run 2 was 1077) |
+| Home | 3863 | **1158** | 4393 | **1240** |
+| Employees | 3004 | 3219 | 4082 | 4377 |
+| Stores | 3260 | 3190 | 3656 | 4338 |
+| Settings | 3156 | 3248 | 3648 | 4139 |
+
+The home row ends on `/sales`, so it also measures a tab screen. The other tab screens (`/packing`, `/delivery`,
+`/orders`) and the More menu are drawn from `/me` alone in the same way; they were not measured separately.
+
+### Why the three data screens still miss
+
+1. **Their largest paint is the loaded data, not the frame.** The frame and title now paint at FCP 0.76 to
+   0.92 s (was 0.97 to 1.15 s, and it was only the "Checking your session" placeholder then). The LCP element is
+   the first row of the people list (`span.name`, "LH Owner ... You"), the first store row, and on settings the
+   information banner under the form. Those need all scripts (about 165 KB gzip), hydration, then the screen's
+   own API call. `/me` no longer sits on that path, but it already ran in parallel after the first pass's
+   preload, so removing it saves almost nothing on these screens. Preloading the data request as well did not
+   move LCP either: the path is scripts + hydration, not the API (it answers in 20 to 60 ms).
+2. **Arabic got slower on these screens (+0.3 to +0.7 s), English stayed within noise.** The server HTML now
+   contains real text, so the browser starts downloading the fonts at once (observed at about 0.4 to 0.7 s, five
+   or six IBM Plex Sans Arabic files, 190 to 230 KB) in parallel with the scripts, on the simulated 1.6 Mbps link.
+   Before, the page had no Arabic text until the scripts had run, so the fonts came after them. The Arabic pages
+   move 420 to 440 KB against 250 to 260 KB in English; the extra 170 KB is about 0.85 s at 1.6 Mbps, matching
+   the en/ar LCP gap (about 1.0 to 1.2 s). In English the 48 KB Inter file costs less.
+3. Run-to-run noise on this machine remains about +-0.3 s.
+
+### What would close the remaining gap (not done here)
+
+- Render the first page of the data on the server too (lists and the settings values), so the largest paint is in
+  the HTML. That changes how these screens load data (the brief excluded it).
+- Arabic fonts: fewer bytes before the first paint, for example a single variable Plex Arabic file, or letting
+  Inter draw the Latin letters on Arabic pages. Both change the look and need a design decision.
+- Production: HTTP/2 or HTTP/3 with brotli behind the real reverse proxy, then re-measure there.
+
+### Verdict (current)
+
+- **Pass**: sign-in en/ar (1.0 / 1.4 s), home en/ar including the start tab `/sales` (1.2 / 1.2 s; was 3.9 /
+  4.4 s). The other screens drawn from `/me` alone should behave like `/sales` (not measured).
+- **Fail on this harsh profile**: employees, stores, settings: English by 0.2 to 0.25 s (inside or just outside
+  the +-0.3 s noise), Arabic by 1.1 to 1.4 s. Their frame and title are visible at under 1 s; the miss is the
+  data rows (all three languages) plus Arabic font bytes (Arabic).
+- T088 stays open for the data screens; the owner still needs to decide whether SC-009 is judged on this
+  simulated profile or on a real device.
+
+### Reproduce (second pass)
+
+`next build` with `BOS_NEXT_DIST_DIR=.next-build`, `next start -H 127.0.0.1 -p 3300` with
+`BOS_API_INTERNAL_URL=http://127.0.0.1:5100`; a fresh business per language through the API (owner, second store,
+pending invitation); for each run launch Edge headless with chrome-launcher, put the owner's `bos_session` and
+`NEXT_LOCALE` cookies into its jar through CDP, then run Lighthouse (node API, `formFactor: "mobile"`, default
+simulated throttling) on the same browser. Scripts are not committed.
+
+### Checks after the second change
+
+- `npm run typecheck`, `npm run lint` clean; `npx vitest run` 585 passed (558 before, plus 27: the server-side
+  `/me` outcomes and cookie forwarding in `tests/auth/server-me.test.ts`, the layout and home redirects in
+  `tests/shell/server-shell.test.tsx`, the guard started from `initialMe` in `tests/auth/session.test.tsx`).
+- Full `npx playwright test`: 10/10 passed (23.7 min) after one test-harness fix. The first two full runs had
+  3 to 5 failures (us1 and us2 after activation, a11y on time): shell pages are now rendered on the server with
+  the person, but `e2e/global-setup.ts` warmed them without a session, so the server redirected to sign-in and
+  the pages' own server-side code was first compiled during the stories (single page loads of 11 to 42 s on
+  `next dev` with the slow disk, against a 15 s expectation). The failing stories passed when run alone. The
+  warm-up now signs in as a throwaway owner and visits each language's pages with that language saved; after
+  that, the full run passed with no failures.
+
+---
+
+## History: first pass (preload of `/me`)
+
+The rest of this file is the first measurement of the day and its analysis, kept as it was.
 **Requirement**: SC-009: "Pages of the shell become usable within 3 seconds on a typical mid-range Android
 phone on a mobile data connection." (plan.md, Performance Goals: "Shell usable within 3 seconds on a mid-range
 Android phone over mobile data".)
