@@ -1,9 +1,94 @@
 # M0 shell performance (T088, SC-009)
 
-**Date**: 2026-11-13 (two measurements the same day: the first with a `/me` preload, the second after the
-signed-in shell was rendered on the server; the second is the current state and comes first below)
+**Date**: 2026-11-13 (three measurements the same day: the first with a `/me` preload, the second after the
+signed-in shell was rendered on the server, the third after the data screens' first data was rendered on the
+server too. The third is the current state and comes first; the other two follow as history.)
 
-## Current results: server-rendered shell (second pass)
+## Current results: data in the server HTML (third pass)
+
+### Change made
+
+Employees, stores and settings now get their first data in the server HTML, the same way the shell gets `/me`:
+
+- `frontend/src/lib/serverData.ts`: `fetchServerData(cookies, path, shapeCheck)` asks the API from the web
+  server with only the `bos_session` cookie (same token check as `/me`), `cache: "no-store"`, a 2 s timeout. It
+  returns the body only for a 200 whose shape matches what the screen renders (`isStaffList`, `isStoreList`,
+  `isBusiness`, against the client's own types in `lib/staff.ts`, `lib/stores.ts`, `lib/business.ts`), else
+  null.
+- `frontend/src/lib/serverSession.ts`: `getServerStaff`, `getServerStores`, `getServerBusiness` (per request,
+  React `cache()`). They ask only when the server already knows the person, the address is in the person's
+  language, and the person has the permission the screen checks (`staff.view`, `store.view`,
+  `settings.manage`). Otherwise nothing is asked and the screen behaves as before (not-allowed screen, language
+  move, sign-in).
+- The pages (`more/employees`, `more/stores`, `more/settings`) pass what they got as a seed to the existing
+  client components (`EmployeesList` with `/staff` and `/stores`, `StoresList`, `SettingsForm`). The loaders
+  (`useStaffList`, `useStoresList`, the settings loader) start "ready" with a seed and do not ask on mount;
+  reload, Try again, saving, the change-then-update flows and the store-scope rules are unchanged. Without a seed
+  (any failure, timeout, 401/403/404/5xx, odd body) the screen loads in the browser exactly as before.
+- `frontend/src/lib/seed.ts`: each server render gives its seed a new id and a screen uses a seed once. When the
+  browser's back or forward button brings back a page from the router's cache, the seed is recognised and the
+  screen loads fresh data, as it did before, instead of showing what the server sent earlier.
+- No caching across users (the pages stay dynamic and `no-store`); fonts untouched.
+
+### Results (medians of 3, ms; same profile and harness as the second pass, `run2.mjs`)
+
+| Page | Lang | FCP | LCP | TBT | CLS | Speed Index | Perf | LCP <= 3.0 s |
+|---|---|---|---|---|---|---|---|---|
+| Sign-in | en | 932 | **932** | 109 | 0 | 1003 | 99 | pass |
+| Sign-in | ar | 1079 | **1079** | 119 | 0 | 1079 | 99 | pass |
+| Home (server redirect to /sales) | en | 1103 | **1103** | 251 | 0.049 | 1235 | 95 | pass |
+| Home (server redirect to /sales) | ar | 1198 | **1198** | 335 | 0 | 1266 | 92 | pass |
+| Employees | en | 947 | **947** | 229 | 0.004 | 1175 | 96 | pass |
+| Employees | ar | 921 | **921** | 253 | 0.001 | 921 | 95 | pass |
+| Stores | en | 923 | **923** | 292 | 0 | 1385 | 94 | pass |
+| Stores | ar | 963 | **963** | 242 | 0 | 963 | 95 | pass |
+| Settings | en | 926 | **926** | 174 | 0 | 1164 | 98 | pass |
+| Settings | ar | 962 | **962** | 265 | 0 | 1116 | 95 | pass |
+
+LCP of each run: sign-in en 1402/932/931, sign-in ar 1072/1079/1085, home en 953/1106/1103, home ar
+1304/1198/936, employees en 947/940/988, employees ar 921/965/908, stores en 923/913/999, stores ar
+963/926/2217 (one slow run), settings en 925/926/942, settings ar 1064/765/962. Accessibility and best-practices
+100 on every run (so no hydration errors in the console). The LCP element is unchanged (first person row, first
+store row, settings information banner), but it is now painted at first paint. The network log of every
+signed-in run shows no browser `GET /api/v1/me`, `/staff`, `/stores` or `/business`. CPU benchmark index
+during the run was similar to the earlier passes.
+
+### Before and after (LCP medians, ms)
+
+| Page | en first pass | en second pass | en now | ar first pass | ar second pass | ar now |
+|---|---|---|---|---|---|---|
+| Sign-in | 943 | 992 | 932 | 1107 | 1436 | 1079 |
+| Home | 3863 | 1158 | 1103 | 4393 | 1240 | 1198 |
+| Employees | 3004 | 3219 | **947** | 4082 | 4377 | **921** |
+| Stores | 3260 | 3190 | **923** | 3656 | 4338 | **963** |
+| Settings | 3156 | 3248 | **926** | 3648 | 4139 | **962** |
+
+### Verdict (current)
+
+- **Pass on every measured screen, both languages**, on the harsh simulated profile: all LCP medians between
+  0.92 and 1.2 s against the 3.0 s target. The Arabic font bytes still make Arabic pages heavier (about 420 to
+  440 KB against 250 to 260 KB), but they no longer sit on the path to the largest paint.
+- Still to do for SC-009 itself: re-measure behind the production reverse proxy, and decide whether SC-009 is
+  judged on this simulated profile or on a real phone.
+
+### Checks after the third change
+
+- `npm run typecheck`, `npm run lint` clean; `npx vitest run` 636 passed (585 before, plus 51):
+  `tests/lib/server-data.test.ts` (each loader: 200 with only the session cookie forwarded, 401/403/404/500,
+  timeout, unreachable API, bad bodies, no or malformed token; the shape checks), `tests/lib/server-session.test.ts`
+  (asked only with the person, the language and the permission; a new seed id per render) and
+  `tests/shell/seeded-screens.test.tsx` (each screen seeded: shown at once, nothing loaded; unseeded: loads as
+  before; a reused seed loads again; saving settings still goes to the server; no permission: not-allowed).
+- Full `npx playwright test`: 10/10 passed (26.8 min). One end-to-end step had to change: the accessibility pass
+  showed the settings load-error screen by cutting the browser's `GET /api/v1/business`, which the browser no
+  longer sends on a normal visit. It now opens settings, goes to More with the Back link, cuts that request and
+  presses the browser's Back button, so the screen loads the settings itself (the reused-seed path) and shows the
+  error. A first full run with the old step failed only there (a11y en); the step passed alone and then the whole
+  suite passed.
+
+---
+
+## History: second pass (server-rendered shell)
 
 ### Change made
 
@@ -96,7 +181,7 @@ The home row ends on `/sales`, so it also measures a tab screen. The other tab s
   Inter draw the Latin letters on Arabic pages. Both change the look and need a design decision.
 - Production: HTTP/2 or HTTP/3 with brotli behind the real reverse proxy, then re-measure there.
 
-### Verdict (current)
+### Verdict (second pass)
 
 - **Pass**: sign-in en/ar (1.0 / 1.4 s), home en/ar including the start tab `/sales` (1.2 / 1.2 s; was 3.9 /
   4.4 s). The other screens drawn from `/me` alone should behave like `/sales` (not measured).

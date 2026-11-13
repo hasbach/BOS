@@ -246,8 +246,16 @@ test("every M0 screen passes axe, shows focus and keeps sheets accessible", asyn
     await sheet(owner, owner.getByRole("button", { name: t("profile.save") }), "profile password sheet");
 
     // ---- Load error, offline notice and a save that did not go through ------------------------------
-    await owner.route("**/api/v1/business", (route) => route.abort());
+    // The saved settings come in the server's HTML (SC-009). The browser loads them itself when the page
+    // comes back from the router's cache (the Back button), and that request is the one cut here.
     await owner.goto(`/${lang}/more/settings`);
+    await settled(owner);
+    await owner.getByRole("link", { name: t("common.back") }).click();
+    await expect(owner).toHaveURL(new RegExp(`/${lang}/more$`));
+    await settled(owner);
+    await owner.route("**/api/v1/business", (route) => route.abort());
+    await owner.goBack();
+    await expect(owner).toHaveURL(new RegExp(`/${lang}/more/settings$`));
     await expect(owner.getByRole("alert").filter({ hasText: t("settings.loadError.title") })).toBeVisible();
     await check(owner, "settings load error", false);
     await owner.unroute("**/api/v1/business");

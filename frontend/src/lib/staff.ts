@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api";
+import { useSeed } from "./seed";
+import type { Seed } from "./seed";
 import type { Role } from "./types";
 
 export type { Role } from "./types";
@@ -67,11 +69,16 @@ export function newIdempotencyKey(): string {
 export type StaffState = { k: "loading" } | { k: "error"; error: unknown } | { k: "ready"; value: StaffList };
 
 /** Loads GET /staff; `update` edits the loaded list after a confirmed change, `reload` fetches it again. */
-export function useStaffList() {
-  const [state, setState] = useState<StaffState>({ k: "loading" });
+export function useStaffList(seed?: Seed<StaffList>) {
+  // What the server already loaded for this page, if it has not been shown before (lib/seed.ts).
+  const initial = useSeed(seed);
+  const [state, setState] = useState<StaffState>(() => (initial !== undefined ? { k: "ready", value: initial } : { k: "loading" }));
   const [attempt, setAttempt] = useState(0);
+  const [seeded] = useState(initial !== undefined);
 
   useEffect(() => {
+    // The server's answer stands for the first load; reload (attempt > 0) always asks again.
+    if (seeded && attempt === 0) return;
     const controller = new AbortController();
     api.get<StaffList>("/staff", { signal: controller.signal }).then(
       (value) => setState({ k: "ready", value }),
@@ -81,7 +88,7 @@ export function useStaffList() {
       },
     );
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, seeded]);
 
   const reload = useCallback(() => {
     setState({ k: "loading" });

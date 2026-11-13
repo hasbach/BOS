@@ -36,7 +36,7 @@ export interface ServerMeOptions {
 
 // The API issues secrets.token_urlsafe tokens. Anything else is not forwarded (and cannot smuggle
 // another header or cookie into the request); the client guard handles it.
-const TOKEN = /^[A-Za-z0-9_-]{1,256}$/;
+export const TOKEN = /^[A-Za-z0-9_-]{1,256}$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");

@@ -12,6 +12,7 @@ import { Screen, ScreenBody, ScreenFooter, screenStyles } from "@/components/Scr
 import { Link } from "@/i18n/navigation";
 import { useMe } from "@/lib/session";
 import { STORES, formatWhatsapp } from "@/lib/stores";
+import type { Seed } from "@/lib/seed";
 import type { Store } from "@/lib/stores";
 
 import employees from "../employees/employees.module.css";
@@ -50,9 +51,13 @@ function StoreRow({ store }: { store: Store }) {
 }
 
 /** Screens 76, 77, 96 and 100 to 102: the stores the signed-in user may see. */
-export function StoresList() {
+export function StoresList({ initial }: { initial?: Seed<Store[]> }) {
   const access = useStoreAccess();
-  return <StoresLoader loadingFooter={access.manage ? <AddButton disabled /> : undefined}>{(ctx) => <Loaded stores={ctx.stores} />}</StoresLoader>;
+  return (
+    <StoresLoader loadingFooter={access.manage ? <AddButton disabled /> : undefined} initial={initial}>
+      {(ctx) => <Loaded stores={ctx.stores} />}
+    </StoresLoader>
+  );
 }
 
 function Loaded({ stores }: { stores: Store[] }) {

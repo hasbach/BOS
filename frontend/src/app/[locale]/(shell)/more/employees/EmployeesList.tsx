@@ -14,6 +14,8 @@ import { Link } from "@/i18n/navigation";
 import { formatDate } from "@/lib/format";
 import { useMe } from "@/lib/session";
 import type { Role, StaffList } from "@/lib/staff";
+import type { Seed } from "@/lib/seed";
+import type { Store } from "@/lib/stores";
 
 import styles from "./employees.module.css";
 import { Avatar, Contact, EMPLOYEES, RoleChips, StaffLoader, StatusChip, StoreChips, useStaffAccess } from "./parts";
@@ -94,9 +96,13 @@ function InviteButton({ disabled = false }: { disabled?: boolean }) {
 }
 
 /** Screens 49 and 69 to 73: everyone in the business, grouped by status, and the way to invite someone. */
-export function EmployeesList() {
+export function EmployeesList({ initial, initialStores }: { initial?: Seed<StaffList>; initialStores?: Seed<Store[]> }) {
   const access = useStaffAccess();
-  return <StaffLoader loadingFooter={access.manage ? <InviteButton disabled /> : undefined}>{(ctx) => <Loaded list={ctx.list} />}</StaffLoader>;
+  return (
+    <StaffLoader loadingFooter={access.manage ? <InviteButton disabled /> : undefined} initial={initial} initialStores={initialStores}>
+      {(ctx) => <Loaded list={ctx.list} />}
+    </StaffLoader>
+  );
 }
 
 function Loaded({ list }: { list: StaffList }) {

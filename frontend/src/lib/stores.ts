@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, api } from "./api";
 import type { AffectedPerson } from "./api";
+import { useSeed } from "./seed";
+import type { Seed } from "./seed";
 import type { Role } from "./types";
 
 export interface Store {
@@ -68,11 +70,16 @@ export type { AffectedPerson, Role };
 export type StoresState = { k: "loading" } | { k: "error"; error: unknown } | { k: "ready"; value: Store[] };
 
 /** Loads GET /stores. Owners and managers get every store; everyone else only their active ones. */
-export function useStoresList() {
-  const [state, setState] = useState<StoresState>({ k: "loading" });
+export function useStoresList(seed?: Seed<Store[]>) {
+  // What the server already loaded for this page, if it has not been shown before (lib/seed.ts).
+  const initial = useSeed(seed);
+  const [state, setState] = useState<StoresState>(() => (initial !== undefined ? { k: "ready", value: initial } : { k: "loading" }));
   const [attempt, setAttempt] = useState(0);
+  const [seeded] = useState(initial !== undefined);
 
   useEffect(() => {
+    // The server's answer stands for the first load; reload (attempt > 0) always asks again.
+    if (seeded && attempt === 0) return;
     const controller = new AbortController();
     api.get<Store[]>("/stores", { signal: controller.signal }).then(
       (value) => setState(Array.isArray(value) ? { k: "ready", value } : { k: "error", error: new ApiError({ status: 200, code: "unexpected_response" }) }),
@@ -82,7 +89,7 @@ export function useStoresList() {
       },
     );
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, seeded]);
 
   const reload = useCallback(() => {
     setState({ k: "loading" });

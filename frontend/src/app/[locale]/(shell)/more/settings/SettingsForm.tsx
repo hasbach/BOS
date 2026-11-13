@@ -18,6 +18,8 @@ import type { Business, BusinessChange } from "@/lib/business";
 import { errorMessage, fieldErrorMessageKey } from "@/lib/errors";
 import { FEE_RULE, RATE_RULE, formatMoney, parseMoney } from "@/lib/money";
 import type { MoneyProblem } from "@/lib/money";
+import { useSeed } from "@/lib/seed";
+import type { Seed } from "@/lib/seed";
 import { useMe } from "@/lib/session";
 import type { Currency } from "@/lib/types";
 
@@ -30,10 +32,11 @@ type Load = { k: "loading" } | { k: "error"; error: unknown } | { k: "ready"; va
 const CURRENCIES: Currency[] = ["USD", "LBP"];
 
 /** Screens 91 to 95 and 99: the business name, currency, exchange rate and delivery fee. */
-export function SettingsForm() {
+/** `initial` is GET /business as the server already loaded it for this page; then it is not loaded again. */
+export function SettingsForm({ initial }: { initial?: Seed<Business> }) {
   const { permissions } = useMe();
   if (!permissions.includes("settings.manage")) return <NotAllowed />;
-  return <Loader />;
+  return <Loader initial={initial} />;
 }
 
 function Bar() {
@@ -58,12 +61,16 @@ function NotAllowed() {
   );
 }
 
-function Loader() {
+function Loader({ initial: seed }: { initial?: Seed<Business> }) {
   const t = useTranslations();
-  const [state, setState] = useState<Load>({ k: "loading" });
+  const initial = useSeed(seed);
+  const [state, setState] = useState<Load>(() => (initial !== undefined ? { k: "ready", value: initial } : { k: "loading" }));
   const [attempt, setAttempt] = useState(0);
+  const [seeded] = useState(initial !== undefined);
 
   useEffect(() => {
+    // The server's answer stands for the first load; Try again (attempt > 0) always asks again.
+    if (seeded && attempt === 0) return;
     const controller = new AbortController();
     api.get<Business>("/business", { signal: controller.signal }).then(
       (value) => setState({ k: "ready", value }),
@@ -73,7 +80,7 @@ function Loader() {
       },
     );
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, seeded]);
 
   if (state.k === "error") {
     if (isApiError(state.error) && state.error.code === "forbidden") return <NotAllowed />;

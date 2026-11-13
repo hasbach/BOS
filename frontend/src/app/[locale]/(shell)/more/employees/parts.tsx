@@ -16,6 +16,8 @@ import { isApiError } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import { sortRoles, useStaffList } from "@/lib/staff";
 import type { Role, StaffList } from "@/lib/staff";
+import type { Seed } from "@/lib/seed";
+import type { Store } from "@/lib/stores";
 
 import styles from "./employees.module.css";
 
@@ -254,11 +256,20 @@ export interface StaffContext {
   reload: () => void;
 }
 
-function Loader({ children, loadingFooter }: { children: (context: StaffContext) => ReactNode; loadingFooter?: ReactNode }) {
+interface LoaderProps {
+  children: (context: StaffContext) => ReactNode;
+  loadingFooter?: ReactNode;
+  /** GET /staff as the server already loaded it for this page (the list screen); then not loaded again. */
+  initial?: Seed<StaffList>;
+  /** GET /stores as the server already loaded it, for the store names. */
+  initialStores?: Seed<Store[]>;
+}
+
+function Loader({ children, loadingFooter, initial, initialStores }: LoaderProps) {
   const t = useTranslations("staff");
   const ui = useTranslations("ui");
   const common = useTranslations("common");
-  const { state, reload, update } = useStaffList();
+  const { state, reload, update } = useStaffList(initial);
 
   if (state.k === "error") {
     if (isApiError(state.error) && state.error.code === "forbidden") return <NotAllowedScreen />;
@@ -282,15 +293,19 @@ function Loader({ children, loadingFooter }: { children: (context: StaffContext)
       </Screen>
     );
   }
-  return <StoresProvider>{children({ list: state.value, update, reload })}</StoresProvider>;
+  return <StoresProvider initial={initialStores}>{children({ list: state.value, update, reload })}</StoresProvider>;
 }
 
 /**
  * Gate and loader shared by the list and both detail screens. No staff.view, or a forbidden answer,
  * shows the not-allowed screen; a failed load offers retry; the children receive the loaded list.
  */
-export function StaffLoader({ children, loadingFooter }: { children: (context: StaffContext) => ReactNode; loadingFooter?: ReactNode }) {
+export function StaffLoader({ children, loadingFooter, initial, initialStores }: LoaderProps) {
   const access = useStaffAccess();
   if (!access.view) return <NotAllowedScreen />;
-  return <Loader loadingFooter={loadingFooter}>{children}</Loader>;
+  return (
+    <Loader loadingFooter={loadingFooter} initial={initial} initialStores={initialStores}>
+      {children}
+    </Loader>
+  );
 }

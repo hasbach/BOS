@@ -13,6 +13,7 @@ import { Loading } from "@/components/Loading";
 import { Screen, ScreenBody, ScreenFooter, StatusHeader } from "@/components/Screen";
 import { isApiError } from "@/lib/api";
 import { useMe } from "@/lib/session";
+import type { Seed } from "@/lib/seed";
 import { STORES, logoUrl, storeInitials, useStoresList } from "@/lib/stores";
 import type { Store } from "@/lib/stores";
 
@@ -121,17 +122,28 @@ export interface StoresContext {
  * Loads GET /stores for the list and the edit screens. No store.view, or a forbidden answer, is
  * not allowed; a failed load offers retry (screen 101); the children get the loaded stores.
  */
-export function StoresLoader({ children, loadingFooter }: { children: (context: StoresContext) => ReactNode; loadingFooter?: ReactNode }) {
-  const access = useStoreAccess();
-  if (!access.view) return <NotAllowedScreen />;
-  return <Loader loadingFooter={loadingFooter}>{children}</Loader>;
+interface LoaderProps {
+  children: (context: StoresContext) => ReactNode;
+  loadingFooter?: ReactNode;
+  /** GET /stores as the server already loaded it for this page (the list screen); then not loaded again. */
+  initial?: Seed<Store[]>;
 }
 
-function Loader({ children, loadingFooter }: { children: (context: StoresContext) => ReactNode; loadingFooter?: ReactNode }) {
+export function StoresLoader({ children, loadingFooter, initial }: LoaderProps) {
+  const access = useStoreAccess();
+  if (!access.view) return <NotAllowedScreen />;
+  return (
+    <Loader loadingFooter={loadingFooter} initial={initial}>
+      {children}
+    </Loader>
+  );
+}
+
+function Loader({ children, loadingFooter, initial }: LoaderProps) {
   const t = useTranslations("stores");
   const ui = useTranslations("ui");
   const common = useTranslations("common");
-  const { state, reload } = useStoresList();
+  const { state, reload } = useStoresList(initial);
 
   if (state.k === "error") {
     if (isApiError(state.error) && state.error.code === "forbidden") return <NotAllowedScreen />;
