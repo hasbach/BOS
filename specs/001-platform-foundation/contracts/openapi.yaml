@@ -79,7 +79,7 @@ paths:
     post:
       tags: [auth]
       summary: Request a reset link by email
-      description: Always returns 204, whether or not the email exists. Limited to 3 requests per address per hour; excess requests still return 204 and send nothing.
+      description: Always returns 204, whether or not the email exists, after the same work in both cases (the link is issued and the email sent after the answer). Limited to 3 requests per address and 10 requests per client address per hour; excess requests still return 204 and send nothing.
       requestBody:
         required: true
         content:

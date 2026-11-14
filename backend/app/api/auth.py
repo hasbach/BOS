@@ -7,7 +7,9 @@ bodies (research R26).
 
 from __future__ import annotations
 
-from flask import Blueprint, Response, jsonify, request
+import functools
+
+from flask import Blueprint, Response, current_app, jsonify, request
 from flask.typing import ResponseReturnValue
 
 from app.api.common import (
@@ -67,9 +69,18 @@ def sign_out() -> ResponseReturnValue:
 @public
 def password_reset_request() -> ResponseReturnValue:
     email = json_body().get("email")
-    if isinstance(email, str):
-        accounts.request_password_reset(get_engine(), email, ip=client_ip())
-    return Response(status=204)
+    response = Response(status=204)
+    if not isinstance(email, str):
+        return response
+    pending = accounts.request_password_reset(get_engine(), email, ip=client_ip())
+    if pending is not None:
+        # Looking the address up, issuing the link and sending the email happen once the
+        # answer has been written to the client (the WSGI server closes the response after
+        # sending it), so a registered address is not answered more slowly than an unknown
+        # one (security.md F-04). Only the limits above are done before answering.
+        app = current_app._get_current_object()  # type: ignore[attr-defined]
+        response.call_on_close(functools.partial(accounts.send_password_reset, app, pending))
+    return response
 
 
 @bp.post("/auth/password-reset/complete")

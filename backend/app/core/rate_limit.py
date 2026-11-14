@@ -8,8 +8,10 @@ tenant context and holds no identifier, only a keyed hash of it.
   failure), or while 30 failures from one address do the same. A success erases nothing.
   The caller should not record an attempt that was refused because of a block (the password
   was never checked), and must answer it exactly like a wrong password.
-* Password-reset emails: at most 3 accepted requests per address in any hour. These rows
-  live in their own hash namespace and are stored as ``success = true``, so they never count
+* Password-reset emails: at most 3 accepted requests per address in any hour, and at most 10
+  requests from one client address in any hour (so one client cannot have reset mail sent to
+  many addresses). These rows live in their own hash namespaces (the per-client rows hold a
+  keyed hash of the client address) and are stored as ``success = true``, so they never count
   towards a sign-in block, by identifier or by address.
 
 Identifiers are hashed with HMAC-SHA-256 keyed by the application secret, so the stored
@@ -33,9 +35,11 @@ MAX_FAILURES_PER_IDENTIFIER = 5
 MAX_FAILURES_PER_IP = 30
 RESET_EMAIL_WINDOW = timedelta(hours=1)
 MAX_RESET_EMAILS = 3
+MAX_RESET_REQUESTS_PER_IP = 10
 
 _SIGN_IN = "sign_in"
 _RESET_EMAIL = "password_reset_email"
+_RESET_IP = "password_reset_ip"
 
 _INSERT = text(
     "INSERT INTO login_attempts (identifier_hash, ip, success, at) "
@@ -128,13 +132,23 @@ class RateLimiter:
         Serialised per address for the rest of the transaction, so two simultaneous
         requests cannot both take the last slot.
         """
-        hashed = self._hash(_RESET_EMAIL, email)
+        return self._take(db, self._hash(_RESET_EMAIL, email), ip, MAX_RESET_EMAILS)
+
+    def take_reset_request_from(self, db: Session, ip: str) -> bool:
+        """True if the client at ``ip`` may make another reset request now; it is then counted.
+
+        Every request that gets this far counts, whatever happens to it afterwards (an
+        address over its own limit, an unknown address). Serialised per client address.
+        """
+        return self._take(db, self._hash(_RESET_IP, ip), ip, MAX_RESET_REQUESTS_PER_IP)
+
+    def _take(self, db: Session, hashed: bytes, ip: str | None, limit: int) -> bool:
         now = self._clock()
         db.execute(_LOCK, {"lock": int.from_bytes(hashed[:8], "big", signed=True)})
         recent = db.execute(
             _RECENT, {"hash": hashed, "now": now, "window": RESET_EMAIL_WINDOW}
         ).scalar_one()
-        if recent >= MAX_RESET_EMAILS:
+        if recent >= limit:
             return False
         db.execute(_INSERT, {"hash": hashed, "ip": ip, "success": True, "at": now})
         return True

@@ -17,12 +17,12 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from flask import current_app, render_template
+from flask import Flask, current_app, render_template
 from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from app.core import audit, sessions
-from app.core.db import transaction
+from app.core.db import engine_of, transaction
 from app.core.identifiers import InvalidIdentifier, normalize_email, parse_identifier
 from app.core.mailer import get_mailer
 from app.core.rate_limit import RateLimiter
@@ -295,21 +295,55 @@ def issue_password_reset(
     return IssuedLink(token=token, expires_at=expires_at, page="reset")
 
 
-def request_password_reset(engine: Engine, email: str, *, ip: str | None) -> None:
-    """Email a reset link if an active user of an active business has this email.
+@dataclass(frozen=True)
+class PendingReset:
+    """A reset request that passed the limits; whether the address is known is not yet looked at."""
 
-    Says nothing either way. Limited to 3 requests per address per hour. The email is sent
-    only after the reset row is committed.
+    email: str
+    ip: str | None
+
+
+def request_password_reset(engine: Engine, email: str, *, ip: str | None) -> PendingReset | None:
+    """The part of a reset request done before answering; the same for every address.
+
+    Normalises the address and takes the limits (10 requests per client address and 3 per
+    email address per hour). Does not look the address up: that, issuing the link and sending
+    the email happen in ``send_password_reset`` after the answer has gone out, so the answer
+    takes as long for an unknown address as for a registered one (FR-007, security.md F-04).
+    Returns None when nothing more should happen.
     """
     try:
         address = normalize_email(email)
     except InvalidIdentifier:
-        return
+        return None
     limiter = RateLimiter.for_app(current_app)
     with transaction(engine) as db:
+        if ip is not None and not limiter.take_reset_request_from(db, ip):
+            log.info("password reset email refused: client limit reached")
+            return None
         if not limiter.take_reset_email(db, address, ip):
             log.info("password reset email refused: limit reached")
-            return
+            return None
+    return PendingReset(email=address, ip=ip)
+
+
+def send_password_reset(app: Flask, pending: PendingReset) -> None:
+    """Email a reset link if an active user of an active business has this email.
+
+    Run after the answer has been sent, outside the request: it opens its own application
+    context and its own transactions. The email is sent only after the reset row is committed.
+    Never raises; a failure is logged by error class only (no address, link or token).
+    """
+    try:
+        with app.app_context():
+            _send_password_reset(engine_of(app), pending)
+    except Exception as exc:
+        log.error("password reset email not issued: error=%s", type(exc).__name__)
+
+
+def _send_password_reset(engine: Engine, pending: PendingReset) -> None:
+    address, ip = pending.email, pending.ip
+    with transaction(engine) as db:
         owner = lookup_identifier(db, "email", address)
     if owner is None or owner.user_status != "active" or owner.tenant_status != "active":
         return

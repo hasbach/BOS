@@ -99,6 +99,13 @@ def _post(
     return client.post(path, json=body or {}, headers={**CSRF, **headers})
 
 
+def _request_reset(app: Flask, email: str) -> Any:
+    # Read and closed as a WSGI server does: the email goes out when the answer is closed.
+    return app.test_client().post(
+        "/api/v1/auth/password-reset/request", json={"email": email}, headers=CSRF, buffered=True
+    )
+
+
 def _patch(client: FlaskClient, path: str, body: dict[str, Any]) -> Any:
     return client.patch(path, json=body, headers=CSRF)
 
@@ -296,15 +303,12 @@ def test_every_action_leaves_exactly_one_entry(
     owner = _sign_in(app, a.email)
     log.expect(t, "auth.sign_in", "user", me, "user", me)
 
-    ok(_post(app.test_client(), "/api/v1/auth/password-reset/request", {"email": a.email}), 204)
+    ok(_request_reset(app, a.email), 204)
     log.expect(t, "auth.password_reset_issued", "anonymous", None, "user", me)
     log.expect(t, "email.sent", "system", None)
     outbox(app).fail = True
     manager_email = "manager-a@example.test"
-    ok(
-        _post(app.test_client(), "/api/v1/auth/password-reset/request", {"email": manager_email}),
-        204,
-    )
+    ok(_request_reset(app, manager_email), 204)
     outbox(app).fail = False
     log.expect(t, "auth.password_reset_issued", "anonymous", None, "user", a.user("manager"))
     log.expect(t, "email.failed", "system", None)

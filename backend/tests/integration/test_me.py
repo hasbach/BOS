@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Callable, Iterator
 from datetime import datetime
@@ -12,11 +13,14 @@ from typing import Any
 import pytest
 from flask import Flask
 from flask.testing import FlaskClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 
 from app.config import Config
+from app.core.db import engine_of
+from app.core.rate_limit import MAX_RESET_REQUESTS_PER_IP
 from app.core.security import new_token
 from app.core.sessions import USER_COOKIE
+from app.services import accounts
 from tests.dbsupport import TwoTenants, insert
 from tests.integration.us1_support import (
     BASE_URL,
@@ -65,7 +69,23 @@ def _sign_in(app: Flask, identifier: str, password: str = PASSWORD) -> FlaskClie
     return client
 
 
-def _request_reset(app: Flask, email: str) -> Any:
+def _request_reset(app: Flask, email: str, *, client_ip: str = "127.0.0.1") -> Any:
+    """A reset request, read to the end and closed as a WSGI server does.
+
+    The email goes out when the answer is closed (security.md F-04), so ``buffered=True``
+    is what makes it happen before this returns.
+    """
+    return app.test_client().post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": email},
+        headers=CSRF,
+        buffered=True,
+        environ_base={"REMOTE_ADDR": client_ip},
+    )
+
+
+def _start_reset(app: Flask, email: str) -> Any:
+    """A reset request whose answer has been received but not yet closed."""
     return app.test_client().post(
         "/api/v1/auth/password-reset/request", json={"email": email}, headers=CSRF
     )
@@ -218,6 +238,119 @@ def test_a_failed_email_is_recorded_in_the_business_history(
     [failed] = history(owner_engine, worlds.a.tenant_id, "email.failed")
     assert failed.actor_type == "system"
     assert failed.data["purpose"] == "password_reset"
+
+
+def test_known_and_unknown_addresses_are_answered_after_the_same_work(
+    app: Flask, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    """FR-007, security.md F-04: the answer cannot tell whether an email is registered.
+
+    The same statements run before the answer for a registered and an unknown address, and
+    the lookup, the link and the email all wait until the answer has been sent.
+    """
+    statements: list[str] = []
+
+    def seen(_conn: Any, _cursor: Any, statement: str, *_args: Any) -> None:
+        statements.append(statement)
+
+    engine = engine_of(app)
+    answers: dict[str, Any] = {}
+    before_answer: dict[str, list[str]] = {}
+    event.listen(engine, "before_cursor_execute", seen)
+    try:
+        for case, email in (("known", worlds.a.email), ("unknown", "nobody@example.test")):
+            statements.clear()
+            answers[case] = _start_reset(app, email)
+            before_answer[case] = list(statements)
+    finally:
+        event.remove(engine, "before_cursor_execute", seen)
+
+    known, unknown = answers["known"], answers["unknown"]
+    assert before_answer["known"] == before_answer["unknown"]
+    assert before_answer["known"]  # the limits were taken
+    assert (known.status_code, known.get_data()) == (unknown.status_code, unknown.get_data())
+    assert known.status_code == 204
+    assert _headers(known) == _headers(unknown)
+    ok(unknown, 204)  # after get_data, so the contract check keeps the close callbacks
+    # Answered, and still nothing issued or sent for the registered address.
+    assert outbox(app).messages == []
+    assert owner_value(owner_engine, "SELECT count(*) FROM password_resets") == 2
+    assert history(owner_engine, worlds.a.tenant_id, "auth.password_reset_issued") == []
+
+    unknown.close()
+    assert outbox(app).messages == []
+    known.close()  # what the WSGI server does once the answer is written
+
+    [message] = outbox(app).messages
+    assert message["To"] == worlds.a.email
+    assert owner_value(owner_engine, "SELECT count(*) FROM password_resets") == 3
+    [issued] = history(owner_engine, worlds.a.tenant_id, "auth.password_reset_issued")
+    assert issued.ip is not None
+    [sent] = history(owner_engine, worlds.a.tenant_id, "email.sent")
+    assert sent.data["purpose"] == "password_reset"
+
+
+def _headers(response: Any) -> dict[str, str]:
+    return {k: v for k, v in response.headers.items() if k != "X-Request-ID"}
+
+
+def test_a_slow_mail_server_does_not_hold_up_the_answer(app: Flask, worlds: TwoTenants) -> None:
+    answered: list[bool] = []
+    response: Any = None
+    # Records, at the moment the message is handed to SMTP, whether the client already
+    # holds the full answer.
+    outbox(app).on_send.append(lambda _message: answered.append(response is not None))
+
+    response = _start_reset(app, worlds.a.email)
+    assert response.status_code == 204
+    assert answered == []
+    response.close()
+
+    assert answered == [True]
+    assert len(outbox(app).messages) == 1
+
+
+def test_a_failure_after_the_answer_is_logged_without_details(
+    app: Flask,
+    worlds: TwoTenants,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def broken(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError(f"cannot issue for {worlds.a.email}")
+
+    monkeypatch.setattr(accounts, "issue_password_reset", broken)
+    caplog.set_level(logging.INFO, logger="bos.accounts")
+
+    response = _start_reset(app, worlds.a.email)
+    assert response.status_code == 204
+    response.close()  # must not raise
+
+    assert outbox(app).messages == []
+    assert "password reset email not issued: error=RuntimeError" in caplog.text
+    assert worlds.a.email not in caplog.text
+
+
+def test_reset_requests_are_limited_to_ten_per_client_per_hour(
+    app: Flask, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    client = "198.51.100.9"
+    for n in range(MAX_RESET_REQUESTS_PER_IP):
+        ok(_request_reset(app, f"probe-{n}@example.test", client_ip=client), 204)
+
+    # Over the limit: answered the same way, and nothing is sent even to a known address.
+    ok(_request_reset(app, worlds.a.email, client_ip=client), 204)
+    assert outbox(app).messages == []
+    # The refused request did not use up one of the address's own three.
+    assert owner_value(owner_engine, "SELECT count(*) FROM login_attempts") == 2 * 10
+
+    # Another client is not affected...
+    ok(_request_reset(app, worlds.a.email, client_ip="198.51.100.10"), 204)
+    assert len(outbox(app).messages) == 1
+    # ...and the limit lifts after an hour.
+    owner_sql(owner_engine, "UPDATE login_attempts SET at = at - interval '61 minutes'")
+    ok(_request_reset(app, worlds.a.email, client_ip=client), 204)
+    assert len(outbox(app).messages) == 2
 
 
 def test_completing_a_reset_sets_the_password_and_ends_every_session(

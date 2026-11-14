@@ -1,6 +1,7 @@
 """Sending email over plain SMTP (research R8) and recording every attempt (R27).
 
-Email is used only for password-reset links in M0, and is sent inline. ``Mailer.send`` never
+Email is used only for password-reset links in M0, and is sent in the API process (after the
+answer to the reset request has gone out, security.md F-04). ``Mailer.send`` never
 raises: it returns whether the message was handed to the SMTP server, and writes
 ``email.sent`` or ``email.failed`` to the recipient business's history. The history holds the
 purpose, the recipient's domain and, on failure, the error's class name: never the address,

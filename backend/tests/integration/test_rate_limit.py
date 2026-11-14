@@ -20,6 +20,7 @@ from app.core.rate_limit import (
     MAX_FAILURES_PER_IDENTIFIER,
     MAX_FAILURES_PER_IP,
     MAX_RESET_EMAILS,
+    MAX_RESET_REQUESTS_PER_IP,
     RateLimiter,
 )
 from app.core.tenancy import enter_tenant
@@ -258,3 +259,38 @@ def test_reset_requests_never_count_as_sign_in_failures(limiter: RateLimiter, db
     other = f"fresh-{uuid.uuid4().hex[:8]}@example.test"
     _fail(limiter, db, other, None, MAX_FAILURES_PER_IDENTIFIER)
     assert limiter.take_reset_email(db, other, None)
+
+
+def test_reset_requests_are_limited_to_ten_per_client_address_per_hour(
+    limiter: RateLimiter, db: Session, clock: Clock
+) -> None:
+    ip = _ip()
+    for _ in range(MAX_RESET_REQUESTS_PER_IP):
+        assert limiter.take_reset_request_from(db, ip)
+        clock.advance(minutes=5)
+
+    assert not limiter.take_reset_request_from(db, ip)
+    assert limiter.take_reset_request_from(db, _ip())
+
+    # Requests at 0..45 minutes; at 60 minutes and a second the first one has expired.
+    clock.now = START + timedelta(hours=1, seconds=1)
+    assert limiter.take_reset_request_from(db, ip)
+    assert not limiter.take_reset_request_from(db, ip)
+
+
+def test_client_and_address_reset_limits_are_counted_apart(
+    limiter: RateLimiter, db: Session
+) -> None:
+    ip = _ip()
+    email = f"apart-{uuid.uuid4().hex[:8]}@example.test"
+    for _ in range(MAX_RESET_REQUESTS_PER_IP):
+        assert limiter.take_reset_request_from(db, ip)
+
+    # A client over its limit has not used up any address's emails, and an address over its
+    # limit has not used up any client's requests.
+    for _ in range(MAX_RESET_EMAILS):
+        assert limiter.take_reset_email(db, email, ip)
+    assert not limiter.take_reset_email(db, email, _ip())
+    assert limiter.take_reset_request_from(db, _ip())
+    # Neither counts towards a sign-in block for the client address.
+    assert not limiter.sign_in_blocked(db, email, ip)
