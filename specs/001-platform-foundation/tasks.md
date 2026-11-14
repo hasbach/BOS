@@ -221,7 +221,7 @@ Web application: `backend/` (Flask API) and `frontend/` (Next.js PWA) at the rep
 - [x] T088 [P] Measure SC-009 with Lighthouse mobile throttling on sign-in, home, employees, stores and settings; record results in `specs/001-platform-foundation/checklists/performance.md`; fix anything over 3 seconds
 - [x] T089 [P] Security review against the spec: no secret, token or link is logged, stored in plain text or returned after creation; cookies have the required flags; uniform sign-in errors; `.env` is git-ignored; scan the repository for committed secrets; record in `specs/001-platform-foundation/checklists/security.md`
 - [x] T090 Run the full quickstart (`specs/001-platform-foundation/quickstart.md`): all automated suites with captured output, then manual scenarios 1–5 in English and Arabic, timing business setup, owner activation and employee invitation against SC-001 and SC-002; record each step in `specs/001-platform-foundation/checklists/exit-gate.md`
-- [ ] T091 Review M0 against the Definition of Done in the constitution and the product brief section 11; list any gaps in `specs/001-platform-foundation/checklists/exit-gate.md` and present to the product owner for exit-gate approval
+- [x] T091 Review M0 against the Definition of Done in the constitution and the product brief section 11; list any gaps in `specs/001-platform-foundation/checklists/exit-gate.md` and present to the product owner for exit-gate approval
 
 ---
 

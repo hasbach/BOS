@@ -218,3 +218,45 @@ The development database now holds the businesses this run created ("T090 Warm .
 the two demo businesses were only read (plus the demo owner's own sign-in sessions and the sign-in history entries that come with them).
 Everything started was stopped: API (5100), web (3400, 3410), PostgreSQL via `local_db.py stop`; no Edge process remains.
 The user's dev server on 3100 was not touched. Nothing was committed.
+
+## T091 — M0 against the Definition of Done
+
+Reviewed 2026-11-14 on commit `0304d7f`, against the constitution ("Development Workflow & Quality Gates") and section 11 of
+the product brief, plus the M0 exit gate in brief section 9.2 ("Multi-tenant isolation tests pass").
+
+| Gate | Status | Evidence / gap |
+|---|---|---|
+| M0 exit gate: multi-tenant isolation tests pass | **Met** | Backend 1032 tests incl. `tests/isolation/` (RLS, scoped functions, route-coverage harness, uniform answers for foreign ids); security.md: no critical findings |
+| Spec, plan, tasks: no unresolved critical contradictions | **Met, with two deviations to record** | `speckit-analyze` before implementation; deviations kept in tasks.md: T021 (ORM models) not built, plain SQL used throughout (plan still mentions models); T036's Playwright CI job not added |
+| Migrations and rollback documented; tests executed | **Met** | `0001_platform_foundation.py` with `downgrade()`; README "Migrations" and `backend/migrations/README.md`; every test run upgrades then downgrades to base (`tests/conftest.py`) |
+| Endpoints validated and permission-enforced; no cross-tenant leakage | **Met** | Contract tests validate every response against `openapi.yaml` and fail on unlisted routes; permission and store-scope tests; `access.denied_*` audit. Open security items below are not leaks of another business's data |
+| Mobile flow demonstrated in Arabic and English | **Partly met** | Automated and scripted on a 360×740 phone viewport in both languages (Playwright 18/18, T090 scenarios 1–5). **Not yet shown on a real phone by a person**, and the Arabic wording has not been read by a native speaker |
+| Error, loading, empty states and recoverability | **Met** | ux-pass.md; a11y e2e "errors and offline" (load error, offline notice, failed save, 0 axe violations); session-ended state (P1) |
+| Audit events for stock, financial and permission changes | **Met for M0** | Role, store-access, deactivation, invitation, sign-in/session, store and settings changes (`user.roles_changed`, `user.deactivated`, `store.*`, `tenant.settings_changed` incl. the USD/LBP rate and delivery fee). No stock or money records exist yet (M1/M3) |
+| Operational logs and failure/retry visible | **Met for M0** | Request log with request id (path only, no secrets), error log, mailer failures; failed saves and offline shown to the person. No monitoring yet (M7) |
+| README: startup, env template, seed, demo sign-in, tests | **Met** | README sections Configuration, Run with Docker / without Docker, Migrations, Demo data and demo sign-ins, Operator account, Tests, Phone demo |
+| No credentials or customer data committed | **Met** | Only `.env.example` tracked; history scan clean (security.md item 25) |
+| Scope within the milestone | **Met** | No catalog, orders, WhatsApp, AI or WooCommerce code; additions beyond tasks were fixes found by reviews (security headers, server rendering for SC-009, open-app access) |
+| CI (an M0 deliverable) | **Not met** | `.github/workflows/ci.yml` exists (backend lint, format, mypy, pytest; frontend lint, typecheck, unit tests) but has **never run**: there is no remote repository. No Playwright job |
+| Docker Compose path | **Not checked since day 1** | Backend container verified 2026-11-10; the `web` image never built on this network (T001/T003/T006/T008 stay open for that reason). All later work ran on the no-Docker path |
+
+### Open items for the product owner
+
+Decisions:
+1. **F-04** (Medium): a password-reset request takes measurably longer for a registered email, so timing reveals whether an email is registered. Fix (equalise the work, or send in the background) or accept for the pilot.
+2. **F-09** (Low): accepting an invitation answers "this phone/email is already used" when the contact belongs to anyone on BOS, so an owner can learn that a number is registered elsewhere. Accept, or change the wording/flow.
+3. **Real-phone check**: a person signs in on a real phone in both languages (SC-001/002 timed by hand, SC-006, SC-009 on real mobile data, install to home screen). SC-009 met only on the simulated mobile profile (0.92–1.2 s).
+4. **CI**: create the GitHub remote so CI runs (and add the Playwright job), or accept local runs as the M0 evidence.
+
+Carried forward (no decision needed now; target milestone in brackets):
+- F-08 production serving (gunicorn behind TLS) and F-12 SMTP STARTTLS [M7, before any live use].
+- F-11 refuse a weak or `CHANGE_ME` secret key at start-up; F-15 larger common-password list [M1, small].
+- F-10 dev-only npm advisories in the lint chain [routine update].
+- F-06 follow-up: rotate the local secret key and database password used during development [before any shared deploy].
+- `me.stores` can go stale in an open app until the next screen change [M1, with catalog store filters].
+- Development database holds e2e and run-through test businesses [clean-up script, M1].
+- History filter arrow keys (F12) [M1]; P3 wording "already used" vs "no longer valid"; P4 no service worker under `next dev` (by design).
+- tasks.md housekeeping: close T021 as "not built by design" and update plan.md; T001/T003/T006/T008/T036 close when the Docker web image builds and CI runs.
+
+**Recommendation:** approve the M0 exit gate with items 1–2 decided and items 3–4 scheduled; none blocks M1 work, which adds no
+public sign-in surface. Exit-gate approval: _pending product owner_.
