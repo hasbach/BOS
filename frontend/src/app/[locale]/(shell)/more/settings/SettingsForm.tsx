@@ -13,7 +13,8 @@ import { LinkButton } from "@/components/LinkButton";
 import { Loading } from "@/components/Loading";
 import { Screen, ScreenBody, ScreenFooter, StatusHeader } from "@/components/Screen";
 import { SegmentedControl } from "@/components/SegmentedControl";
-import { api, isApiError } from "@/lib/api";
+import { SessionEnded } from "@/components/SessionEnded";
+import { api, isApiError, isSessionEnded } from "@/lib/api";
 import type { Business, BusinessChange } from "@/lib/business";
 import { errorMessage, fieldErrorMessageKey } from "@/lib/errors";
 import { FEE_RULE, RATE_RULE, formatMoney, parseMoney } from "@/lib/money";
@@ -83,6 +84,7 @@ function Loader({ initial: seed }: { initial?: Seed<Business> }) {
   }, [attempt, seeded]);
 
   if (state.k === "error") {
+    if (isSessionEnded(state.error)) return <SessionEnded />;
     if (isApiError(state.error) && state.error.code === "forbidden") return <NotAllowed />;
     return (
       <Screen>

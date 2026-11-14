@@ -137,7 +137,7 @@ estimates, not a measurement with people on a real phone.
 | SC-002 invite to employee on starting tab under 2 min | This run: 4.0 s worst case scripted; human estimate about 2 min, link hand-over excluded | **Met** for the app; borderline when a person types; **needs real device / real people** |
 | SC-003 isolation, 100% refused | `backend/tests/isolation/` (RLS, route coverage, scoped functions, per-story route tests) inside the 974 passing tests; e2e `us1-activation` step 10; this run scenario 2 | **Met** (automated). Two small distinguishing signals for foreign staff ids with unusual requests (P2) |
 | SC-004 permission refusals, 100% | `backend/tests/unit/test_permissions.py` and the permission cases of every isolation route test; this run 3.3, 3.7, 3.10 | **Met** (automated) |
-| SC-005 access change effective on the next action | Backend `test_staff.py` (roles/stores/deactivation take effect on the next request, sessions ended), e2e `us2-staff` (`/me` and 401 after the change); this run: server side effective at once | **Met at the API / server level; not met in the open app screen** (P1): the already-open tab bar and screens only react when the page is loaded again |
+| SC-005 access change effective on the next action | Backend `test_staff.py` (roles/stores/deactivation take effect on the next request, sessions ended), e2e `us2-staff` (`/me` and 401 after the change); this run: server side effective at once | **Met** after the P1 fix: server side at once; the open app follows on the next screen change or action, and goes to sign-in after deactivation (e2e `open-app-access`, en and ar, no reload) |
 | SC-006 usable in en and ar at 360 px, no horizontal scroll | `e2e/a11y.spec.ts` (0 axe violations, no horizontal scroll, 44 px targets, both languages), e2e `us4-shell`; `checklists/ux-pass.md`; this run: 0 horizontal-scroll hits, RTL looked at by eye on three screenshots (owner home, History, store-deactivation sheet), the rest by the script and the a11y suite | **Met** on emulated Edge 360 px; **needs real device** for a phone's own browser |
 | SC-007 double submit gives one business / account | Backend `test_idempotency.py` (same key returns the same resource, including `test_concurrent_duplicates_create_once_and_both_get_the_same_resource`, and the operator-setup case) and the acceptance cases in `test_auth.py`/`test_staff.py` | **Met** (automated); not exercised by hand in this run |
 | SC-008 every FR-032 event in history with person and time | `backend/tests/integration/test_audit_completeness.py`, `test_audit_api.py`, e2e `us4-shell`; `checklists/us4.md`; this run: the History screen showed the event types listed above with the right actor and Beirut time | **Met** (automated and observed). Exception to look at: P2, cross-business staff ids leave no `access.denied_tenant` entry |
@@ -160,6 +160,7 @@ is refused or answered with the new access).
   (`f3-profile-deactivated`). A full page load goes to `/en/sign-in`.
 - Why the e2e suites pass: they call `/me` (401 or new tabs) and then reload; none taps through the open app.
 - Not changed (verification task).
+- **Fixed** (frontend): every 401/403 "session ended" answer from any screen goes to sign-in centrally (`lib/api.ts` `onApiRefusal`, `SessionGuard`), and `/me` is asked again on every screen change and after a 403 `forbidden` (one in flight, plus one follow-up when an action comes while it is on its way) and on window focus/visibility (at most once per 3 s); no timer; tests `tests/shell/open-app-access.test.tsx`, e2e `e2e/open-app-access.spec.ts` (no reload).
 
 **P2 — Cross-business staff ids can be told apart from missing ids in two small ways (SC-003, FR-032).** Severity: low.
 - With any request the screens send, a foreign staff id and a made-up id get identical answers (404 `not_found`):
@@ -173,6 +174,7 @@ is refused or answered with the new access).
   (`f4.cjs`: 6 requests, 0 entries; 2 logo requests, 2 entries). `request_context.not_found_in_tenant` says both cases
   "must not be told apart" and are "recorded as `access.denied_tenant`".
 - Not root-caused here; the 404 for foreign staff ids happens before the staff handler's validation and audit code.
+- **Fixed** (security.md F-16): the two PATCH routes now find the record in the business before checking the body; tests `tests/isolation/test_uniform_answers.py` (58); the password-reset audit gap did not reproduce in code and is pinned by a test.
 
 **P3 — Quickstart wording that does not match the app** (informational): step 1.5 expects "link no longer valid" but
 a used link says "This link was already used" (a revoked/expired one says "no longer valid"); step 3.4 asked to "remove the sales role" but a person must keep one role.
@@ -188,6 +190,7 @@ whether Edge/Chrome offers the install on `localhost` without a worker.
 when the file is chosen, but "Save store" stays enabled and creates the store **without** a logo and without a second message
 (`follow-notes.json`: stores 1 -> 2 -> 3). Matches "refused with clear messages"; noted because it leaves a store the
 owner may think has a logo.
+- **Fixed**: a refused logo now blocks "Save store" like any other field ("1 thing to fix", focus on Choose logo with the message), and Remove logo clears it to save without one; tests in `tests/stores/new.test.tsx`.
 
 ## Documentation fixes
 

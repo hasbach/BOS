@@ -1,11 +1,11 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { usePathname, useRouter } from "@/i18n/navigation";
-import { ApiError, isApiError } from "@/lib/api";
+import { ApiError, isApiError, isSessionEnded, onApiRefusal } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { MeContext, MeSetterContext, OpsMeContext, SIGN_IN_CODES, loadMe, loadOpsMe } from "@/lib/session";
 import type { Me, OpsMe } from "@/lib/types";
@@ -25,6 +25,11 @@ export const IDENTITY_ATTEMPT_TIMEOUT_MS = 7_000;
 export const IDENTITY_ATTEMPTS = 2;
 /** Worst case before the error state with Try again shows. */
 export const IDENTITY_TIMEOUT_MS = IDENTITY_ATTEMPT_TIMEOUT_MS * IDENTITY_ATTEMPTS;
+/**
+ * Coming back to the window or the tab asks GET /me again at most once per this interval (focus and
+ * visibility events come in bursts). Moving between screens and a 403 always ask (SC-005).
+ */
+export const ME_REFRESH_MIN_INTERVAL_MS = 3_000;
 
 interface Flight<T> {
   promise: Promise<T>;
@@ -160,15 +165,109 @@ function useIdentity<T>(load: (signal: AbortSignal) => Promise<T>, signInPath: s
     setAttempt((n) => n + 1);
   }, []);
 
-  const replace = useCallback((value: T) => setState({ k: "ready", value }), []);
+  // An identical answer keeps the same object, so a refresh that changed nothing renders nothing.
+  const replace = useCallback(
+    (value: T) => setState((prev) => (prev.k === "ready" && JSON.stringify(prev.value) === JSON.stringify(value) ? prev : { k: "ready", value })),
+    [],
+  );
 
   return { state, retry, replace };
 }
 
 /**
+ * Asks GET /me again on the person's next action, so a role, store or deactivation change made by
+ * someone else shows in the already-open app (SC-005, FR-017). There is no timer.
+ * - "action": every move between screens (tab tap, link, back) and every 403 `forbidden` answer. Always
+ *   asks; while a request is on its way, one more is sent after it, so the latest action is covered.
+ * - "focus": the window or tab comes back into view. At most once per ME_REFRESH_MIN_INTERVAL_MS, and
+ *   not while a request is on its way.
+ * The new answer replaces the person in context; an answer that says the session is over ends it.
+ */
+function useMeRefresh(active: boolean, replace: (me: Me) => void, endSession: () => void) {
+  const pathname = usePathname();
+  const inFlight = useRef(false);
+  const again = useRef(false);
+  const lastAt = useRef<number | null>(null);
+  const activeRef = useRef(active);
+  const shownPath = useRef(pathname);
+
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+
+  // The person in context was just loaded (by the server or the guard): a page load's own focus event
+  // must not ask again straight away.
+  useEffect(() => {
+    lastAt.current = Date.now();
+  }, []);
+
+  const refresh = useCallback(
+    (reason: "action" | "focus") => {
+      if (!activeRef.current) return;
+      if (inFlight.current) {
+        if (reason === "action") again.current = true;
+        return;
+      }
+      const now = Date.now();
+      if (reason === "focus" && lastAt.current !== null && now - lastAt.current < ME_REFRESH_MIN_INTERVAL_MS) return;
+      const send = () => {
+        inFlight.current = true;
+        again.current = false;
+        lastAt.current = Date.now();
+        loadMe()
+          .then(
+            (me) => {
+              if (activeRef.current) replace(me);
+            },
+            (error: unknown) => {
+              // Ended: go to sign-in. Anything else (no connection, a server error): keep what is shown.
+              if (isSessionEnded(error)) endSession();
+            },
+          )
+          .finally(() => {
+            inFlight.current = false;
+            // An action came while this one was on its way: its answer may predate the change.
+            if (again.current && activeRef.current) send();
+          });
+      };
+      send();
+    },
+    [replace, endSession],
+  );
+
+  // The next move between screens. The first render (seeded or just loaded) does not ask again.
+  useEffect(() => {
+    if (shownPath.current === pathname) return;
+    shownPath.current = pathname;
+    refresh("action");
+  }, [pathname, refresh]);
+
+  // Coming back to the window or the tab.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh("focus");
+    };
+    const onFocus = () => refresh("focus");
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [refresh]);
+
+  return refresh;
+}
+
+/** True for operator API paths (handled by OpsGuard, never by the business guard). */
+const isOpsPath = (path: string) => path === "/ops" || path.startsWith("/ops/");
+
+/**
  * Guards every signed-in page: loads GET /me, sends visitors without a session to sign-in, and
  * moves the page to the user's saved language when the URL differs (FR-027a). `initialMe` is GET /me
  * as the server already loaded it for this page (shell layout); the guard then does not load it again.
+ * While the page is open, any request answered with "session ended" sends the person to sign-in, and
+ * GET /me is asked again on their next action (useMeRefresh).
  */
 export function SessionGuard({ children, initialMe }: { children: ReactNode; initialMe?: Me }) {
   const t = useTranslations();
@@ -176,14 +275,39 @@ export function SessionGuard({ children, initialMe }: { children: ReactNode; ini
   const pathname = usePathname();
   const router = useRouter();
   const { state, retry, replace } = useIdentity<Me>(loadMe, "/sign-in", SIGN_IN_CODES, initialMe);
+  const [ended, setEnded] = useState(false);
+  const endedRef = useRef(false);
+
+  const endSession = useCallback(() => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    setEnded(true);
+    router.replace("/sign-in");
+  }, [router]);
+
+  const ready = state.k === "ready" && !ended;
+  const refresh = useMeRefresh(ready, replace, endSession);
+
+  useEffect(
+    () =>
+      onApiRefusal(({ path, error }) => {
+        // Before the first answer the guard's own load decides; operator requests are OpsGuard's.
+        if (!ready || isOpsPath(path)) return;
+        if (isSessionEnded(error)) endSession();
+        else if (error.status === 403 && error.code === "forbidden") refresh("action");
+      }),
+    [ready, endSession, refresh],
+  );
 
   const savedLocale = state.k === "ready" ? state.value.user.locale : null;
   const mismatch = savedLocale !== null && savedLocale !== locale;
 
   useEffect(() => {
-    if (mismatch && savedLocale) router.replace(pathname, { locale: savedLocale });
-  }, [mismatch, savedLocale, pathname, router]);
+    if (mismatch && savedLocale && !ended) router.replace(pathname, { locale: savedLocale });
+  }, [mismatch, savedLocale, pathname, router, ended]);
 
+  // The session is over: nothing of the screen stays (no stale data, no "couldn't reach" error).
+  if (ended) return <Loading label={t("shell.sessionEnded")} />;
   if (state.k === "error") return <ErrorState message={errorMessage(t, state.error)} onRetry={retry} />;
   if (state.k === "loading" || mismatch) return <Loading label={t("shell.checking")} />;
   return (
@@ -195,11 +319,32 @@ export function SessionGuard({ children, initialMe }: { children: ReactNode; ini
 
 const OPS_REDIRECT: ReadonlySet<string> = new Set(["unauthenticated", "forbidden"]);
 
-/** Guards the operator pages: loads GET /ops/me and sends visitors to operator sign-in. */
+/**
+ * Guards the operator pages: loads GET /ops/me and sends visitors to operator sign-in. While the page is
+ * open, an operator request answered 401 `unauthenticated` (the operator session ended) does the same.
+ */
 export function OpsGuard({ children }: { children: ReactNode }) {
   const t = useTranslations();
+  const router = useRouter();
   const { state, retry } = useIdentity<OpsMe>(loadOpsMe, "/ops/sign-in", OPS_REDIRECT);
+  const [ended, setEnded] = useState(false);
+  const endedRef = useRef(false);
+  const ready = state.k === "ready";
 
+  useEffect(
+    () =>
+      onApiRefusal(({ path, error }) => {
+        if (!ready || endedRef.current || !isOpsPath(path) || path.startsWith("/ops/auth/")) return;
+        if (error.status === 401 && error.code === "unauthenticated") {
+          endedRef.current = true;
+          setEnded(true);
+          router.replace("/ops/sign-in");
+        }
+      }),
+    [ready, router],
+  );
+
+  if (ended) return <Loading label={t("shell.sessionEnded")} />;
   if (state.k === "error") return <ErrorState message={errorMessage(t, state.error)} onRetry={retry} />;
   if (state.k === "loading") return <Loading label={t("shell.checking")} />;
   return <OpsMeContext.Provider value={state.value}>{children}</OpsMeContext.Provider>;

@@ -99,6 +99,52 @@ describe("add store", () => {
     expect(screen.queryByText(/larger than 2 MB/)).not.toBeInTheDocument();
   });
 
+  it("does not save the store while a refused logo is shown, and moves focus to the logo (P5)", () => {
+    const calls = storesApi([], () => reply(201, STORE_B));
+    renderAs(<NewStore />);
+    type("Store name", "Store B");
+    chooseLogo(imageFile("big.png", "image/png", 3 * 1024 * 1024));
+    save();
+    expect(writes(calls)).toHaveLength(0);
+    expect(screen.getByText("1 thing to fix before you continue.")).toBeInTheDocument();
+    const choose = screen.getByRole("button", { name: /Choose logo/ });
+    expect(choose).toHaveFocus();
+    expect(choose).toHaveAccessibleDescription("This image is larger than 2 MB. Choose a smaller one.");
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("counts a refused logo with a missing name", () => {
+    const calls = storesApi([]);
+    renderAs(<NewStore />);
+    chooseLogo(imageFile("a.gif", "image/gif"));
+    save();
+    expect(writes(calls)).toHaveLength(0);
+    expect(screen.getByText("2 things to fix before you continue.")).toBeInTheDocument();
+  });
+
+  it("saves without a logo once the refused file is removed", async () => {
+    const calls = storesApi([], () => reply(201, STORE_B));
+    renderAs(<NewStore />);
+    type("Store name", "Store B");
+    chooseLogo(imageFile("a.gif", "image/gif"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove logo" }));
+    expect(screen.queryByText(/not a PNG/)).not.toBeInTheDocument();
+    save();
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/more/stores"));
+    expect(writes(calls)).toHaveLength(1);
+  });
+
+  it("saves with the logo once a valid file replaces the refused one", async () => {
+    const calls = storesApi([], () => reply(201, STORE_B));
+    renderAs(<NewStore />);
+    type("Store name", "Store B");
+    chooseLogo(imageFile("a.gif", "image/gif"));
+    chooseLogo(imageFile("ok.png"));
+    save();
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    await waitFor(() => expect(lastUpload()).toMatchObject({ url: "/api/v1/stores/st-b/logo" }));
+  });
+
   it("removes a chosen logo before saving", async () => {
     renderAs(<NewStore />);
     chooseLogo(imageFile("ok.png"));

@@ -12,8 +12,9 @@ import { Chip } from "@/components/Chip";
 import { CheckIcon, LaptopIcon, LogoutIcon, PhoneIcon } from "@/components/icons";
 import { Loading } from "@/components/Loading";
 import { Screen, ScreenBody, ScreenFooter, StatusHeader, screenStyles } from "@/components/Screen";
+import { SessionEnded } from "@/components/SessionEnded";
 import { Sheet } from "@/components/Sheet";
-import { api } from "@/lib/api";
+import { api, isSessionEnded } from "@/lib/api";
 import { currentFirst, deviceLabel } from "@/lib/devices";
 import type { Session } from "@/lib/devices";
 import { writeFailureMessage } from "@/lib/errors";
@@ -21,7 +22,7 @@ import { daysAgo, formatDateTime, formatClock } from "@/lib/time";
 
 import styles from "../account.module.css";
 
-type Load = { k: "loading" } | { k: "error" } | { k: "ready"; sessions: Session[] };
+type Load = { k: "loading" } | { k: "ended" } | { k: "error" } | { k: "ready"; sessions: Session[] };
 type Notice = { tone: BannerTone; icon: "check" | "alert"; text: string };
 
 /** Screens 115 to 118: the person's own signed-in devices; end one, or all the others. */
@@ -39,8 +40,10 @@ export function DevicesScreen() {
     const controller = new AbortController();
     api.get<Session[]>("/me/sessions", { signal: controller.signal }).then(
       (sessions) => setState({ k: "ready", sessions: currentFirst(sessions) }),
-      () => {
-        if (!controller.signal.aborted) setState({ k: "error" });
+      (error: unknown) => {
+        if (controller.signal.aborted) return;
+        // A 401 is not a connection problem: the guard is taking the person to sign-in.
+        setState(isSessionEnded(error) ? { k: "ended" } : { k: "error" });
       },
     );
     return () => controller.abort();
@@ -63,6 +66,7 @@ export function DevicesScreen() {
       </Screen>
     );
   }
+  if (state.k === "ended") return <SessionEnded />;
   if (state.k === "error") {
     return (
       <Screen>

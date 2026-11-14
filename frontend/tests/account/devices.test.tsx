@@ -140,6 +140,13 @@ describe("Devices (screens 115 to 118)", () => {
     expect(screen.queryByText(/Signed out on 2 other devices/)).not.toBeInTheDocument();
   });
 
+  it("says the session has ended, not that BOS could not be reached, when the list is answered 401 (P1)", async () => {
+    mockApi(() => apiError(401, "unauthenticated"));
+    renderMe(<DevicesScreen />);
+    expect(await screen.findByText("Your session has ended. Taking you to sign in…")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn’t load your devices")).not.toBeInTheDocument();
+  });
+
   it("offers Try again when the list cannot be loaded", async () => {
     let fail = true;
     mockApi(() => (fail ? networkFailure() : reply(200, SESSIONS)));

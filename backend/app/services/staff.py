@@ -266,6 +266,17 @@ class MemberChange:
     status: Literal["active", "inactive"] | None = None
 
 
+def require_member(db: Session, user_id: uuid.UUID) -> None:
+    """NotFound unless this business has the user (row-level security hides all others).
+
+    Routes call it before they look at the request body, so a made-up id and another
+    business's id are answered, and recorded, the same way whatever the body says.
+    """
+    found = db.execute(text("SELECT 1 FROM users WHERE id = :id"), {"id": user_id}).first()
+    if found is None:
+        raise NotFound("user", user_id)
+
+
 def _target(db: Session, actor: Actor, user_id: uuid.UUID) -> Any:
     """A user of this business other than the actor; owners only for owners."""
     row = db.execute(

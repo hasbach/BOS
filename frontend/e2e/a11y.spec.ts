@@ -1,8 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { BrowserContext, Page } from "@playwright/test";
+import type { Browser, BrowserContext, Page } from "@playwright/test";
 
 import { createBusinessApi, expect, me, newApi, newContext, operatorSignInApi, operatorSignInUi, rebase, test, text, unique, uniquePhone, userSignInApi } from "./fixtures";
-import type { Locale } from "./fixtures";
+import type { E2eEnv } from "./env";
+import type { Locale, NewBusiness } from "./fixtures";
 
 // Task T087: the accessibility pass over every M0 screen, in the language of the project (en, ar), at
 // 360 x 740. On each screen: axe (WCAG 2.2 A/AA and best practice) in light mode, axe colour contrast
@@ -133,15 +134,76 @@ function report(locale: string): void {
   for (const line of [...focusProblems, ...smallTargets]) console.log(`a11y ${locale} ${line}`);
 }
 
-test("every M0 screen passes axe, shows focus and keeps sheets accessible", async ({ browser, baseURL, env, locale }) => {
-  test.setTimeout(900_000);
+// The pass is split into four tests (one screen group each, in each language project) so each has its
+// own time budget: on the slow development machine every first page load of a signed-in screen is a
+// server render of several seconds, and one walk over every screen came close to a single test's limit.
+// Each test checks its own screens with the same rules and fails on its own serious findings.
+
+const TEST_TIMEOUT_MS = 600_000;
+
+test.beforeEach(() => {
+  findings.length = 0;
+  focusProblems.length = 0;
+  smallTargets.length = 0;
+});
+
+/** The same verdict as before, for the screens of this test only. */
+function verdict(locale: string, group: string): void {
+  report(`${locale} [${group}]`);
+  const blocking = findings.filter((f) => f.impact === "serious" || f.impact === "critical");
+  expect(blocking, "serious or critical axe violations").toEqual([]);
+  expect(focusProblems, "focusable elements without a visible focus indicator").toEqual([]);
+}
+
+interface Owner {
+  page: Page;
+  context: BrowserContext;
+  business: NewBusiness;
+  invitationId: string;
+  userId: string;
+  storeId: string;
+}
+
+/** A fresh business whose owner is signed in on a second device too and has one pending invitation. */
+async function ownerSetup(browser: Browser, origin: string, env: E2eEnv, lang: Locale, contexts: BrowserContext[]): Promise<Owner> {
+  const ops = await newApi(origin);
+  await operatorSignInApi(ops, env);
+  const business = await createBusinessApi(ops);
+  await ops.dispose();
+  const link = rebase(business.link, origin);
+
+  const context = await newContext(browser, origin, []);
+  contexts.push(context);
+  const accepted = await context.request.post("/api/v1/invitations/accept", {
+    data: { token: link.token, password: OWNER_PASSWORD, locale: lang },
+  });
+  expect(accepted.status(), "owner activation").toBe(200);
+  const otherDevice = await newApi(origin);
+  await userSignInApi(otherDevice, business.ownerPhoneInternational, OWNER_PASSWORD);
+  await otherDevice.dispose();
+  const invited = await context.request.post("/api/v1/staff/invitations", {
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    data: { name: `E2E Invitee ${unique()}`, phone: uniquePhone().national, roles: ["sales"], all_stores: true },
+  });
+  expect(invited.status(), "invite").toBe(201);
+  const invitationId = ((await invited.json()) as { invitation: { invitation_id: string } }).invitation.invitation_id;
+
+  const page = await context.newPage();
+  await page.goto(`/${lang}/more`);
+  await settled(page);
+  const mine = (await me(page)).body;
+  if (!mine) throw new Error("no /me for the owner");
+  return { page, context, business, invitationId, userId: mine.user.id, storeId: mine.stores[0]?.id ?? "" };
+}
+
+test("public pages and the operator console pass axe and show focus", async ({ browser, baseURL, env, locale }) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
   const origin = baseURL ?? "";
   const lang = locale as Locale;
   const t = (key: string, values?: Record<string, string>) => text(lang, key, values);
-  const requests: string[] = [];
   const contexts: BrowserContext[] = [];
   const context = async () => {
-    const created = await newContext(browser, origin, requests);
+    const created = await newContext(browser, origin, []);
     contexts.push(created);
     return created;
   };
@@ -197,30 +259,21 @@ test("every M0 screen passes axe, shows focus and keeps sheets accessible", asyn
     await operatorSignInUi(operator, lang, env);
     await check(operator, "ops businesses");
     await visit(operator, lang, "/ops/new", "ops new business");
+  } finally {
+    for (const created of contexts) await created.close();
+  }
+  verdict(lang, "public and operator");
+});
 
-    // ---- The owner, with a second signed-in device and one pending invitation -----------------------
-    const ownerContext = await context();
-    const accepted = await ownerContext.request.post("/api/v1/invitations/accept", {
-      data: { token: link.token, password: OWNER_PASSWORD, locale: lang },
-    });
-    expect(accepted.status(), "owner activation").toBe(200);
-    const otherDevice = await newApi(origin);
-    await userSignInApi(otherDevice, business.ownerPhoneInternational, OWNER_PASSWORD);
-    await otherDevice.dispose();
-    const invited = await ownerContext.request.post("/api/v1/staff/invitations", {
-      headers: { "Idempotency-Key": crypto.randomUUID() },
-      data: { name: `E2E Invitee ${unique()}`, phone: uniquePhone().national, roles: ["sales"], all_stores: true },
-    });
-    expect(invited.status(), "invite").toBe(201);
-    const invitationId = ((await invited.json()) as { invitation: { invitation_id: string } }).invitation.invitation_id;
+test("the owner's tab screens, More and Employees pass axe and show focus", async ({ browser, baseURL, env, locale }) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const origin = baseURL ?? "";
+  const lang = locale as Locale;
+  const t = (key: string, values?: Record<string, string>) => text(lang, key, values);
+  const contexts: BrowserContext[] = [];
 
-    const owner = await ownerContext.newPage();
-    await owner.goto(`/${lang}/more`);
-    await settled(owner);
-    const mine = (await me(owner)).body;
-    if (!mine) throw new Error("no /me for the owner");
-    const storeId = mine.stores[0]?.id ?? "";
-
+  try {
+    const { page: owner, invitationId, userId } = await ownerSetup(browser, origin, env, lang, contexts);
     for (const tab of ["sales", "packing", "delivery", "orders"]) await visit(owner, lang, `/${tab}`, `${tab} (coming soon)`);
     await visit(owner, lang, "/more", "more");
     await visit(owner, lang, "/more/employees", "employees");
@@ -228,8 +281,23 @@ test("every M0 screen passes axe, shows focus and keeps sheets accessible", asyn
     await owner.getByRole("button", { name: t("staff.form.submit") }).click();
     await expect(owner.getByRole("alert").first()).toBeVisible();
     await check(owner, "invite with errors", false);
-    await visit(owner, lang, `/more/employees/${mine.user.id}`, "employee detail");
+    await visit(owner, lang, `/more/employees/${userId}`, "employee detail");
     await visit(owner, lang, `/more/employees/invitations/${invitationId}`, "invitation detail");
+  } finally {
+    for (const created of contexts) await created.close();
+  }
+  verdict(lang, "tabs and employees");
+});
+
+test("the owner's Stores, Settings, History, Devices, Language and Profile pass axe and keep sheets accessible", async ({ browser, baseURL, env, locale }) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const origin = baseURL ?? "";
+  const lang = locale as Locale;
+  const t = (key: string, values?: Record<string, string>) => text(lang, key, values);
+  const contexts: BrowserContext[] = [];
+
+  try {
+    const { page: owner, storeId } = await ownerSetup(browser, origin, env, lang, contexts);
     await visit(owner, lang, "/more/stores", "stores");
     await visit(owner, lang, "/more/stores/new", "new store");
     await visit(owner, lang, `/more/stores/${storeId}`, "store detail");
@@ -244,8 +312,21 @@ test("every M0 screen passes axe, shows focus and keeps sheets accessible", asyn
     await visit(owner, lang, "/more/profile", "profile");
     await owner.getByLabel(t("profile.email"), { exact: true }).fill(`a11y-${unique()}@example.com`);
     await sheet(owner, owner.getByRole("button", { name: t("profile.save") }), "profile password sheet");
+  } finally {
+    for (const created of contexts) await created.close();
+  }
+  verdict(lang, "account and setup");
+});
 
-    // ---- Load error, offline notice and a save that did not go through ------------------------------
+test("a load error, the offline notice and a save that did not go through pass axe", async ({ browser, baseURL, env, locale }) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const origin = baseURL ?? "";
+  const lang = locale as Locale;
+  const t = (key: string, values?: Record<string, string>) => text(lang, key, values);
+  const contexts: BrowserContext[] = [];
+
+  try {
+    const { page: owner, context: ownerContext, business } = await ownerSetup(browser, origin, env, lang, contexts);
     // The saved settings come in the server's HTML (SC-009). The browser loads them itself when the page
     // comes back from the router's cache (the Back button), and that request is the one cut here.
     await owner.goto(`/${lang}/more/settings`);
@@ -270,11 +351,7 @@ test("every M0 screen passes axe, shows focus and keeps sheets accessible", asyn
     await check(owner, "profile offline, save failed", false);
     await ownerContext.setOffline(false);
   } finally {
-    report(lang);
     for (const created of contexts) await created.close();
   }
-
-  const blocking = findings.filter((f) => f.impact === "serious" || f.impact === "critical");
-  expect(blocking, "serious or critical axe violations").toEqual([]);
-  expect(focusProblems, "focusable elements without a visible focus indicator").toEqual([]);
+  verdict(lang, "errors and offline");
 });

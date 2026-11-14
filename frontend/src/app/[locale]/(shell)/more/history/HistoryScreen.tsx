@@ -32,8 +32,9 @@ import {
 import { LinkButton } from "@/components/LinkButton";
 import { Loading } from "@/components/Loading";
 import { Screen, ScreenBody, ScreenFooter, StatusHeader } from "@/components/Screen";
+import { SessionEnded } from "@/components/SessionEnded";
 import { Sheet } from "@/components/Sheet";
-import { api, isApiError } from "@/lib/api";
+import { api, isApiError, isSessionEnded } from "@/lib/api";
 import { EVENT_GROUPS, EVENT_ICONS, actorLabel, describeEntry, eventName } from "@/lib/audit";
 import type { AuditEntry, AuditPage, EventIcon } from "@/lib/audit";
 import { useMe } from "@/lib/session";
@@ -65,7 +66,7 @@ interface Filters {
 }
 const NO_FILTERS: Filters = { event: "", person: null };
 
-type Page = { k: "loading" } | { k: "forbidden" } | { k: "error" } | { k: "ready"; entries: AuditEntry[]; next: string | null };
+type Page = { k: "loading" } | { k: "forbidden" } | { k: "ended" } | { k: "error" } | { k: "ready"; entries: AuditEntry[]; next: string | null };
 type More = "idle" | "loading" | "error";
 
 function NotAllowed() {
@@ -110,7 +111,8 @@ function History() {
       (result) => setPage({ k: "ready", entries: result.items, next: result.next_cursor }),
       (error: unknown) => {
         if (controller.signal.aborted) return;
-        setPage(isApiError(error) && error.code === "forbidden" ? { k: "forbidden" } : { k: "error" });
+        if (isSessionEnded(error)) setPage({ k: "ended" });
+        else setPage(isApiError(error) && error.code === "forbidden" ? { k: "forbidden" } : { k: "error" });
       },
     );
     return () => controller.abort();
@@ -138,6 +140,7 @@ function History() {
   const bar = <AppBar title={h("title")} subtitle={me.business.name} backHref="/more" backLabel={t("common.back")} />;
   const filtered = filters.event !== "" || filters.person !== null;
 
+  if (page.k === "ended") return <SessionEnded />;
   if (page.k === "forbidden") return <NotAllowed />;
   if (page.k === "error") {
     return (

@@ -1,6 +1,12 @@
 // Typed fetch wrapper for the same-origin BOS API (/api/v1).
 // Success means the server answered 2xx and nothing else: a network failure, a non-2xx status
 // or an unreadable response always throws ApiError, so callers never show success by accident.
+//
+// Every refused answer (401/403) is also reported to the listeners registered with onApiRefusal, so the
+// guards can react centrally (SC-005): a session that has ended goes to sign-in from whichever screen
+// asked, and a permission refusal makes the business guard ask GET /me again. Screens still get the error.
+
+import { SIGN_IN_CODES } from "./identity";
 
 export const API_BASE = "/api/v1";
 
@@ -39,6 +45,51 @@ export function isConnectionError(value: unknown): boolean {
   return value instanceof ApiError && value.code === "network_error";
 }
 
+/**
+ * True when the answer means the business session is over (signed out elsewhere, deactivated, business
+ * suspended or not active): the person must sign in again. Never true for a request with no answer.
+ */
+export function isSessionEnded(value: unknown): boolean {
+  return value instanceof ApiError && (value.status === 401 || value.status === 403) && SIGN_IN_CODES.has(value.code);
+}
+
+/** A refused answer (401 or 403) to a request, with the API path that was asked (no query string). */
+export interface ApiRefusal {
+  path: string;
+  error: ApiError;
+}
+
+type RefusalListener = (refusal: ApiRefusal) => void;
+
+const refusalListeners = new Set<RefusalListener>();
+
+/** Calls `listener` for every 401/403 answer from any request; returns the function that stops it. */
+export function onApiRefusal(listener: RefusalListener): () => void {
+  refusalListeners.add(listener);
+  return () => {
+    refusalListeners.delete(listener);
+  };
+}
+
+function normalisePath(path: string): string {
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+/** Tells the listeners about a refused answer before it is thrown to the caller. */
+function refused(path: string, error: ApiError): ApiError {
+  if (error.status === 401 || error.status === 403) {
+    const refusal = { path: normalisePath(path), error };
+    for (const listener of [...refusalListeners]) {
+      try {
+        listener(refusal);
+      } catch {
+        // A listener's own failure must not change what the caller gets.
+      }
+    }
+  }
+  return error;
+}
+
 export type QueryValue = string | number | boolean | undefined;
 
 export interface RequestOptions {
@@ -54,7 +105,7 @@ export interface RequestOptions {
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
-  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const url = `${API_BASE}${normalisePath(path)}`;
   if (!query) return url;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -150,7 +201,7 @@ export async function apiRequest<T = void>(path: string, options: RequestOptions
     throw new ApiError({ status: response.status, code: "network_error" });
   }
 
-  if (!response.ok) throw readEnvelope(text, response.status);
+  if (!response.ok) throw refused(path, readEnvelope(text, response.status));
 
   return readSuccess<T>(response.status, text);
 }
@@ -206,7 +257,7 @@ export function apiUpload<T = void>(path: string, file: Blob, options: UploadOpt
       done();
       const text = typeof xhr.response === "string" ? xhr.response : "";
       try {
-        if (xhr.status < 200 || xhr.status >= 300) throw readEnvelope(text, xhr.status);
+        if (xhr.status < 200 || xhr.status >= 300) throw refused(path, readEnvelope(text, xhr.status));
         resolve(readSuccess<T>(xhr.status, text));
       } catch (error) {
         reject(error);

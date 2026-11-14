@@ -155,6 +155,10 @@ def revoke(invitation_id: uuid.UUID) -> ResponseReturnValue:
 @bp.patch("/staff/<uuid:user_id>")
 @require("staff.manage")
 def update(user_id: uuid.UUID) -> ResponseReturnValue:
+    # The employee is found in this business first: an invalid body must not tell a made-up
+    # id from another business's (404 and a recorded refusal for both), only then the body.
+    with _outcomes():
+        staff.require_member(request_db(), user_id)
     body = json_body()
     errors: dict[str, str] = {}
     roles = _roles(body, errors) if "roles" in body else None

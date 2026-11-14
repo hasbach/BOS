@@ -11,7 +11,8 @@ import { BanIcon, CheckIcon } from "@/components/icons";
 import { LinkButton } from "@/components/LinkButton";
 import { Loading } from "@/components/Loading";
 import { Screen, ScreenBody, ScreenFooter, StatusHeader } from "@/components/Screen";
-import { isApiError } from "@/lib/api";
+import { SessionEnded } from "@/components/SessionEnded";
+import { isApiError, isSessionEnded } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import type { Seed } from "@/lib/seed";
 import { STORES, logoUrl, storeInitials, useStoresList } from "@/lib/stores";
@@ -146,6 +147,7 @@ function Loader({ children, loadingFooter, initial }: LoaderProps) {
   const { state, reload } = useStoresList(initial);
 
   if (state.k === "error") {
+    if (isSessionEnded(state.error)) return <SessionEnded />;
     if (isApiError(state.error) && state.error.code === "forbidden") return <NotAllowedScreen />;
     return (
       <StatusScreen icon="wifioff" tone="warn" heading={t("loadError.title")} text={t("loadError.text")} alert>

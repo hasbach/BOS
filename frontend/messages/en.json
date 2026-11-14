@@ -161,7 +161,8 @@
     "signedInAs": "Signed in as",
     "signOut": "Sign out",
     "signingOut": "Signing out…",
-    "checking": "Checking your session…"
+    "checking": "Checking your session…",
+    "sessionEnded": "Your session has ended. Taking you to sign in…"
   },
   "ops": {
     "badge": "Beta staff",

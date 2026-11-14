@@ -114,6 +114,10 @@ def create_store() -> ResponseReturnValue:
 @bp.patch("/stores/<uuid:store_id>")
 @require("store.manage")
 def update_store(store_id: uuid.UUID) -> ResponseReturnValue:
+    # Found in this business first, so an invalid body cannot tell a made-up id from another
+    # business's (see the staff routes).
+    with _store_outcomes():
+        stores.get_store(request_db(), store_id)
     body = json_body()
     errors: dict[str, str] = {}
     name = text_field(body, "name", NAME_MAX, errors) if "name" in body else None

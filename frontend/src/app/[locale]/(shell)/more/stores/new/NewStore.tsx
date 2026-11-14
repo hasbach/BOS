@@ -39,6 +39,7 @@ function Form() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [banner, setBanner] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [logoFocus, setLogoFocus] = useState(0);
   // The store exists but its logo was refused: the screen turns into Edit store (screen 82).
   const [created, setCreated] = useState<{ store: Store; logoError: string } | null>(null);
   const [refused, setRefused] = useState<"gone" | "denied" | null>(null);
@@ -71,9 +72,13 @@ function Form() {
     event.preventDefault();
     if (busy) return;
     const trimmed = name.trim();
-    if (trimmed === "") {
-      setErrors({ name: t("stores.fe.name"), logo: errors.logo });
-      setBanner(t("stores.form.fix", { count: 1 }));
+    // A refused logo blocks saving like any other field (P5): the owner chooses another file or
+    // removes it, so a store is never created without the logo they think they added.
+    if (trimmed === "" || errors.logo) {
+      const nameError = trimmed === "" ? t("stores.fe.name") : undefined;
+      setErrors({ name: nameError, logo: errors.logo });
+      setBanner(t("stores.form.fix", { count: (nameError ? 1 : 0) + (errors.logo ? 1 : 0) }));
+      if (!nameError) setLogoFocus((n) => n + 1);
       return;
     }
 
@@ -135,7 +140,19 @@ function Form() {
             error={errors.wa}
             onChange={(event) => setWhatsapp(event.target.value)}
           />
-          <LogoField store={null} chosen={logo} error={errors.logo} disabled={busy} onPick={pick} onRemove={() => setLogo(null)} />
+          <LogoField
+            store={null}
+            chosen={logo}
+            error={errors.logo}
+            removable
+            focusRequest={logoFocus}
+            disabled={busy}
+            onPick={pick}
+            onRemove={() => {
+              setLogo(null);
+              setErrors((current) => ({ ...current, logo: undefined }));
+            }}
+          />
           <Banner>{t("stores.form.afterSave")}</Banner>
         </ScreenBody>
         <ScreenFooter>

@@ -22,6 +22,10 @@ export interface LogoFieldProps {
   /** An upload in progress (edit screen). */
   uploading?: { file: string; percent: number } | null;
   error?: string;
+  /** Offers Remove while an error is shown, so a refused file can be cleared and the form saved without one. */
+  removable?: boolean;
+  /** Each new value (above 0) moves focus to Choose logo, which reads out the error. */
+  focusRequest?: number;
   disabled?: boolean;
   onPick: (file: File) => void;
   onRemove: () => void;
@@ -47,12 +51,18 @@ function usePreview(file: File | null | undefined): string | null {
 }
 
 /** Screens 78 to 86: the logo block of the store form. */
-export function LogoField({ store, version = 0, chosen, uploading, error, disabled = false, onPick, onRemove, onCancel }: LogoFieldProps) {
+export function LogoField({ store, version = 0, chosen, uploading, error, removable = false, focusRequest = 0, disabled = false, onPick, onRemove, onCancel }: LogoFieldProps) {
   const t = useTranslations("stores.logo");
   const inputId = useId();
+  const errorId = useId();
   const input = useRef<HTMLInputElement>(null);
+  const chooseButton = useRef<HTMLDivElement>(null);
   const preview = usePreview(chosen);
   const has = Boolean(chosen) || Boolean(store?.has_logo);
+
+  useEffect(() => {
+    if (focusRequest > 0) chooseButton.current?.querySelector<HTMLButtonElement>("[data-logo-choose]")?.focus();
+  }, [focusRequest]);
 
   function onChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -122,17 +132,24 @@ export function LogoField({ store, version = 0, chosen, uploading, error, disabl
           {thumb}
           <div className={styles.grow}>{middle}</div>
         </div>
-        <div className={styles.actions}>
+        <div className={styles.actions} ref={chooseButton}>
           {uploading ? (
             <Button variant="ghost" size="small" onClick={onCancel}>
               <CloseIcon width={16} height={16} /> {t("cancel")}
             </Button>
           ) : (
             <>
-              <Button variant="ghost" size="small" disabled={disabled} onClick={() => input.current?.click()}>
+              <Button
+                variant="ghost"
+                size="small"
+                disabled={disabled}
+                data-logo-choose=""
+                aria-describedby={error ? errorId : undefined}
+                onClick={() => input.current?.click()}
+              >
                 <UploadIcon width={16} height={16} /> {has ? t("change") : t("choose")}
               </Button>
-              {has ? (
+              {has || (removable && error) ? (
                 <Button variant="ghost" size="small" disabled={disabled} onClick={onRemove}>
                   <CloseIcon width={16} height={16} /> {t("remove")}
                 </Button>
@@ -153,7 +170,7 @@ export function LogoField({ store, version = 0, chosen, uploading, error, disabl
         />
       </Card>
       {error ? (
-        <p className={styles.error} role="alert">
+        <p className={styles.error} role="alert" id={errorId}>
           <AlertIcon width={16} height={16} />
           <span>{error}</span>
         </p>
