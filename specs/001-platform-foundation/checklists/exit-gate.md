@@ -259,4 +259,4 @@ Carried forward (no decision needed now; target milestone in brackets):
 - tasks.md housekeeping: close T021 as "not built by design" and update plan.md; T001/T003/T006/T008/T036 close when the Docker web image builds and CI runs.
 
 **Recommendation:** approve the M0 exit gate with items 1–2 now fixed and items 3–4 scheduled; none blocks M1 work, which adds no
-public sign-in surface. Exit-gate approval: _pending product owner_.
+public sign-in surface. Exit-gate approval: **approved by the product owner on 2026-11-14**, after F-04 and F-09 were fixed. Still scheduled: the real-phone check (item 3) and the CI decision (item 4).

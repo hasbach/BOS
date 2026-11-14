@@ -305,7 +305,7 @@ T038 design/bos-screens.html (M0 additions) → approval
 - After Phase 2 (T037): show the RLS, scoped-function and route-coverage tests passing
 - Each design task before its screens are built
 - After each story: demonstrate in both languages before starting the next
-- After T091: product owner approves the M0 exit gate
+- After T091: product owner approves the M0 exit gate (approved 2026-11-14)
 
 ---
 
