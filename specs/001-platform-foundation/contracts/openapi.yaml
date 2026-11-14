@@ -112,6 +112,27 @@ paths:
       responses:
         '200': { description: Preview, content: { application/json: { schema: { $ref: '#/components/schemas/InvitationPreview' } } } }
         '410': { description: "`link_invalid` — expired, revoked or unknown; `link_already_used` — already accepted (the page then offers sign-in)" }
+  /invitations/send-code:
+    post:
+      tags: [auth]
+      summary: Email a single-use code for accepting an employee invitation by email
+      description: |
+        Only for a preview with `code_required: true` (FR-012a). Stores a new 6-digit code,
+        valid 15 minutes, which replaces any earlier code of the invitation, and emails it to
+        the invitation's address after answering, in `locale`. The answer never depends on
+        whether the address is used elsewhere in BOS. At most 5 codes per invitation and 10
+        code emails per address in any hour.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string }, locale: { enum: [en, ar] } } }
+      responses:
+        '204': { description: Code stored; the email is sent after the answer }
+        '400': { description: "`validation_failed` — `locale` is not en or ar" }
+        '409': { description: "`code_not_required` — an owner activation or a phone invitation, accepted without a code" }
+        '410': { description: "`link_invalid` or `link_already_used`, as for the preview" }
+        '429': { description: "`too_many_requests` — too many codes in the last hour; try again later" }
   /invitations/accept:
     post:
       tags: [auth]
@@ -119,6 +140,12 @@ paths:
       description: |
         The link itself is single-use, so no Idempotency-Key is needed: a second submission
         returns 410 `link_already_used` and creates nothing.
+
+        When the preview says `code_required: true` (an employee invitation by email), the
+        request must carry the code emailed by `/invitations/send-code`, and it is checked
+        before anything else about the acceptance: until it is right every answer is 400
+        `code_invalid`, whether or not the address is used elsewhere in BOS. The fifth wrong
+        entry voids the code; a new one must then be requested.
       requestBody:
         required: true
         content:
@@ -126,7 +153,7 @@ paths:
             schema: { $ref: '#/components/schemas/AcceptInvitationRequest' }
       responses:
         '200': { description: Accepted; session cookie set, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
-        '400': { description: "`weak_password`" }
+        '400': { description: "`weak_password` or `code_invalid` — the code is missing, wrong, expired or voided (email invitations only)" }
         '403': { description: "`business_suspended` — the business was suspended after the link was sent" }
         '409': { description: "`identifier_unavailable` — the phone number or email cannot be used; ask to be invited with a different one. Reveals nothing else." }
         '410': { description: "`link_invalid` (also when every invited store has since been deactivated) or `link_already_used`" }
@@ -480,6 +507,7 @@ components:
         token: { type: string }
         password: { type: string, minLength: 10 }
         locale: { enum: [en, ar] }
+        code: { type: string, description: 'The 6-digit code from the email; required when the preview says code_required' }
     InvitationPreview:
       type: object
       description: Only what the inviter entered; nothing looked up from elsewhere.
@@ -489,6 +517,7 @@ components:
         invitee_name: { type: string }
         roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
         expires_at: { type: string, format: date-time }
+        code_required: { type: boolean, description: 'True for an employee invitation by email: a code must be requested and entered before accepting (FR-012a)' }
     BusinessRef:
       type: object
       properties: { id: { type: string, format: uuid }, name: { type: string }, edition: { enum: [social, commerce] } }

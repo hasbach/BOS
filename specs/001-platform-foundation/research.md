@@ -428,3 +428,55 @@ parts of R2, R5, R7, R10 and R13).
 - **Logos**: new files are written before the database change and removed if the request rolls
   back; replaced files are removed only after commit. Images over 40 megapixels count as
   `file_too_large`.
+
+## R37. Email codes for employee invitations (2026-11-14, security.md F-09)
+
+- **Decision**: An employee invitation that has an email address is accepted only with a
+  6-digit code emailed to that address (FR-012a as revised). The invitation page asks for the
+  code (`POST /invitations/send-code`), the person enters it with their password, and only
+  then does acceptance check the business, the password, the stores and whether the phone or
+  email is used elsewhere in BOS (`identifier_unavailable`). The preview says
+  `code_required: true` for these links. Owner activations (Beta sends those links itself)
+  and phone-only invitations keep the old flow until BOS can send SMS. An invitation with
+  both a phone and an email needs the code.
+- **Rules**:
+  - A code is 6 random digits (`secrets`), valid **15 minutes**.
+  - Stored only as HMAC-SHA-256 keyed with `BOS_SECRET_KEY` over the invitation id and the
+    code (table `invitation_codes`, migration `0002`). Links use plain SHA-256 because they
+    carry 256 random bits; six digits do not, so a plain hash could be reversed by trying a
+    million values, and the key is needed.
+  - A new code voids the previous one; at most one code is open per invitation.
+  - **5 code emails per invitation per hour**, and **10 per address per hour** across all
+    invitations (own `login_attempts` namespace), so neither the link holder nor an inviter
+    who keeps resending can flood a mailbox. Over either limit: 429 `too_many_requests`.
+    The per-address limit is tighter than the brief: the per-invitation limit alone starts
+    again with every resend.
+  - **5 wrong entries per code**, then the code is void and a new one must be requested.
+    A request without any code is not counted. Missing, wrong, expired or void codes all get
+    one answer: 400 `code_invalid`. Arabic-Indic digits and spaces are accepted.
+  - A correct code is not used up by a refusal after it (weak password, or
+    `identifier_unavailable`), so the person can correct the password; it stops mattering
+    once the invitation is accepted.
+- **Uniform answers**: nothing before the right code depends on whether the address is
+  registered elsewhere: the preview, `send-code` (which never looks the address up) and an
+  accept without the right code run the same statements and give the same status, body and
+  headers (`test_until_the_right_code_registered_and_unregistered_addresses_get_the_same_answers`).
+  The code email is sent after the answer, with `response.call_on_close` as for reset links
+  (F-04), so a slow mail server never shows in the answer time.
+- **History**: `invitation.code_sent` (actor anonymous; `kind` only) when a code is stored,
+  `invitation.code_failed` (`kind`, `attempts`) when the fifth wrong entry voids a code, plus
+  the mailer's `email.sent` / `email.failed` with purpose `invitation_code`. Never the code
+  or the address.
+- **Development**: there is no mail server on the PC without Docker, so `local_api.py` sets
+  `BOS_MAIL_OUTBOX_DIR` (default `%LOCALAPPDATA%\bos-dev\outbox`) and the mailer writes each
+  email there as a JSON file; the end-to-end tests read codes from it. Docker Compose keeps
+  Mailpit. The setting is ignored in tests and must stay unset in deployed environments.
+- **Residual**: a link holder can still guess codes, at most 25 per invitation per hour
+  (5 codes x 5 tries), about 1 in 40,000 per invitation-hour; each resend by the inviter
+  leaves `invitation.resent` in their own history and code emails in the invitee's mailbox.
+  Phone invitations still answer `identifier_unavailable` without verification (F-09
+  residual). Rows in `invitation_codes` are not yet removed by `platform_maintenance()`.
+- **Alternatives considered**: a link in the email instead of a code (harder to use when the
+  email is read on another device); a longer code (the attempt and send limits make 6
+  digits enough); dropping the cross-business check (FR-006 needs platform-unique
+  identifiers).

@@ -25,6 +25,7 @@ RLS_TABLES: dict[str, str] = {
     "users": "tenant_id",
     "user_stores": "tenant_id",
     "invitations": "tenant_id",
+    "invitation_codes": "tenant_id",
     "password_resets": "tenant_id",
     "idempotency_keys": "tenant_id",
     "files": "tenant_id",
@@ -37,6 +38,7 @@ ALL_TABLES = [
     "login_attempts",
     "sessions",
     "password_resets",
+    "invitation_codes",
     "invitations",
     "user_stores",
     "users",
@@ -184,6 +186,14 @@ class World:
             all_stores=True,
             token_hash=self.invitation_token_hash,
             created_by_user_id=self.user_id,
+        )
+        insert(
+            conn,
+            "invitation_codes",
+            id=uuid.uuid4(),
+            tenant_id=self.tenant_id,
+            invitation_id=self.invitation_id,
+            code_hash=b"not a real code hash",
         )
         insert(
             conn,

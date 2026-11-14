@@ -36,6 +36,8 @@ export const EVENT_ICONS: Record<string, { icon: EventIcon; flip?: boolean }> = 
   "invitation.accepted": { icon: "check" },
   "invitation.revoked": { icon: "x" },
   "invitation.resent": { icon: "send", flip: true },
+  "invitation.code_sent": { icon: "send", flip: true },
+  "invitation.code_failed": { icon: "alert" },
   "user.roles_changed": { icon: "users" },
   "user.stores_changed": { icon: "users" },
   "user.deactivated": { icon: "ban" },
@@ -61,7 +63,7 @@ export const EVENT_ICONS: Record<string, { icon: EventIcon; flip?: boolean }> = 
 export const EVENT_GROUPS: Array<{ key: string; events: string[] }> = [
   { key: "signin", events: ["auth.sign_in", "auth.sign_in_failed", "auth.sign_out", "auth.session_revoked"] },
   { key: "contact", events: ["auth.password_changed", "auth.password_reset_issued", "auth.identifier_changed"] },
-  { key: "people", events: ["invitation.created", "invitation.accepted", "invitation.revoked", "invitation.resent", "user.roles_changed", "user.stores_changed", "user.deactivated", "user.reactivated"] },
+  { key: "people", events: ["invitation.created", "invitation.accepted", "invitation.revoked", "invitation.resent", "invitation.code_sent", "invitation.code_failed", "user.roles_changed", "user.stores_changed", "user.deactivated", "user.reactivated"] },
   { key: "stores", events: ["store.created", "store.updated", "store.deactivated", "store.reactivated"] },
   { key: "business", events: ["tenant.settings_changed", "tenant.created", "tenant.suspended", "tenant.reactivated"] },
   { key: "refused", events: ["access.denied_permission", "access.denied_tenant", "access.denied_store"] },

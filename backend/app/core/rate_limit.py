@@ -13,6 +13,10 @@ tenant context and holds no identifier, only a keyed hash of it.
   many addresses). These rows live in their own hash namespaces (the per-client rows hold a
   keyed hash of the client address) and are stored as ``success = true``, so they never count
   towards a sign-in block, by identifier or by address.
+* Invitation codes: at most 10 code emails per address in any hour, across every invitation
+  (each invitation also allows only 5 per hour, counted on its own codes), so neither a link
+  holder nor an inviter who keeps resending can flood one mailbox. Its own hash namespace,
+  stored like the reset rows.
 
 Identifiers are hashed with HMAC-SHA-256 keyed by the application secret, so the stored
 value cannot be turned back into a phone number by trying every number. Pass the normalized
@@ -36,10 +40,12 @@ MAX_FAILURES_PER_IP = 30
 RESET_EMAIL_WINDOW = timedelta(hours=1)
 MAX_RESET_EMAILS = 3
 MAX_RESET_REQUESTS_PER_IP = 10
+MAX_INVITATION_CODE_EMAILS = 10
 
 _SIGN_IN = "sign_in"
 _RESET_EMAIL = "password_reset_email"
 _RESET_IP = "password_reset_ip"
+_INVITATION_CODE_EMAIL = "invitation_code_email"
 
 _INSERT = text(
     "INSERT INTO login_attempts (identifier_hash, ip, success, at) "
@@ -141,6 +147,12 @@ class RateLimiter:
         address over its own limit, an unknown address). Serialised per client address.
         """
         return self._take(db, self._hash(_RESET_IP, ip), ip, MAX_RESET_REQUESTS_PER_IP)
+
+    def take_invitation_code_email(self, db: Session, email: str, ip: str | None) -> bool:
+        """True if an invitation code may be emailed to ``email`` now; it is then counted."""
+        return self._take(
+            db, self._hash(_INVITATION_CODE_EMAIL, email), ip, MAX_INVITATION_CODE_EMAILS
+        )
 
     def _take(self, db: Session, hashed: bytes, ip: str | None, limit: int) -> bool:
         now = self._clock()

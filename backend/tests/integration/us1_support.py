@@ -18,9 +18,10 @@ from sqlalchemy import Engine, text
 from app import create_app
 from app.config import Config
 from app.core import security
-from app.core.db import engine_of
+from app.core.db import engine_of, transaction
 from app.core.mailer import Mailer
-from app.core.security import hash_token
+from app.core.security import code_hash, hash_token
+from app.core.tenancy import tenant_transaction
 from tests.contract.support import assert_matches_contract
 from tests.dbsupport import TwoTenants
 
@@ -210,6 +211,56 @@ def token_of(link: str, page: str) -> str:
 
 def token_hash(token: str) -> bytes:
     return hash_token(token)
+
+
+TEST_CODE = "246810"
+
+
+def code_for(app: Flask, token: object) -> dict[str, str]:
+    """``{"code": ...}`` to accept an email employee invitation, else ``{}``.
+
+    Stores a known open code as ``/invitations/send-code`` would (voiding earlier ones),
+    without the history entry or the email, for tests about what happens after the code.
+    """
+    from app import get_config
+
+    if not isinstance(token, str):
+        return {}
+    engine = engine_of(app)
+    with transaction(engine) as db:
+        found = db.execute(
+            text("SELECT tenant_id, row_id FROM auth_lookup_token('invitation', :h)"),
+            {"h": hash_token(token)},
+        ).one_or_none()
+    if found is None:
+        return {}
+    with tenant_transaction(engine, found.tenant_id) as db:
+        row = db.execute(
+            text("SELECT id, kind, invitee_email FROM invitations WHERE id = :id"),
+            {"id": found.row_id},
+        ).one()
+        if row.kind != "employee" or row.invitee_email is None:
+            return {}
+        db.execute(
+            text(
+                "UPDATE invitation_codes SET voided_at = now() "
+                "WHERE invitation_id = :id AND voided_at IS NULL"
+            ),
+            {"id": row.id},
+        )
+        db.execute(
+            text(
+                "INSERT INTO invitation_codes (id, tenant_id, invitation_id, code_hash) "
+                "VALUES (:id, :t, :i, :h)"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "t": found.tenant_id,
+                "i": row.id,
+                "h": code_hash(get_config(app).secret_key, str(row.id), TEST_CODE),
+            },
+        )
+    return {"code": TEST_CODE}
 
 
 def cookie(client: FlaskClient, name: str) -> str | None:

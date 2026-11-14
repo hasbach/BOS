@@ -99,6 +99,25 @@ def invitation_preview() -> ResponseReturnValue:
     return jsonify(jsonable(invitations.preview(get_engine(), json_body().get("token"))))
 
 
+@bp.post("/invitations/send-code")
+@public
+def invitation_send_code() -> ResponseReturnValue:
+    body = json_body()
+    locale = body.get("locale", "en")
+    if locale not in LOCALES:
+        raise validation_failed({"locale": "invalid"})
+    pending = invitations.request_code(
+        get_engine(), body.get("token"), locale=str(locale), ip=client_ip()
+    )
+    response = Response(status=204)
+    # The code is stored before answering; the email goes out once the answer has been
+    # written, as for password resets (security.md F-04), so the answer never waits for the
+    # mail server. Nothing in either step depends on whether the address is used elsewhere.
+    app = current_app._get_current_object()  # type: ignore[attr-defined]
+    response.call_on_close(functools.partial(invitations.send_code, app, pending))
+    return response
+
+
 @bp.post("/invitations/accept")
 @public
 def invitation_accept() -> ResponseReturnValue:
@@ -116,5 +135,6 @@ def invitation_accept() -> ResponseReturnValue:
         locale=str(locale),
         ip=client_ip(),
         user_agent=user_agent(),
+        code=body.get("code"),
     )
     return _signed_in(result.me, result.session_token)

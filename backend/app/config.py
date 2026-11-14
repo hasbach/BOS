@@ -60,6 +60,9 @@ class Config:
     # How many reverse proxies in front of the API may be trusted to set X-Forwarded-For
     # (the Next.js rewrite or the production proxy: 1). 0 = use the connecting address.
     trusted_proxy_hops: int = 0
+    # Development only: when set, email is written to this folder as JSON files instead of
+    # being sent over SMTP (the PC without Docker has no mail server; see README).
+    mail_outbox_dir: str = ""
 
     @classmethod
     def from_env(cls, *, testing: bool = False) -> Config:
@@ -86,4 +89,5 @@ class Config:
             smtp_from=os.environ.get("BOS_SMTP_FROM", "BOS <no-reply@example.test>"),
             testing=testing,
             trusted_proxy_hops=_hops("BOS_TRUSTED_PROXY_HOPS"),
+            mail_outbox_dir="" if testing else os.environ.get("BOS_MAIL_OUTBOX_DIR", "").strip(),
         )

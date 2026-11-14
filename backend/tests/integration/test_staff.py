@@ -24,6 +24,7 @@ from tests.integration.us1_support import (
     NEW_PASSWORD,
     PASSWORD,
     app_for,
+    code_for,
     cookie,
     error,
     history,
@@ -82,7 +83,7 @@ def _accept(app: Flask, link: str, client: FlaskClient | None = None) -> Any:
     token = token_of(link, "activate")
     return (client or app.test_client()).post(
         "/api/v1/invitations/accept",
-        json={"token": token, "password": PASSWORD, "locale": "en"},
+        json={"token": token, "password": PASSWORD, "locale": "en", **code_for(app, token)},
         headers=CSRF,
     )
 

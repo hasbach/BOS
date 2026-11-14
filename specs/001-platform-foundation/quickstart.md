@@ -106,7 +106,10 @@ Run each on a phone-sized window (360 px wide), once in English and once in Arab
 ### 3. Employees, roles and store access (User Story 2)
 
 1. As the demo owner, invite a sales agent limited to Store A and a packing agent for both
-   stores. Open each link in a separate private window and set passwords.
+   stores. Open each link in a separate private window and set passwords. For someone invited
+   by email, the page first asks for a code: tap **Send code**, open the email (Mailpit at
+   http://localhost:8025 on Docker; on the PC without Docker, the newest JSON file in
+   `%LOCALAPPDATA%\bos-dev\outbox`), and enter the 6 digits with the password.
 2. **Expect**: the sales agent opens on Sales and sees only Store A; the packing agent opens
    on Packing and sees both stores. Neither sees Employees or Settings under More.
 3. As the sales agent, call the staff list endpoint directly. **Expect**: refused, and the
@@ -121,6 +124,10 @@ Run each on a phone-sized window (360 px wide), once in English and once in Arab
 9. Invite someone using a phone number that already belongs to a user of the *other* demo
    business. **Expect**: the invitation is created with no warning; opening the link and
    setting a password is refused with a neutral "use a different phone number or email".
+   Do the same with an *email* of the other business. **Expect**: the page asks for a code;
+   without it (or with a wrong one) the answer is "This code is wrong or has expired", exactly
+   as for an unused address; only after the code from that mailbox is the neutral "use a
+   different phone number or email" shown (FR-012a).
 10. As a manager, try to change your own roles. **Expect**: refused.
 
 ### 4. Stores and settings (User Story 3)

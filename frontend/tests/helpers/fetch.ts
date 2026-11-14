@@ -56,6 +56,7 @@ export const PREVIEW: InvitationPreview = {
   invitee_name: "Dana Demo",
   roles: ["sales", "packing"],
   expires_at: "2026-11-18T10:00:00Z",
+  code_required: false,
 };
 
 export const OPS_ME: OpsMe = { id: "o1", name: "Layla Demo", email: "layla@beta.example" };

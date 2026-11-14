@@ -38,6 +38,8 @@ EVENTS: frozenset[str] = frozenset(
         "invitation.accepted",
         "invitation.revoked",
         "invitation.resent",
+        "invitation.code_sent",
+        "invitation.code_failed",
         "user.roles_changed",
         "user.stores_changed",
         "user.deactivated",

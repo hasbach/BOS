@@ -46,7 +46,7 @@ describe("history entries", () => {
       "auth.sign_in", "auth.sign_in_failed", "auth.sign_out", "auth.session_revoked", "auth.password_changed",
       "auth.password_reset_issued", "auth.identifier_changed", "tenant.created", "tenant.suspended",
       "tenant.reactivated", "tenant.settings_changed", "invitation.created", "invitation.accepted",
-      "invitation.revoked", "invitation.resent", "user.roles_changed", "user.stores_changed",
+      "invitation.revoked", "invitation.resent", "invitation.code_sent", "invitation.code_failed", "user.roles_changed", "user.stores_changed",
       "user.deactivated", "user.reactivated", "store.created", "store.updated", "store.deactivated",
       "store.reactivated", "access.denied_permission", "access.denied_tenant", "access.denied_store",
       "email.sent", "email.failed", "operator.sign_in", "maintenance.run",

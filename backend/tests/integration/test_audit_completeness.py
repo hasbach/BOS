@@ -11,6 +11,7 @@ another business.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections import Counter
 from collections.abc import Callable, Iterator
@@ -205,13 +206,28 @@ def _staff_actions(
     resent = ok(_post(owner, f"/api/v1/staff/invitations/{first}/resend"), 201)
     second = resent["invitation"]["invitation_id"]
     log.expect(t, "invitation.resent", "user", me, "invitation", second)
-    joined = ok(
-        _post(
-            app.test_client(),
-            "/api/v1/invitations/accept",
-            {"token": token_of(resent["link"], "activate"), "password": PASSWORD},
+    token = token_of(resent["link"], "activate")
+
+    def emailed_code() -> str:
+        sent = app.test_client().post(
+            "/api/v1/invitations/send-code", json={"token": token}, headers=CSRF, buffered=True
         )
-    )
+        ok(sent, 204)
+        log.expect(t, "invitation.code_sent", "anonymous", None, "invitation", second)
+        log.expect(t, "email.sent", "system", None)
+        [code] = re.findall(r"\b\d{6}\b", str(outbox(app).messages[-1].get_content()))
+        return str(code)
+
+    def accept(code: str) -> Any:
+        body = {"token": token, "password": PASSWORD, "code": code}
+        return _post(app.test_client(), "/api/v1/invitations/accept", body)
+
+    first_code = emailed_code()
+    wrong = f"{(int(first_code) + 1) % 1_000_000:06d}"
+    for _ in range(5):
+        assert accept(wrong).status_code == 400
+    log.expect(t, "invitation.code_failed", "anonymous", None, "invitation", second)
+    joined = ok(accept(emailed_code()))
     hire = uuid.UUID(joined["user"]["id"])
     log.expect(t, "invitation.accepted", "user", hire, "invitation", second)
     log.expect(t, "auth.sign_in", "user", hire, "user", hire)
@@ -476,7 +492,18 @@ def _check_history_api(
         None,
     )
     assert failed["target_name"] == "Owner A Renamed"
-    sent = one("email.sent")
+    sent = one("email.sent", data={"purpose": "password_reset", "domain": "example.test"})
+    codes_sent = [i for i in items if i["event"] == "invitation.code_sent"]
+    assert len(codes_sent) == 2
+    for code_sent in codes_sent:
+        assert (code_sent["actor_type"], code_sent["actor_id"], code_sent["target_name"]) == (
+            "anonymous",
+            None,
+            "New Hire",
+        )
+        assert code_sent["data"] == {"kind": "employee"}
+    assert one("invitation.code_failed")["data"] == {"kind": "employee", "attempts": 5}
+    assert len([i for i in items if i["data"].get("purpose") == "invitation_code"]) == 2
     assert (sent["actor_type"], sent["actor_id"], sent["actor_name"]) == ("system", None, None)
     assert sent["data"] == {"purpose": "password_reset", "domain": "example.test"}
     assert (sent["target_type"], sent["target_id"], sent["target_name"]) == (None, None, None)

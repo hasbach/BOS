@@ -1,7 +1,7 @@
 """Sending email over plain SMTP (research R8) and recording every attempt (R27).
 
-Email is used only for password-reset links in M0, and is sent in the API process (after the
-answer to the reset request has gone out, security.md F-04). ``Mailer.send`` never
+Email is used for password-reset links and invitation codes in M0, and is sent in the API
+process after the answer to the request has gone out (security.md F-04, F-09). ``Mailer.send`` never
 raises: it returns whether the message was handed to the SMTP server, and writes
 ``email.sent`` or ``email.failed`` to the recipient business's history. The history holds the
 purpose, the recipient's domain and, on failure, the error's class name: never the address,
@@ -11,17 +11,25 @@ The history entry is written in its own transaction, because the email has been 
 not) whatever happens to the caller's transaction afterwards. Do not call ``send`` while
 the caller's transaction holds a lock on the business's ``tenants`` row: the history insert
 checks its foreign key against that row and would wait for it.
+
+Development only: with ``BOS_MAIL_OUTBOX_DIR`` set, each message is written to that folder
+as a JSON file (``to``, ``subject``, ``text``) instead of going to SMTP, so codes and
+links can be read on a PC with no mail server (the end-to-end tests read codes this way).
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 import smtplib
 import ssl
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -78,7 +86,11 @@ class Mailer:
         domain = _domain(to)
         error: str | None = None
         try:
-            self._deliver(_message(self._config.smtp_from, to, subject, text, html))
+            message = _message(self._config.smtp_from, to, subject, text, html)
+            if self._config.mail_outbox_dir:
+                _write_outbox(Path(self._config.mail_outbox_dir), to, subject, text)
+            else:
+                self._deliver(message)
         except Exception as exc:
             error = type(exc).__name__
             log.warning("email not sent: purpose=%s domain=%s error=%s", purpose, domain, error)
@@ -125,6 +137,15 @@ def get_mailer(app: Flask) -> Mailer:
     if isinstance(mailer, Mailer):
         return mailer
     return Mailer.for_app(app)
+
+
+def _write_outbox(folder: Path, to: str, subject: str, text: str) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    name = f"{datetime.now(UTC):%Y%m%dT%H%M%S%f}-{uuid.uuid4().hex[:8]}.json"
+    partial = folder / (name + ".part")
+    content = {"to": to, "subject": subject, "text": text}
+    partial.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(partial, folder / name)  # a reader never sees half a file
 
 
 def _ehlo_name(config: Config) -> str:

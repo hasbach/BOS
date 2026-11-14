@@ -223,7 +223,7 @@ Web application: `backend/` (Flask API) and `frontend/` (Next.js PWA) at the rep
 - [x] T090 Run the full quickstart (`specs/001-platform-foundation/quickstart.md`): all automated suites with captured output, then manual scenarios 1–5 in English and Arabic, timing business setup, owner activation and employee invitation against SC-001 and SC-002; record each step in `specs/001-platform-foundation/checklists/exit-gate.md`
 - [x] T091 Review M0 against the Definition of Done in the constitution and the product brief section 11; list any gaps in `specs/001-platform-foundation/checklists/exit-gate.md` and present to the product owner for exit-gate approval
 - [x] T092 Close exit-gate finding F-04: password-reset requests answer after the same work whether or not the email is registered (lookup, link and email sent after the response) and are limited per IP address; tests in `backend/tests/`; update `checklists/security.md`
-- [ ] T093 Close exit-gate finding F-09 per FR-012a (revised 2026-11-14): accepting an employee invitation by email first asks for a single-use code emailed to that address; migration with rollback, contract, accept screen in English and Arabic, tests at every level; update `checklists/security.md`
+- [x] T093 Close exit-gate finding F-09 per FR-012a (revised 2026-11-14): accepting an employee invitation by email first asks for a single-use code emailed to that address; migration with rollback, contract, accept screen in English and Arabic, tests at every level; update `checklists/security.md`
 
 ---
 

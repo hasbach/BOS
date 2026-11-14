@@ -1,8 +1,9 @@
-"""Password hashing and policy, one-time link tokens, and the CSRF header check."""
+"""Password hashing and policy, one-time link tokens and codes, and the CSRF header check."""
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 from collections.abc import Mapping
 
@@ -86,6 +87,40 @@ def new_token() -> tuple[str, bytes]:
     """A fresh random token (given to the person once) and its hash (stored)."""
     token = secrets.token_urlsafe(32)
     return token, hash_token(token)
+
+
+CODE_DIGITS = 6
+# Arabic-Indic and Eastern Arabic-Indic digits, as typed on Arabic keyboards, read as 0-9.
+_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "0123456789" * 2)
+
+
+def new_code() -> str:
+    """A random single-use code of six decimal digits, sent to a person by email."""
+    return f"{secrets.randbelow(10**CODE_DIGITS):0{CODE_DIGITS}d}"
+
+
+def normalize_code(value: object) -> str | None:
+    """The code as six ASCII digits (spaces removed, Arabic digits read), or None."""
+    if not isinstance(value, str) or len(value) > 32:
+        return None
+    code = "".join(value.split()).translate(_DIGITS)
+    if len(code) != CODE_DIGITS or not code.isascii() or not code.isdigit():
+        return None
+    return code
+
+
+def code_hash(key: str, scope: str, code: str) -> bytes:
+    """What is stored for a code: HMAC-SHA-256 keyed by the application secret.
+
+    A plain hash of six digits could be reversed by trying all million values, so the key
+    is needed to check a code. ``scope`` ties the hash to one record (an invitation's id).
+    """
+    message = f"{scope}\0{code}".encode()
+    return hmac.new(key.encode(), message, hashlib.sha256).digest()
+
+
+def code_matches(key: str, scope: str, code: str, stored: bytes) -> bool:
+    return hmac.compare_digest(code_hash(key, scope, code), bytes(stored))
 
 
 def csrf_ok(method: str, headers: Mapping[str, str] | Headers) -> bool:

@@ -9,10 +9,14 @@ import pytest
 from app.core.security import (
     MIN_PASSWORD_LENGTH,
     WeakPassword,
+    code_hash,
+    code_matches,
     csrf_ok,
     hash_password,
     hash_token,
+    new_code,
     new_token,
+    normalize_code,
     validate_password,
     verify_password,
 )
@@ -106,3 +110,44 @@ def test_state_changing_methods_require_the_csrf_header(method: str) -> None:
     assert csrf_ok(method, {}) is False
     assert csrf_ok(method, {"X-BOS-CSRF": "0"}) is False
     assert csrf_ok(method, {"X-BOS-CSRF": "1"}) is True
+
+
+# ---- emailed codes (FR-012a, research R37) ----------------------------------------------------
+
+
+def test_new_codes_are_six_digits_and_vary() -> None:
+    codes = {new_code() for _ in range(200)}
+
+    assert all(len(code) == 6 and code.isascii() and code.isdigit() for code in codes)
+    assert len(codes) > 190
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("012345", "012345"),
+        (" 012 345 ", "012345"),
+        ("٠١٢٣٤٥", "012345"),
+        ("۰۱۲۳۴۵", "012345"),
+        ("12345", None),
+        ("1234567", None),
+        ("12a456", None),
+        ("".join(chr(0xFF10 + d) for d in (1, 2, 3, 4, 5, 6)), None),  # full-width: refused
+        ("", None),
+        (123456, None),
+        (None, None),
+        ("1" * 40, None),
+    ],
+)
+def test_typed_codes_are_normalized(typed: object, expected: str | None) -> None:
+    assert normalize_code(typed) == expected
+
+
+def test_a_code_hash_needs_the_key_and_is_tied_to_its_scope() -> None:
+    stored = code_hash("key-one", "invitation-1", "123456")
+
+    assert code_matches("key-one", "invitation-1", "123456", stored)
+    assert not code_matches("key-two", "invitation-1", "123456", stored)
+    assert not code_matches("key-one", "invitation-2", "123456", stored)
+    assert not code_matches("key-one", "invitation-1", "123457", stored)
+    assert stored != hashlib.sha256(b"123456").digest()

@@ -30,6 +30,8 @@ export interface InvitationPreview {
   invitee_name: string;
   roles: Role[];
   expires_at: string;
+  /** An employee invitation by email: a code must be emailed and entered before accepting. */
+  code_required: boolean;
 }
 
 export interface OpsMe {

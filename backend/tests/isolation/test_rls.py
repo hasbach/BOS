@@ -88,6 +88,7 @@ UPDATABLE = {
     "stores": ("name", "'hacked'"),
     "users": ("name", "'hacked'"),
     "invitations": ("invitee_name", "'hacked'"),
+    "invitation_codes": ("failed_attempts", "5"),
     "password_resets": ("used_at", "now()"),
     "idempotency_keys": ("resource_type", "'hacked'"),
     "files": ("mime", "'text/plain'"),
@@ -112,7 +113,14 @@ def test_tenant_cannot_update_another_tenants_rows(
     assert affected == 0
 
 
-DELETABLE = ["user_stores", "invitations", "password_resets", "idempotency_keys", "files"]
+DELETABLE = [
+    "user_stores",
+    "invitations",
+    "invitation_codes",
+    "password_resets",
+    "idempotency_keys",
+    "files",
+]
 
 
 @pytest.mark.parametrize("table", DELETABLE)

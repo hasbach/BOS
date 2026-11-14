@@ -1,3 +1,6 @@
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 import { expect, request as playwrightRequest, test as base } from "@playwright/test";
 import type { APIRequestContext, Browser, BrowserContext, Locator, Page } from "@playwright/test";
 
@@ -188,4 +191,28 @@ export async function me(page: Page): Promise<{ status: number; body: MeBody | n
  */
 export async function openTab(page: Page, label: string): Promise<void> {
   await page.getByRole("navigation").getByRole("link", { name: label }).dispatchEvent("click");
+}
+
+// ---- email ----------------------------------------------------------------------------------------
+
+/**
+ * The 6-digit code in the newest email to `address` written to the development outbox after `since`
+ * (the API run by `local_api.py` writes each email there as a JSON file instead of sending it).
+ * Waits up to 30 s: the API writes the email only after it has answered.
+ */
+export async function emailedCode(env: E2eEnv, address: string, since: number): Promise<string> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const names = existsSync(env.outboxDir) ? readdirSync(env.outboxDir).filter((n) => n.endsWith(".json")) : [];
+    const found = names
+      .map((name) => join(env.outboxDir, name))
+      .filter((path) => statSync(path).mtimeMs >= since - 1000)
+      .map((path) => ({ path, mail: JSON.parse(readFileSync(path, "utf-8")) as { to: string; text: string } }))
+      .filter(({ mail }) => mail.to === address)
+      .sort((a, b) => statSync(b.path).mtimeMs - statSync(a.path).mtimeMs);
+    const code = found[0]?.mail.text.match(/\b(\d{6})\b/)?.[1];
+    if (code) return code;
+    await new Promise((done) => setTimeout(done, 250));
+  }
+  throw new Error("No code email arrived in the development outbox");
 }

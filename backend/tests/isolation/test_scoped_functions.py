@@ -144,7 +144,16 @@ def test_overview_returns_account_level_columns_only(
 
 @pytest.mark.parametrize(
     "table",
-    ["stores", "users", "user_stores", "invitations", "password_resets", "files", "audit_entries"],
+    [
+        "stores",
+        "users",
+        "user_stores",
+        "invitations",
+        "invitation_codes",
+        "password_resets",
+        "files",
+        "audit_entries",
+    ],
 )
 def test_operator_context_cannot_read_inside_any_business(
     app_engine: Engine, two_tenants: TwoTenants, table: str

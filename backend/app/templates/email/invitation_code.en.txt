@@ -1,0 +1,11 @@
+Hello {{ name }},
+
+Your code to join {{ business }} on BOS:
+
+{{ code }}
+
+Enter it on the invitation page. It works for {{ minutes }} minutes. A new code replaces this one.
+
+If you were not expecting an invitation, ignore this email: nothing happens without the code.
+
+BOS - Beta Orders Solutions

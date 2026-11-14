@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 // The test credentials come from the repository .env (never committed), exactly as the backend
 // scripts read them. Nothing here is printed.
@@ -28,6 +28,8 @@ export interface E2eEnv {
   operatorEmail: string;
   operatorPassword: string;
   demoPassword: string;
+  /** Where the development API writes email (backend/scripts/local_api.py, BOS_MAIL_OUTBOX_DIR). */
+  outboxDir: string;
 }
 
 export function loadEnv(): E2eEnv {
@@ -38,5 +40,9 @@ export function loadEnv(): E2eEnv {
     operatorEmail,
     operatorPassword: need(values, "BOS_OPERATOR_PASSWORD"),
     demoPassword: need(values, "BOS_DEMO_PASSWORD"),
+    outboxDir:
+      process.env.BOS_MAIL_OUTBOX_DIR ??
+      values.BOS_MAIL_OUTBOX_DIR ??
+      join(process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? "", "AppData", "Local"), "bos-dev", "outbox"),
   };
 }

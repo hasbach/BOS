@@ -21,6 +21,8 @@ export const ERROR_CODES = [
   "business_pending",
   "business_suspended",
   "cannot_modify_self",
+  "code_invalid",
+  "code_not_required",
   "confirmation_required",
   "file_not_image",
   "file_too_large",

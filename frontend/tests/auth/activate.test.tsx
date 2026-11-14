@@ -224,3 +224,128 @@ describe("activate screen", () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 });
+
+// FR-012a, security.md F-09: an employee invited by email confirms the address with an emailed code.
+describe("activate screen for an email invitation", () => {
+  const EMAIL_PREVIEW = { ...PREVIEW, code_required: true };
+  const isSendCode = (url: string) => url.endsWith("/send-code");
+  const sendCode = () => fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+  const typeCode = (value: string) =>
+    fireEvent.change(screen.getByLabelText("Code from the email"), { target: { value } });
+
+  it("asks for a code, sends it, and accepts with the code", async () => {
+    const calls = mockApi(({ url }) => {
+      if (isPreview(url)) return reply(200, EMAIL_PREVIEW);
+      if (isSendCode(url)) return reply(204);
+      return reply(200, ME("en"));
+    });
+    renderWithIntl(<ActivateForm />, "en");
+    expect(await screen.findByRole("heading", { name: "Confirm your email" })).toBeInTheDocument();
+
+    sendCode();
+    expect(await screen.findByText(/Code sent\. Check your email/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Code from the email")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Send a new code" })).toBeInTheDocument();
+
+    typeCode(" 123 456 ");
+    fillPasswords("a long enough password");
+    activate();
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/", { locale: "en" }));
+    expect(calls.map((c) => c.url)).toEqual([
+      "/api/v1/invitations/preview",
+      "/api/v1/invitations/send-code",
+      "/api/v1/invitations/accept",
+    ]);
+    expect(calls[1]?.body).toEqual({ token: TOKEN, locale: "en" });
+    expect(calls[2]?.body).toEqual({ token: TOKEN, password: "a long enough password", locale: "en", code: "123456" });
+  });
+
+  it("does not show the code step for a link that needs none, and sends no code", async () => {
+    const calls = mockApi(({ url }) => (isPreview(url) ? reply(200, PREVIEW) : reply(200, ME("en"))));
+    renderWithIntl(<ActivateForm />, "en");
+    await screen.findByText("Welcome, Dana Demo");
+
+    expect(screen.queryByLabelText("Code from the email")).not.toBeInTheDocument();
+    fillPasswords("a long enough password");
+    activate();
+    await waitFor(() => expect(router.replace).toHaveBeenCalled());
+    expect(calls[1]?.body).not.toHaveProperty("code");
+  });
+
+  it("refuses to submit without a six-digit code and sends nothing", async () => {
+    const calls = mockApi(() => reply(200, EMAIL_PREVIEW));
+    renderWithIntl(<ActivateForm />, "en");
+    await screen.findByRole("heading", { name: "Confirm your email" });
+
+    typeCode("12");
+    fillPasswords("a long enough password");
+    activate();
+
+    expect(screen.getByText("Enter the 6-digit code from the email.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Code from the email")).toHaveAttribute("aria-invalid", "true");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("shows code_invalid under the code field and keeps the person on the form", async () => {
+    mockApi(({ url }) => {
+      if (isPreview(url)) return reply(200, EMAIL_PREVIEW);
+      if (isSendCode(url)) return reply(204);
+      return apiError(400, "code_invalid");
+    });
+    renderWithIntl(<ActivateForm />, "en");
+    await screen.findByRole("heading", { name: "Confirm your email" });
+    sendCode();
+    await screen.findByText(/Code sent/);
+    typeCode("000000");
+    fillPasswords("a long enough password");
+    activate();
+
+    expect(await screen.findByText(/This code is wrong or has expired/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Code from the email")).toHaveAttribute("aria-invalid", "true");
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("says when too many codes were requested", async () => {
+    mockApi(({ url }) => (isPreview(url) ? reply(200, EMAIL_PREVIEW) : apiError(429, "too_many_requests")));
+    renderWithIntl(<ActivateForm />, "en");
+    await screen.findByRole("heading", { name: "Confirm your email" });
+    sendCode();
+
+    expect(await screen.findByText("Too many codes were requested. Try again in an hour.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send code" })).toBeEnabled();
+  });
+
+  it("shows the invalid-link screen when the link died before the code was sent", async () => {
+    mockApi(({ url }) => (isPreview(url) ? reply(200, EMAIL_PREVIEW) : apiError(410, "link_invalid")));
+    renderWithIntl(<ActivateForm />, "en");
+    await screen.findByRole("heading", { name: "Confirm your email" });
+    sendCode();
+
+    expect(await screen.findByRole("heading", { name: "This link is no longer valid" })).toBeInTheDocument();
+  });
+
+  it("works in Arabic: Arabic digits are read and the code is sent in Arabic", async () => {
+    const calls = mockApi(({ url }) => {
+      if (isPreview(url)) return reply(200, EMAIL_PREVIEW);
+      if (isSendCode(url)) return reply(204);
+      return reply(200, ME("ar"));
+    });
+    renderWithIntl(<ActivateForm />, "ar");
+    expect(await screen.findByRole("heading", { name: "تأكيد بريدك الإلكتروني" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "أرسل الرمز" }));
+    await screen.findByRole("button", { name: "أرسل رمزاً جديداً" });
+
+    const field = screen.getByLabelText("الرمز من البريد");
+    expect(field).toHaveAttribute("dir", "ltr");
+    expect(field).toHaveAttribute("inputmode", "numeric");
+    expect(field).toHaveAttribute("autocomplete", "one-time-code");
+    fireEvent.change(field, { target: { value: "١٢٣٤٥٦" } });
+    fillPasswords("a long enough password");
+    fireEvent.click(screen.getByRole("button", { name: "فعّل الحساب وسجّل الدخول" }));
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/", { locale: "ar" }));
+    expect(calls[1]?.body).toEqual({ token: TOKEN, locale: "ar" });
+    expect(calls[2]?.body).toMatchObject({ code: "123456" });
+  });
+});

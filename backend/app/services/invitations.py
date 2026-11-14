@@ -10,15 +10,24 @@ the maintenance command.
 
 Links arrive before any tenant is known: ``auth_lookup_token`` gives the tenant and row id
 of a token hash, and everything after that happens inside that tenant's own context.
+
+An employee invitation by email is accepted only with a six-digit code emailed to that
+address (FR-012a, security.md F-09, research R37). Until the right code is given, nothing
+that is said depends on whether the address belongs to someone elsewhere in BOS; only then
+can acceptance answer ``identifier_unavailable``. Owner activations and invitations by
+phone number need no code.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from flask import Flask, current_app, render_template
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -26,14 +35,35 @@ from sqlalchemy.orm import Session
 from app.core import audit, sessions
 from app.core.audit import ActorType
 from app.core.db import transaction
+from app.core.mailer import get_mailer
 from app.core.permissions import Role
-from app.core.security import WeakPassword, hash_password, hash_token, new_token, validate_password
+from app.core.rate_limit import RateLimiter
+from app.core.security import (
+    WeakPassword,
+    code_matches,
+    hash_password,
+    hash_token,
+    new_code,
+    new_token,
+    normalize_code,
+    validate_password,
+)
+from app.core.security import code_hash as make_code_hash
 from app.core.tenancy import tenant_transaction
 from app.errors import ApiError
 from app.services.common import IssuedLink, NotFound, lookup_identifier
 from app.services.me import build_me
 
+log = logging.getLogger("bos.invitations")
+
 MAX_TOKEN_LENGTH = 200
+CODE_MINUTES = 15  # how long a code is valid
+MAX_CODES_PER_HOUR = 5  # codes sent per invitation in any hour
+MAX_CODE_ATTEMPTS = 5  # wrong entries per code; the fifth voids it
+CODE_SUBJECTS = {
+    "en": "Your BOS invitation code",
+    "ar": "رمز دعوتك إلى BOS",
+}
 MANAGEMENT_ROLES = frozenset({Role.OWNER.value, Role.MANAGER.value})
 
 Kind = Literal["owner_activation", "employee"]
@@ -59,6 +89,25 @@ def identifier_unavailable() -> ApiError:
         "identifier_unavailable",
         "This phone number or email cannot be used; ask to be invited with a different one",
     )
+
+
+def code_invalid() -> ApiError:
+    return ApiError(
+        400, "code_invalid", "This code is wrong or no longer valid; request a new one if needed"
+    )
+
+
+def code_not_required() -> ApiError:
+    return ApiError(409, "code_not_required", "This link is accepted without a code")
+
+
+def too_many_codes() -> ApiError:
+    return ApiError(429, "too_many_requests", "Too many codes were requested; try again later")
+
+
+def needs_code(invitation: Any) -> bool:
+    """An employee invitation by email is accepted with an emailed code (FR-012a)."""
+    return bool(invitation.kind == "employee" and invitation.invitee_email is not None)
 
 
 # ---- creating ---------------------------------------------------------------------------------
@@ -420,7 +469,191 @@ def preview(engine: Engine, token: object) -> dict[str, Any]:
         "invitee_name": row.invitee_name,
         "roles": list(row.roles),
         "expires_at": row.expires_at,
+        "code_required": needs_code(row),
     }
+
+
+# ---- codes for email invitations ----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PendingCode:
+    """A code that has been stored and is waiting to be emailed (after the answer)."""
+
+    tenant_id: uuid.UUID
+    email: str
+    code: str = dataclasses.field(repr=False)
+    locale: str = "en"
+    invitee_name: str = ""
+    business_name: str = ""
+
+
+def _secret() -> str:
+    from app import get_config
+
+    return get_config(current_app).secret_key
+
+
+def request_code(engine: Engine, token: object, *, locale: str, ip: str | None) -> PendingCode:
+    """Store a new code for an email invitation, voiding the previous one.
+
+    Done before answering; the email is sent by ``send_code`` after the answer, so the
+    answer never waits for the mail server. Nothing here looks at whether the address is
+    used elsewhere in BOS. Raises 410 ``link_invalid`` / ``link_already_used`` like the
+    preview, 409 ``code_not_required`` for a link that needs no code, and 429
+    ``too_many_requests`` past 5 codes per invitation, or 10 code emails per address, in
+    an hour.
+    """
+    found = _find_token(engine, token)
+    if found is None:
+        raise link_invalid()
+    tenant_id, invitation_id = found
+    refusal: ApiError | None = None
+    pending: PendingCode | None = None
+    with tenant_transaction(engine, tenant_id) as db:
+        row = _locked(db, invitation_id)
+        refusal = _refusal(_expire_if_due(db, row))
+        if refusal is None and not needs_code(row):
+            refusal = code_not_required()
+        if refusal is None:
+            sent = db.execute(
+                text(
+                    "SELECT count(*) FROM invitation_codes WHERE invitation_id = :id "
+                    "AND created_at > now() - interval '1 hour'"
+                ),
+                {"id": row.id},
+            ).scalar_one()
+            limiter = RateLimiter.for_app(current_app)
+            if sent >= MAX_CODES_PER_HOUR or not limiter.take_invitation_code_email(
+                db, row.invitee_email, ip
+            ):
+                refusal = too_many_codes()
+        if refusal is None:
+            pending = _store_code(db, row, locale=locale, ip=ip)
+    if refusal is not None:
+        raise refusal  # after the block, so a lazy expiry is saved
+    assert pending is not None
+    return pending
+
+
+def _store_code(db: Session, row: Any, *, locale: str, ip: str | None) -> PendingCode:
+    db.execute(
+        text(
+            "UPDATE invitation_codes SET voided_at = now() "
+            "WHERE invitation_id = :id AND voided_at IS NULL"
+        ),
+        {"id": row.id},
+    )
+    code = new_code()
+    db.execute(
+        text(
+            "INSERT INTO invitation_codes (id, tenant_id, invitation_id, code_hash, expires_at) "
+            "VALUES (:id, :tenant_id, :invitation_id, :hash, "
+            "now() + make_interval(mins => :minutes))"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "tenant_id": row.tenant_id,
+            "invitation_id": row.id,
+            "hash": make_code_hash(_secret(), str(row.id), code),
+            "minutes": CODE_MINUTES,
+        },
+    )
+    audit.record(
+        db,
+        tenant_id=row.tenant_id,
+        actor_type="anonymous",
+        actor_id=None,
+        event="invitation.code_sent",
+        target_type="invitation",
+        target_id=row.id,
+        data={"kind": row.kind},
+        ip=ip,
+    )
+    business_name = db.execute(
+        text("SELECT name FROM tenants WHERE id = :id"), {"id": row.tenant_id}
+    ).scalar_one()
+    return PendingCode(
+        tenant_id=row.tenant_id,
+        email=row.invitee_email,
+        code=code,
+        locale=locale if locale in CODE_SUBJECTS else "en",
+        invitee_name=row.invitee_name,
+        business_name=business_name,
+    )
+
+
+def send_code(app: Flask, pending: PendingCode) -> None:
+    """Email a stored code. Run after the answer has been sent, outside the request.
+
+    Opens its own application context. Never raises; a failure is logged by error class
+    only (no address or code). The mailer records ``email.sent`` or ``email.failed``.
+    """
+    try:
+        with app.app_context():
+            body = render_template(
+                f"email/invitation_code.{pending.locale}.txt",
+                name=pending.invitee_name,
+                business=pending.business_name,
+                code=pending.code,
+                minutes=CODE_MINUTES,
+            )
+            get_mailer(app).send(
+                pending.email,
+                CODE_SUBJECTS[pending.locale],
+                body,
+                tenant_id=pending.tenant_id,
+                purpose="invitation_code",
+            )
+    except Exception as exc:
+        log.error("invitation code email not sent: error=%s", type(exc).__name__)
+
+
+def _check_code(db: Session, invitation: Any, code: object, *, ip: str | None) -> ApiError | None:
+    """None if ``code`` is the invitation's open code; otherwise the refusal to give.
+
+    Every failure is the same 400 ``code_invalid``: no code sent yet, or a missing, wrong,
+    expired or voided code. A wrong entry is counted against the open code, and the fifth
+    voids it (recorded as ``invitation.code_failed``); a new one must then be requested.
+    """
+    current = db.execute(
+        text(
+            "SELECT id, code_hash, failed_attempts FROM invitation_codes "
+            "WHERE invitation_id = :id AND voided_at IS NULL AND expires_at > now() "
+            "ORDER BY created_at DESC LIMIT 1 FOR UPDATE"
+        ),
+        {"id": invitation.id},
+    ).one_or_none()
+    if current is None:
+        return code_invalid()
+    entered = normalize_code(code)
+    if entered is not None and code_matches(
+        _secret(), str(invitation.id), entered, current.code_hash
+    ):
+        return None
+    if code is None:
+        return code_invalid()  # nothing entered at all: not counted as a guess
+    attempts = current.failed_attempts + 1
+    db.execute(
+        text(
+            "UPDATE invitation_codes SET failed_attempts = :attempts, "
+            "voided_at = CASE WHEN :attempts >= :limit THEN now() END WHERE id = :id"
+        ),
+        {"attempts": attempts, "limit": MAX_CODE_ATTEMPTS, "id": current.id},
+    )
+    if attempts >= MAX_CODE_ATTEMPTS:
+        audit.record(
+            db,
+            tenant_id=invitation.tenant_id,
+            actor_type="anonymous",
+            actor_id=None,
+            event="invitation.code_failed",
+            target_type="invitation",
+            target_id=invitation.id,
+            data={"kind": invitation.kind, "attempts": attempts},
+            ip=ip,
+        )
+    return code_invalid()
 
 
 @dataclass(frozen=True)
@@ -437,11 +670,15 @@ def accept(
     locale: str,
     ip: str | None,
     user_agent: str,
+    code: object = None,
 ) -> Accepted:
     """Create the invited user, sign them in, and (for an owner) activate the business.
 
     One transaction, holding a lock on the invitation row, so a second submission (or a
-    simultaneous revoke) waits and then finds the invitation no longer pending.
+    simultaneous revoke) waits and then finds the invitation no longer pending. An email
+    invitation needs its open code first (else ``code_invalid``, the wrong entry counted);
+    only after the right code are the business, the password, the stores and the
+    identifier checked, so the answer can reveal something only to the address's owner.
     """
     found = _find_token(engine, token)
     if found is None:
@@ -451,9 +688,11 @@ def accept(
     with tenant_transaction(engine, tenant_id) as db:
         row = _locked(db, invitation_id)
         refusal = _refusal(_expire_if_due(db, row))
+        if refusal is None and needs_code(row):
+            refusal = _check_code(db, row, code, ip=ip)
         if refusal is None:
             return _create_user(db, row, password=password, locale=locale, ip=ip, ua=user_agent)
-    raise refusal  # after the block, so a lazy expiry is saved
+    raise refusal  # after the block, so a lazy expiry and a counted wrong code are saved
 
 
 def _create_user(

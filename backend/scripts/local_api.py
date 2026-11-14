@@ -14,7 +14,9 @@ for ``serve``, ``--port N`` (default 5100; never 8000, which belongs to other so
 Reads ``../.env`` for the database roles, the secret key and the operator and demo
 passwords, so no password ever appears on the command line or in the output. The development
 database is ``POSTGRES_DB``; the test database (``BOS_TEST_DB``) is refused. There is no mail
-server on this computer: sending mail fails gracefully and is recorded as ``email.failed``.
+server on this computer: email (reset links, invitation codes) is written as JSON files to
+``BOS_MAIL_OUTBOX_DIR`` from .env, by default the ``bos-dev/outbox`` folder under
+``%LOCALAPPDATA%``.
 """
 
 from __future__ import annotations
@@ -65,8 +67,10 @@ def build_environment(env: dict[str, str], public_base_url: str) -> dict[str, st
     if database == env.get("BOS_TEST_DB"):
         raise SystemExit("Refusing to run against the test database.")
     result = {name: env[name] for name in PASS_THROUGH if env.get(name)}
+    local = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "bos-dev"
     result.update(
         {
+            "BOS_MAIL_OUTBOX_DIR": env.get("BOS_MAIL_OUTBOX_DIR") or str(local / "outbox"),
             "BOS_COOKIE_SECURE": "false",
             "BOS_PUBLIC_BASE_URL": public_base_url.rstrip("/"),
             "BOS_UPLOAD_DIR": str(

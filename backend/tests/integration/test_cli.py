@@ -67,6 +67,7 @@ def _snapshot(owner: Engine) -> dict[str, list[Any]]:
         "users",
         "user_stores",
         "invitations",
+        "invitation_codes",
         "password_resets",
         "files",
         "sessions",
@@ -413,7 +414,14 @@ def test_seed_demo_creates_exactly_the_documented_rows(
         ["owner", "manager", "sales", "packing", "dispatch", "sales"]
     )
     # Nothing else was created.
-    for table in ("invitations", "password_resets", "files", "sessions", "idempotency_keys"):
+    for table in (
+        "invitations",
+        "invitation_codes",
+        "password_resets",
+        "files",
+        "sessions",
+        "idempotency_keys",
+    ):
         assert _rows(owner_engine, f"SELECT 1 FROM {table}") == [], table  # noqa: S608
     assert _rows(owner_engine, "SELECT 1 FROM audit_entries WHERE tenant_id IS NULL") == []
 

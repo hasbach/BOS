@@ -51,7 +51,9 @@
     "invalid_idempotency_key": "This request could not be processed. Please try again.",
     "owner_has_email": "This owner has an email. Use the email reset instead.",
     "unknown": "Something went wrong. Please try again.",
-    "user_inactive": "This person is deactivated. Reactivate them first."
+    "user_inactive": "This person is deactivated. Reactivate them first.",
+    "code_invalid": "This code is wrong or has expired. Check it or send a new code.",
+    "code_not_required": "This link doesn't need a code."
   },
   "fieldErrors": {
     "required": "Required",
@@ -112,6 +114,15 @@
       "languageHint": "The page switches now. This becomes your language in BOS on every device.",
       "password": "Password",
       "confirm": "Confirm password",
+      "codeTitle": "Confirm your email",
+      "codeIntro": "We email a 6-digit code to the address you were invited with. Enter it here to join.",
+      "sendCode": "Send code",
+      "sendNewCode": "Send a new code",
+      "codeSent": "Code sent. Check your email: the code works for 15 minutes.",
+      "code": "Code from the email",
+      "codeHint": "6 digits",
+      "codeRequired": "Enter the 6-digit code from the email.",
+      "tooManyCodes": "Too many codes were requested. Try again in an hour.",
       "submit": "Activate and sign in"
     },
     "link": {
@@ -808,6 +819,8 @@
       "invitation_accepted": "Invitation accepted",
       "invitation_revoked": "Invitation revoked",
       "invitation_resent": "Invitation resent",
+      "invitation_code_sent": "Invitation code sent",
+      "invitation_code_failed": "Invitation code stopped after wrong tries",
       "user_roles_changed": "Roles changed",
       "user_stores_changed": "Store access changed",
       "user_deactivated": "Employee deactivated",

@@ -143,6 +143,25 @@ Holds everything about the invitee until acceptance; it does not reference a use
 Constraints: at most one `pending` invitation per `(tenant_id, invitee_phone_e164)` and per
 `(tenant_id, invitee_email)`; at most one `pending` `owner_activation` per tenant.
 
+### invitation_codes (RLS)
+
+Codes for accepting an employee invitation by email (FR-012a, research R37; migration
+`0002`). One row per code sent.
+
+| Field | Type | Rules |
+|---|---|---|
+| id | uuid | PK |
+| tenant_id | uuid | FK `(tenant_id, invitation_id)` → invitations |
+| invitation_id | uuid | indexed with created_at; 5 rows per invitation per hour at most |
+| code_hash | bytea | HMAC-SHA-256 (keyed with the server secret) of the invitation id and the 6-digit code; the code itself is never stored |
+| expires_at | timestamptz | created + 15 minutes |
+| failed_attempts | int | 0–5; the fifth wrong entry voids the code |
+| voided_at | timestamptz, nullable | set when a newer code is sent or after 5 wrong entries |
+| created_at | timestamptz | |
+
+A code is open while `voided_at` is null and `expires_at` is in the future; at most one is
+open per invitation. The application role may select, insert and update, not delete.
+
 ### password_resets (RLS)
 
 | Field | Type | Rules |
@@ -177,7 +196,7 @@ Constraints: at most one `pending` invitation per `(tenant_id, invitee_phone_e16
 | Field | Type | Rules |
 |---|---|---|
 | id | bigserial | PK |
-| identifier_hash | bytea | HMAC-SHA-256 (keyed with the server secret) of the normalized identifier typed; a separate namespace holds password-reset email requests (recorded with `success = true`, so they never count towards a sign-in block) |
+| identifier_hash | bytea | HMAC-SHA-256 (keyed with the server secret) of the normalized identifier typed; separate namespaces hold password-reset email requests and invitation-code emails (recorded with `success = true`, so they never count towards a sign-in block) |
 | ip | inet | |
 | success | bool | |
 | at | timestamptz | indexed with identifier_hash and with ip |
@@ -269,6 +288,8 @@ store's WhatsApp number is the business's own public number and is kept as enter
 | `invitation.accepted` | invitation | `kind`, `roles` |
 | `invitation.revoked` | invitation | `kind` |
 | `invitation.resent` | invitation (the new one) | `kind`, `previous_invitation_id`; `repeat: true` when an idempotent repeat refreshed the same invitation's link |
+| `invitation.code_sent` | invitation | `kind` (actor `anonymous`: the link holder); never the code or the address. The email itself is `email.sent` / `email.failed` with purpose `invitation_code` |
+| `invitation.code_failed` | invitation | `kind`, `attempts` (5): the code was voided after 5 wrong entries (actor `anonymous`) |
 | `user.roles_changed` | user | change; sides are lists of role codes |
 | `user.stores_changed` | user | change; sides are `{all_stores, store_ids}` |
 | `user.deactivated` | user | change; sides are status strings; plus `sessions_ended` (count) |
@@ -303,11 +324,12 @@ re-invited as a fresh invitation.
 
 ## Known, accepted limitations
 
-- **Identifiers are not verified.** Links are shared by the inviter, so BOS does not prove
-  the invitee controls the phone number or email. Because users belong to one business, the
-  effect is limited to that business, plus the possibility of claiming an identifier someone
-  else would want to use. An operator can release a wrongly claimed identifier. Verification
-  (SMS or email codes) is deferred to when BOS has a sending channel.
+- **Phone numbers are not verified.** An employee invited by email proves control of the
+  address with an emailed code before acceptance (FR-012a). Links by phone number and owner
+  activations are shared by the inviter, so BOS does not prove the invitee controls the
+  phone number. Because users belong to one business, the effect is limited to that
+  business, plus the possibility of claiming a phone number someone else would want to use.
+  An operator can release a wrongly claimed identifier. SMS codes wait for an SMS channel.
 - **Sign-in lockout can be triggered by a third party** who knows a user's phone number
   (5 wrong passwords block that identifier for 15 minutes). Accepted for the pilot.
 - **An operator who issues an owner reset link could use it.** This is restricted to owners

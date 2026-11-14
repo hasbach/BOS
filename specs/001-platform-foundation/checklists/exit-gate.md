@@ -243,14 +243,14 @@ the product brief, plus the M0 exit gate in brief section 9.2 ("Multi-tenant iso
 ### Open items for the product owner
 
 Decisions:
-1. **F-04** (Medium): a password-reset request takes measurably longer for a registered email, so timing reveals whether an email is registered. Fix (equalise the work, or send in the background) or accept for the pilot.
-2. **F-09** (Low): accepting an invitation answers "this phone/email is already used" when the contact belongs to anyone on BOS, so an owner can learn that a number is registered elsewhere. Accept, or change the wording/flow.
+1. **F-04** (Medium): **Fixed** 2026-11-14 (T092, `6af7b7c`): the same work happens before the answer for every address; lookup and email after it; 10 reset requests per client address per hour.
+2. **F-09** (Low): **Fixed for email** 2026-11-14 (T093): an employee invitation by email needs a 6-digit code sent to that address before acceptance answers anything (research R37). Phone invitations and owner activations keep the residual until BOS can message phones.
 3. **Real-phone check**: a person signs in on a real phone in both languages (SC-001/002 timed by hand, SC-006, SC-009 on real mobile data, install to home screen). SC-009 met only on the simulated mobile profile (0.92–1.2 s).
 4. **CI**: create the GitHub remote so CI runs (and add the Playwright job), or accept local runs as the M0 evidence.
 
 Carried forward (no decision needed now; target milestone in brackets):
 - F-08 production serving (gunicorn behind TLS) and F-12 SMTP STARTTLS [M7, before any live use].
-- F-11 refuse a weak or `CHANGE_ME` secret key at start-up; F-15 larger common-password list [M1, small].
+- F-11 refuse a weak or `CHANGE_ME` secret key at start-up, and refuse the development-only `BOS_MAIL_OUTBOX_DIR` (added with T093) outside development; F-15 larger common-password list [M1, small].
 - F-10 dev-only npm advisories in the lint chain [routine update].
 - F-06 follow-up: rotate the local secret key and database password used during development [before any shared deploy].
 - `me.stores` can go stale in an open app until the next screen change [M1, with catalog store filters].
@@ -258,5 +258,5 @@ Carried forward (no decision needed now; target milestone in brackets):
 - History filter arrow keys (F12) [M1]; P3 wording "already used" vs "no longer valid"; P4 no service worker under `next dev` (by design).
 - tasks.md housekeeping: close T021 as "not built by design" and update plan.md; T001/T003/T006/T008/T036 close when the Docker web image builds and CI runs.
 
-**Recommendation:** approve the M0 exit gate with items 1–2 decided and items 3–4 scheduled; none blocks M1 work, which adds no
+**Recommendation:** approve the M0 exit gate with items 1–2 now fixed and items 3–4 scheduled; none blocks M1 work, which adds no
 public sign-in surface. Exit-gate approval: _pending product owner_.

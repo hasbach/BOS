@@ -305,3 +305,53 @@ def test_starttls_and_login_only_with_a_user(
     expected += [("send", "a@example.test"), ("close", None)]
     assert _RecordingSmtp.calls == expected
     assert SMTP_TIMEOUT_SECONDS == 10
+
+
+def test_a_development_outbox_folder_receives_the_message_instead_of_smtp(
+    config: Config,
+    app_engine: Engine,
+    owner_engine: Engine,
+    fresh_tenants: TwoTenants,
+    sink: _SmtpSink,
+    tmp_path: Any,
+) -> None:
+    folder = tmp_path / "outbox"
+    mailer = Mailer(_config(config, sink.port, mail_outbox_dir=str(folder)), app_engine)
+
+    sent = mailer.send(
+        "a@example.test",
+        "Code",
+        "Your code: 123456",
+        tenant_id=fresh_tenants.a.tenant_id,
+        purpose="invitation_code",
+    )
+
+    assert sent is True
+    assert sink.messages == []
+    [written] = list(folder.iterdir())
+    assert written.suffix == ".json"
+    import json
+
+    assert json.loads(written.read_text(encoding="utf-8")) == {
+        "to": "a@example.test",
+        "subject": "Code",
+        "text": "Your code: 123456",
+    }
+    [entry] = _history(owner_engine)
+    assert entry.event == "email.sent"
+
+
+def test_the_outbox_still_refuses_a_header_injection(
+    config: Config, app_engine: Engine, fresh_tenants: TwoTenants, tmp_path: Any
+) -> None:
+    folder = tmp_path / "outbox"
+    mailer = Mailer(_config(config, 1, mail_outbox_dir=str(folder)), app_engine)
+
+    assert not mailer.send(
+        "a@example.test\nBcc: x@example.test",
+        "Code",
+        "x",
+        tenant_id=fresh_tenants.a.tenant_id,
+        purpose="invitation_code",
+    )
+    assert not folder.exists()

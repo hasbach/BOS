@@ -26,6 +26,7 @@ from tests.integration.us1_support import (
     CSRF,
     PASSWORD,
     app_for,
+    code_for,
     cookie,
     history,
     ok,
@@ -131,7 +132,7 @@ def _post(app: Flask, path: str, body: dict[str, Any], client: FlaskClient | Non
 
 
 def _accept(app: Flask, token: str, client: FlaskClient | None = None, **extra: Any) -> Any:
-    body = {"token": token, "password": PASSWORD, "locale": "ar", **extra}
+    body = {"token": token, "password": PASSWORD, "locale": "ar", **code_for(app, token), **extra}
     return _post(app, "/invitations/accept", body, client)
 
 
@@ -151,8 +152,16 @@ def test_preview_shows_only_what_the_inviter_entered(
 
     body = ok(_post(app, "/invitations/preview", {"token": token}))
 
-    assert set(body) == {"kind", "business_name", "invitee_name", "roles", "expires_at"}
+    assert set(body) == {
+        "kind",
+        "business_name",
+        "invitee_name",
+        "roles",
+        "expires_at",
+        "code_required",
+    }
     assert body["kind"] == "employee"
+    assert body["code_required"] is True  # invited by email (FR-012a)
     assert body["business_name"] == "Tenant a"
     assert body["invitee_name"] == "New Person"
     assert body["roles"] == ["sales", "packing"]
@@ -170,6 +179,7 @@ def test_preview_of_an_owner_activation(
         "Pending Shop",
         ["owner"],
     )
+    assert body["code_required"] is False
 
 
 @pytest.mark.parametrize("token", ["", "unknown-token", None, 42])
