@@ -109,6 +109,7 @@ An owner who already keeps products in a spreadsheet uploads a CSV file. BOS che
 - An employee whose store access changes sees the new set of products on their next screen change (as for other screens in M0).
 - Quantities and prices typed with Arabic-Indic digits are accepted; large LBP amounts (e.g., 89,500,000) display with thousands separators in both languages.
 - Photo upload fails on a weak connection: the form keeps everything else and lets the person retry the photo; a refused photo (too large, wrong type) blocks saving like any other field error.
+- A CSV file with a photo or image-link column is treated like any file with unknown columns.
 - A CSV file that is too large, not CSV, or has unknown columns is refused before row checks with one clear message.
 - Allocation requests for an archived variant are refused; archiving a variant with active allocations is refused until they are released.
 
@@ -123,7 +124,7 @@ An owner who already keeps products in a spreadsheet uploads a CSV file. BOS che
 - **FR-003**: Each combination of option values MUST be a variant with its own SKU, price, low-stock level and optional photo chosen from the product's photos; a product without options MUST have exactly one variant.
 - **FR-004**: Each variant MUST have one stable inventory identity, created with it and never reused or changed; SKU, price, names and options may be edited later without changing that identity.
 - **FR-005**: SKUs MUST be unique within a business, compared without regard to letter case and surrounding spaces, including archived variants. The system MUST suggest a SKU built from the product code and option values when the person leaves it empty.
-- **FR-006**: Prices MUST be stored as exact decimal amounts with an explicit currency, and MUST NOT be converted silently. Each variant MUST have one price in a currency the seller chooses, USD or LBP; the other currency MUST be shown as an approximate conversion at the business's current USD/LBP rate (from Settings) and labelled as approximate. Changing the rate MUST NOT change any stored price.
+- **FR-006**: Prices MUST be stored as exact decimal amounts with an explicit currency, and MUST NOT be converted silently. Each variant MUST have one price in a currency the seller chooses, USD or LBP; the other currency MUST be shown as an approximate conversion at the business's current USD/LBP rate (from Settings) and labelled as approximate. Changing the rate MUST NOT change any stored price. A variant's price MUST be the same in every store the product is listed in; there are no per-store prices in M1.
 - **FR-007**: Products and variants with stock history or allocations MUST NOT be deletable; they can be archived and restored. Archived items MUST be excluded from sales search and from new allocations.
 - **FR-008**: Changes to a product MUST be refused when the product changed since the person opened it, showing the current version.
 - **FR-009**: Catalog search MUST match product names in either language, product codes and SKUs, partially and ignoring letter case, and MUST filter by store and by in-stock / low / out-of-stock.
@@ -158,7 +159,7 @@ An owner who already keeps products in a spreadsheet uploads a CSV file. BOS che
 - **FR-026**: The system MUST validate the whole file before saving anything: required columns and fields, product code consistency across rows of the same product, duplicate SKUs within the file and against the catalog, number formats, non-negative opening quantities, known store names, option combinations not repeated within a product.
 - **FR-027**: The preview MUST list every error with row number, column and a reason in the person's language, and the counts of products, variants and opening stock that would be created.
 - **FR-028**: Confirming a valid preview MUST save all rows in one step or none, recording opening quantities as ledger movements and the import as one entry in the business's history.
-- **FR-029**: Import in M1 MUST only create new products and variants; rows whose SKU or product code already exists MUST be reported as errors.
+- **FR-029**: Import in M1 MUST only create new products and variants; rows whose SKU or product code already exists MUST be reported as errors. The import file MUST NOT carry photos or photo links; imported products start without photos, and catalog search MUST offer a "no photo" filter for owners and managers so they can add them on the phone.
 
 **Cross-cutting**
 
@@ -195,6 +196,11 @@ An owner who already keeps products in a spreadsheet uploads a CSV file. BOS che
 ### Session 2026-11-14
 
 - Q: How do prices work with USD and LBP? → A: One price per variant in a currency the seller chooses (USD or LBP); the other currency is shown as an approximate conversion at the business rate (FR-006).
+
+### Session 2026-11-15
+
+- Q: When a product is listed in several stores, is its price the same in all of them? → A: Yes, one price per variant for the whole business; no per-store prices in M1 (FR-006).
+- Q: Does the CSV import bring in photos? → A: No; imported products start without photos, which are added on the phone, helped by a "no photo" filter (FR-029). BOS does not download images from web links.
 
 ## Assumptions
 
