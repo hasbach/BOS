@@ -138,7 +138,7 @@ An owner who already keeps products in a spreadsheet uploads a CSV file. BOS che
 - **FR-014**: Owners and managers (permission `stock.adjust`) MUST be able to record these reasons: opening stock, received, count correction, damaged, lost, found, other (note required). Sales, packing and dispatch agents MUST NOT be able to change stock.
 - **FR-015**: A stock change MUST be refused if the balance changed since the person loaded it, or if it would make on hand lower than zero or lower than the quantity allocated.
 - **FR-016**: Repeated submission of the same stock change (same request key) MUST be recorded once.
-- **FR-017**: Every stock change MUST appear in the business's history (audit) and in the variant's stock history, readable by owners and managers.
+- **FR-017**: Every stock change MUST appear in the business's history (audit, readable by owners, as in M0) and in the variant's stock history (readable by owners and managers).
 
 **Allocation**
 

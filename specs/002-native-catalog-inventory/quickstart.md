@@ -94,9 +94,10 @@ user `sales-store-a@demo.bos.test`.
    Save. **Expect**: under 3 minutes (SC-001); six variants with SKUs like
    `JN-TEST-30-BLUE`; the price shows "≈ LBP …" labelled approximate; each variant shows on
    hand 5, reserved 0, available 5.
-3. Edit the product, type the SKU of the first variant as ` jn-test-32-blue ` (lower case,
-   spaces) on another variant. **Expect**: refused on that field, naming the product that has
-   it. Create the same SKU in "Demo Second Shop". **Expect**: allowed.
+3. Create a second product `JN-TEST2` and type ` jn-test-32-blue ` (lower case, spaces) as
+   the SKU of one of its variants. **Expect**: refused on that field (`sku_in_use`), naming
+   "Test jeans", which has it. Create the same SKU in "Demo Second Shop". **Expect**:
+   allowed.
 4. Upload a 6 MB photo and a PDF renamed `.jpg`. **Expect**: both refused as field errors;
    the rest of the form is kept; saving is blocked until they are removed.
 5. Sign in as the Store A agent; search `test`, then `jn-te`, then `32-BLU`. **Expect**: the

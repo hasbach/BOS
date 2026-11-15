@@ -41,8 +41,11 @@ rejected.
 ## R40. Balances: on hand and allocated, available derived
 
 - **Decision**: `stock_balances(tenant_id, warehouse_id, inventory_item_id)` unique, with
-  `on_hand`, `allocated` and `version`. `CHECK (allocated >= 0 AND on_hand >= allocated AND
-  on_hand <= 1000000)`. Available (`on_hand − allocated`) is computed in queries and never
+  `on_hand`, `allocated` and `version`. The CHECKs enforce `allocated >= 0 AND on_hand >=
+  allocated AND on_hand <= 1000000`, written as two named constraints
+  (`stock_balances_not_oversold`: `allocated >= 0 AND on_hand >= allocated`;
+  `stock_balances_on_hand_range`: `on_hand BETWEEN 0 AND 1000000`) so R42 can answer each
+  by name. Available (`on_hand − allocated`) is computed in queries and never
   stored. `version` (bigint) increases by one on every change of the row: adjustment,
   allocation, release, consumption. A balance row is created with its variant (on hand 0, or
   the opening quantity).
@@ -60,13 +63,17 @@ rejected.
   `audit_entries` (R11). Each row: inventory item, warehouse, signed integer `quantity`,
   `reason`, `counted_quantity` (count corrections only), `on_hand_after`, actor (`user` with
   id, or `system`), optional `note` (≤ 500), optional `request_key` (the Idempotency-Key or
-  allocation key that caused it), optional `allocation_id` / `import_batch_id`, `created_at`
-  and an identity `seq` that orders movements of one item. Reasons and their sign rules
-  (enforced by CHECK):
+  allocation key that caused it), optional `allocation_id` / `import_batch_id`, a stored
+  `source` (`manual` = stock adjustment, `product_form`, `import`, `allocation`; set by the
+  code path that writes the movement and tied to reason, `import_batch_id` and
+  `allocation_id` by a CHECK, data-model.md), `created_at` and an identity `seq` that orders
+  movements of one item. `source` is stored rather than derived because a manual adjustment
+  may also use the reason `opening` (FR-014), which would otherwise look like product-form
+  opening stock. Reasons and their sign rules (enforced by CHECK):
 
   | Reason | Who | Sign |
   |---|---|---|
-  | `opening` | person, product form or import | > 0 |
+  | `opening` | person (source `manual`), product form (`product_form`) or import (`import`) | > 0 |
   | `received` | person | > 0 |
   | `found` | person | > 0 |
   | `damaged` | person | < 0 |
@@ -91,8 +98,11 @@ rejected.
   `SELECT … FOR UPDATE`, **always in ascending `inventory_item_id` order**, before reading the
   numbers it decides on. Stock operations never lock product or variant rows. Operations
   that touch both (archiving a variant, deleting a history-less variant, archiving a product)
-  lock the product row first, then the balances in the same ascending order. The CHECK of
-  R40 is the final guard: a violation is answered as `not_enough_stock`, never a 500. M0's
+  lock the product row first, then the balances in the same ascending order. The CHECKs of
+  R40 are the final guard, answered by constraint name, never a 500:
+  `stock_balances_not_oversold` → 409 `not_enough_stock`; `stock_balances_on_hand_range`
+  and `stock_movements_on_hand_after_range` → 400 `quantity: too_large`. The service
+  checks the same limits first, so these fire only if a code path forgets. M0's
   connection settings stay (`lock_timeout = 10s`); a lock timeout or a detected deadlock is
   answered **503 `try_again`** with `Retry-After: 1`, and nothing is applied. The client
   retries with the same Idempotency-Key, so a retry can never apply twice.
@@ -130,8 +140,10 @@ rejected.
     and reuses it for every retry of that save.
   - **Product create** (`POST /catalog/products`) also uses `core/idempotency.py` (resource
     type `product`): a double tap or a retry on a weak connection must not create two
-    products with opening stock. The form creates one key when it opens. Product edits are
-    protected by the product `version` instead (R43).
+    products with opening stock. The form creates one key when it opens and reuses it for
+    every save of that form (M0 stores no key for a refused request, so correcting a field
+    error and saving again with the same key is safe). Product edits are protected by the
+    product `version` instead (R43).
   - **Allocations** have their own durable key, because the M2 caller is an order and must
     be replayable forever: `allocations(tenant_id, request_key)` is unique, and
     `request_hash` is SHA-256 of the canonical list of `(inventory_item_id, quantity)` sorted
@@ -155,8 +167,9 @@ rejected.
   `release(db, actor, allocation_id)` and `consume(db, actor, allocation_id)`. There is **no
   HTTP endpoint in M1**; M2 adds one with orders. Rules:
   - `allocate`: lines are `(inventory_item_id, quantity ≥ 1)`, at most 100, no item twice.
-    Locks the balances (R42), refuses the whole request if any item is unknown, belongs to an
-    archived variant (`variant_archived`) or has `available < quantity`
+    Locks the balances (R42), refuses the whole request if any item is unknown
+    (`unknown_item`), belongs to an archived variant (`variant_archived`) or has
+    `available < quantity`
     (`insufficient_stock`, listing every short line with its available number). Otherwise
     increases `allocated`, bumps versions, inserts the allocation (`active`) and its lines,
     and records `stock.allocated` — all in the caller's transaction.
@@ -170,7 +183,13 @@ rejected.
     are M2/M3 concerns and are not built now.
   - The integrity check (FR-022) is `services/inventory.integrity_report(db)` (one business)
     and the command `flask bos stock-check [--tenant ID]` (every business, each in its own
-    tenant transaction). A pytest fixture runs the same check after every test of the
+    tenant transaction). Businesses are listed the way M0 already allows under forced RLS:
+    one short transaction in operator context (`app.core.tenancy.enter_operator`, which sets
+    `app.operator = on`; policy `operator_reads_tenants` on `tenants`, `USING
+    (app_is_operator())`) reads `SELECT id FROM tenants`; then each business runs in its own
+    `app.core.tenancy.tenant_transaction(engine, tenant_id)` (which calls `enter_tenant`).
+    `enter_tenant_from_operator` is not used: `tenancy.py` keeps it to onboarding and the
+    demo seed (R24), and per-business work needs no operator context. A pytest fixture runs the same check after every test of the
     catalog and stock suites and fails the test on any difference (SC-003).
   - Concurrency tests use real separate connections from the application engine, one per
     thread, started together on a `threading.Barrier` (not sequential calls), as Principle
@@ -230,7 +249,9 @@ rejected.
     of option types can change only while no variant of the product has history (otherwise
     409 `options_locked`); a merchant who needs a new dimension creates a new product.
   - Restoring an archived variant is refused with 409 `combination_in_use` if an active
-    variant now has the same combination; restoring it reactivates its archived value.
+    variant now has the same combination; restoring it reactivates its archived value, and
+    is refused with 409 `value_in_use` (checked before anything is written) when an active
+    value of the same option now has that label, ignoring ASCII case.
   - Archiving a variant (or its product) with `allocated > 0` is refused with 409
     `variant_has_allocations` (checked under the balance lock, so it cannot race an
     allocation).
@@ -323,7 +344,10 @@ rejected.
     callback; files of removed photos are deleted by an `on_commit` callback (M0 R36).
     Unattached uploads older than 24 hours are removed by `flask bos maintenance`, which
     gains a per-tenant step run in each tenant's own transaction (FR-004), deleting files
-    only after that transaction commits.
+    only after that transaction commits. Tenants are listed and entered exactly as for
+    `stock-check` (R45): `enter_operator` to read `tenants`, then
+    `tenant_transaction(engine, tenant_id)` per business. Its counts are added to M0's
+    platform `maintenance.run` entry.
   - **Storage stays on local disk** behind M0's `Storage` interface in M1. The brief's
     object storage is introduced with deployment hardening (M7) without touching callers.
 - **Rationale**: FR-010, spec edge cases, Principle I (no public URLs), M0 R14 and R36.
@@ -440,7 +464,8 @@ rejected.
   7. Columns: `product_code`*, `name_en`, `name_ar` (at least one name)*, `description_en`,
      `description_ar`, `stores`, `option1_name`, `option1_value`, `option2_name`,
      `option2_value`, `sku`, `price`*, `currency`*, `opening_quantity` (empty = 0),
-     `low_stock_level` (empty = business default). No photo columns (FR-029).
+     `low_stock_level` (empty → stored as null, so the variant follows the business
+     default, now and after it changes). No photo columns (FR-029).
   8. Expired batches are deleted by the maintenance step of R50; committed batches are kept
      (movements and products reference them).
 - **Rationale**: FR-025–FR-029, SC-005, US5. Validation of 2,000 rows is pure Python plus
@@ -528,10 +553,12 @@ rejected.
     (`backend/app/data/common_passwords.txt`): a published list (for example SecLists'
     100,000 most common passwords, MIT licence) filtered to entries of 10 or more
     characters, lower-cased; source and licence in the file header. Loaded once at start.
-  - **`me.stores` staleness**: the web app re-reads `GET /me` on every screen change and
-    when the app returns to the foreground (it already re-reads permissions on the server
-    for every request); catalog store pills use the fresh list, so a store-access change
-    shows on the next screen change (spec edge case).
+  - **`me.stores` staleness**: M0 already re-reads `GET /me` on every screen change and
+    when the window returns to view (`useMeRefresh` in `frontend/src/components/
+    SessionGuard.tsx`). What remains is that store lists use the refreshed `me.stores`:
+    the catalog store pills read it from the session context, and `StoresProvider` falls
+    back to the refreshed list, so a store-access change shows on the next screen change
+    (spec edge case).
   - **Development database clean-up**: `backend/scripts/local_api.py
     purge-test-businesses` deletes non-demo businesses created by the end-to-end and
     run-through tests (`E2E Business …` names), with their files, from the development

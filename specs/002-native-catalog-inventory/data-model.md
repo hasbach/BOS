@@ -172,7 +172,14 @@ GIN `gin_trgm_ops` on `sku_key`. Grants: `SELECT, INSERT, UPDATE, DELETE`.
 | updated_at | timestamptz | |
 
 PK `(warehouse_id, inventory_item_id)`; unique `(tenant_id, warehouse_id, inventory_item_id)`
-(FR-011, one authoritative balance). `CHECK (allocated >= 0 AND on_hand >= allocated AND on_hand <= 1000000)` (R40).
+(FR-011, one authoritative balance). Together the balance CHECKs enforce
+`allocated >= 0 AND on_hand >= allocated AND on_hand <= 1000000` (R40), as two named
+constraints so a violation can be answered by name (R42): `stock_balances_not_oversold
+CHECK (allocated >= 0 AND on_hand >= allocated)` → 409 `not_enough_stock`;
+`stock_balances_on_hand_range CHECK (on_hand BETWEEN 0 AND 1000000)` → 400
+`quantity: too_large`. PostgreSQL checks CHECK constraints in name order, so a negative on
+hand always fails `stock_balances_not_oversold` first (since `allocated >= 0`) and is
+answered `not_enough_stock`.
 Grants: `SELECT, INSERT, UPDATE, DELETE` (delete only with a history-less variant).
 
 ### stock_movements (append-only)
@@ -190,6 +197,7 @@ Grants: `SELECT, INSERT, UPDATE, DELETE` (delete only with a history-less varian
 | on_hand_after | integer | the balance's on hand right after this movement |
 | allocation_id | uuid, nullable | FK `(tenant_id, allocation_id)` → allocations; required for `allocation_consumed` |
 | import_batch_id | uuid, nullable | FK `(tenant_id, import_batch_id)` → import_batches |
+| source | text | `manual` (a stock adjustment), `product_form` (opening stock from the product form), `import` (opening stock from a CSV import), `allocation` (an allocation consumed); set by the code path that writes the movement, never derived later |
 | actor_type | text | `user` / `system` |
 | actor_id | uuid, nullable | the user when `actor_type = 'user'` (FK `(tenant_id, actor_id)` → users) |
 | note | text, nullable | ≤ 500; required for `other` |
@@ -200,7 +208,13 @@ Checks: `opening`, `received`, `found` → `quantity > 0`; `damaged`, `lost`,
 `allocation_consumed` → `quantity < 0`; `other` → `quantity <> 0` and note present;
 `count_correction` → `counted_quantity IS NOT NULL` (quantity may be 0); `counted_quantity`
 null for every other reason; `allocation_id IS NOT NULL` exactly when the reason is
-`allocation_consumed`; `|quantity| <= 1000000`; `on_hand_after` 0–1,000,000.
+`allocation_consumed`; `|quantity| <= 1000000`; `on_hand_after` 0–1,000,000 (named
+`stock_movements_on_hand_after_range`, answered as `quantity: too_large`). Source CHECK
+(`stock_movements_source`): `source IN ('manual', 'product_form', 'import', 'allocation')`;
+`source = 'allocation'` exactly when `reason = 'allocation_consumed'` (and so when
+`allocation_id` is set); `source = 'import'` exactly when `import_batch_id IS NOT NULL`, and
+then `reason = 'opening'`; `source = 'product_form'` only with `reason = 'opening'`. A manual
+adjustment with reason `opening` (FR-014) is `manual`.
 
 Index: `(tenant_id, inventory_item_id, seq DESC)`. Trigger `stock_movements_no_change`
 (`BEFORE UPDATE OR DELETE`, function `stock_movements_are_append_only()`) raises for every
@@ -300,20 +314,21 @@ means the business is consistent.
 
 | Field | Rule | Error |
 |---|---|---|
-| product code | 1–32, allowed characters (R46), unique in business incl. archived | `validation_failed` (`code: required/too_long/invalid`), 409 `product_code_in_use` |
+| product code | 1–32, allowed characters (R46), unique in business incl. archived | `validation_failed` (`code: required/too_long/invalid`), 409 `product_code_in_use` (`code: in_use`) |
 | names | at least one of `name_en`, `name_ar`; each 1–120 | `name_en: required` when both missing; `too_long` |
 | descriptions | ≤ 2,000 each | `too_long` |
-| stores | ids of this business's active stores (a store already listed and later deactivated may stay) | `store_ids: invalid` |
+| stores | ids of this business's active stores (a store already listed and later deactivated may stay, and its listing is kept); same rule for import (`unknown_store`) | `store_ids: invalid` |
 | photos | ≤ 8 ids, each a staged photo of this business or already this product's | `photo_ids: too_many / invalid` |
 | options | 0–2 types; name 1–40; 1–20 values each, label 1–40, no duplicate labels (ASCII case ignored) | `options: too_many`, `options.0.values: too_many / duplicate` |
 | variants | exactly the combinations of the active values, ≤ 100 | `variants: invalid / too_many` |
-| SKU | empty → suggested; else 1–64, allowed characters, unique in business and in the request | `variants.N.sku: too_long / invalid / duplicate`, 409 `sku_in_use` |
+| SKU | empty → suggested; else 1–64, allowed characters, unique in business and in the request | `variants.N.sku: too_long / invalid / duplicate`, 409 `sku_in_use` (`variants.N.sku: in_use`) |
+| variant restore | reactivating its archived option value must not clash with an active value's label of the same option (ASCII case ignored); checked before writing | 409 `value_in_use` |
 | price | decimal string ≤ 2 decimals, 0–99,999,999,999.99; LBP whole | `variants.N.price: required / invalid / too_large / not_whole` |
 | currency | `USD` / `LBP` | `invalid` |
 | low-stock level | integer 0–1,000,000 or null | `invalid / too_large` |
 | opening quantity | integer 0–1,000,000 (create, and new variants have 0) | `invalid / too_large` |
 | adjustment quantity | integer 1–1,000,000; counted quantity 0–1,000,000 | `quantity: required / invalid / too_large` |
-| adjustment result | 0 ≤ on hand after ≤ 1,000,000 and on hand after ≥ allocated | 409 `not_enough_stock`, `quantity: too_large` |
+| adjustment result | 0 ≤ on hand after ≤ 1,000,000 and on hand after ≥ allocated | 409 `not_enough_stock` (below zero or allocated), `quantity: too_large` (above 1,000,000); the database CHECKs are answered by constraint name the same way |
 | note | ≤ 500; required for `other` | `note: required / too_long` |
 | direction | `in` / `out`; required for `other`, ignored for every other reason (each has a fixed sign) | `direction: required / invalid` |
 
@@ -336,7 +351,10 @@ deleted (rows gone) only when none of its variants ever had a movement or alloca
 item and balance.
 
 **Option value**: `active` → `archived` when removed while one of its variants has history;
-back to `active` when one of those variants is restored.
+back to `active` when one of those variants is restored. That restore is refused with 409
+`value_in_use`, before anything is written, when an active value of the same option now
+has the same label (ASCII case ignored), which the partial unique index would otherwise
+reject.
 
 **Allocation**: `active` → `released` | `consumed`. Terminal states never change; repeating
 the same transition returns the allocation unchanged; the other transition is refused
@@ -426,7 +444,8 @@ head` covers the full chain.
 | FR-008 product concurrency | `products.version` |
 | FR-011 one warehouse, one balance | `warehouses` partial unique + CHECK; balances unique per item and warehouse |
 | FR-012/013 ledger | append-only `stock_movements` + trigger; same-transaction balance write; integrity rule 2 |
-| FR-015 stale or impossible change | `stock_balances.version`; CHECK `on_hand >= allocated` |
+| FR-015 stale or impossible change | `stock_balances.version`; CHECKs `stock_balances_not_oversold` and `stock_balances_on_hand_range` |
+| FR-017 movement origin in stock history | `stock_movements.source` + `stock_movements_source` CHECK |
 | FR-018 available ≥ 0 | CHECK; derived, never stored |
 | FR-019 idempotent all-or-nothing allocation | `allocations (tenant_id, request_key)` unique + `request_hash`; one transaction |
 | FR-021 concurrency | ordered row locks (R42) + CHECK |

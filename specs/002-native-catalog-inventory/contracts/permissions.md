@@ -2,7 +2,10 @@
 
 M0's [permissions.md](../../001-platform-foundation/contracts/permissions.md) remains the
 source for every M0 permission, the shell tabs and the operator. This file records what M1
-changes. The backend map (`app/core/permissions.py`) is tested against both files.
+changes. The backend map (`app/core/permissions.py`) is tested against both files: the rows
+of the table below **override** the same permissions' rows in M0's "Reserved for later
+milestones" table, and the code's `STORE_SCOPED` must equal the union of the store-scoped
+rows of M0's enforced table and this table (`store.view`, `catalog.view`).
 
 ## What changes
 

@@ -20,9 +20,10 @@ Technical approach: the M0 stack and patterns, extended rather than repeated. Pl
 through SQLAlchemy `text()` in the request transaction, PostgreSQL row-level security
 forced on thirteen new tables with composite foreign keys, the `require()` permission
 declarations (with a new store-filtered form for the catalog), `core/idempotency.py` for
-stock adjustments, `core/audit.py` for history, and M0's storage interface and Pillow
+stock adjustments and product create (R44), `core/audit.py` for history, and M0's storage interface and Pillow
 pipeline for photos. Integrity lives in the database first: a unique balance per item and
-warehouse, `CHECK (allocated >= 0 AND on_hand >= allocated)`, an append-only movements
+warehouse, CHECKs enforcing `allocated >= 0 AND on_hand >= allocated AND on_hand <=
+1000000` (two named constraints, R40), an append-only movements
 trigger, generated normalised SKU keys with unique indexes, and a unique index that allows
 one active variant per option combination. Every stock change locks its balance rows in a
 fixed order. Allocation is a service proven by concurrent tests on real separate
@@ -94,7 +95,7 @@ about 8 screens (3 already designed), 18 API operations (16 new, 2 changed), 13 
 | Principle | How this plan complies | Status |
 |---|---|---|
 | I. Tenant isolation and least privilege | RLS enabled and forced on all 13 new tables with `tenant_isolation`; composite FKs on every reference (a variant's photo must be its own product's); 404 for foreign or out-of-store records with `access.denied_tenant` / `access.denied_store`; `catalog.view` becomes store-scoped and filtered in one SQL predicate; packing/sales/dispatch cannot change prices or stock (server-checked, recorded); route-coverage harness requires cross-tenant, missing-permission and cross-store cases for every new route (R52, R56) | Pass |
-| II. Inventory and money integrity | One balance per item per warehouse (unique); available derived; `CHECK (allocated >= 0 AND on_hand >= allocated)`; all-or-nothing allocation in one transaction with ordered row locks; idempotent adjustments (M0 keys) and allocations (durable keys + content hash); append-only movements enforced by trigger; on hand = Σ movements checked after every test; exact decimals with explicit currency, LBP whole, nothing converted or stored at a rate; lock timeouts and deadlocks fail closed (R40–R45, R48) | Pass |
+| II. Inventory and money integrity | One balance per item per warehouse (unique); available derived; CHECKs `allocated >= 0 AND on_hand >= allocated AND on_hand <= 1000000`; all-or-nothing allocation in one transaction with ordered row locks; idempotent adjustments and product create (M0 keys), import confirm (batch lock, committed batch returned) and allocations (durable keys + content hash), each with concurrent duplicate tests; append-only movements enforced by trigger; on hand = Σ movements checked after every test; exact decimals with explicit currency, LBP whole, nothing converted or stored at a rate; lock timeouts and deadlocks fail closed (R40–R45, R48) | Pass |
 | III. Mobile-first, bilingual UX | Screens 12–14 from the approved designs; the new screens are designed and approved before they are built (R55); 360 px, `en` and `ar`, M0 states; "Low"/"Out" chips with text; no success before the server confirms; Arabic-Indic digits accepted in catalog inputs (R48) | Pass |
 | IV. Contracts and tests before integration | OpenAPI delta and permissions delta written first and tested against; tests written first and seen to fail; concurrency tests with real threads and separate connections for last-unit races, duplicate submissions and adjust/allocate races; integrity check after every scenario; no external platform touched | Pass |
 | V. Small vertical slices | Only M1 scope: no orders, no allocation endpoint, no queue (synchronous import), no object storage, no multi-warehouse (CHECK forbids a second warehouse). The allocation service is the M1 exit gate, not speculation (R45). Five stories, each demonstrable | Pass |
@@ -220,7 +221,7 @@ frontend/
 │       ├── catalog.ts, stock.ts, imports.ts   # NEW: API calls and types
 │       ├── digits.ts               # NEW: Arabic-Indic → ASCII for catalog inputs
 │       ├── money.ts                # CHANGED: approximate conversion helper
-│       ├── session.ts              # CHANGED: re-read /me on screen change and on return to foreground
+│       ├── session.ts              # unchanged unless needed: /me is already re-read by SessionGuard's useMeRefresh
 │       └── audit.ts                # CHANGED: event icons and "Catalog and stock" group
 ├── tests/catalog/                  # NEW: Vitest for form validation, digits, conversion, sheets
 └── e2e/                            # NEW: m1-catalog.spec.ts, m1-stock.spec.ts, m1-import.spec.ts; CHANGED: a11y.spec.ts
@@ -248,13 +249,18 @@ the allocation service the spec requires.
     `not_found_in_scope()` (404, `access.denied_store`, target the product); a record not in
     the business with M0's `not_found_in_tenant()`.
   - Stock change: `idempotent()` (M0) → resolve variant (scope) → lock balance rows `FOR
-    UPDATE` in ascending `inventory_item_id` → check version and limits → insert movement →
-    update balance (version + 1) → `audit.record` → commit. Allocation follows the same
-    locking without HTTP.
+    UPDATE` in ascending `inventory_item_id` → check version and limits → insert movement
+    (with its `source`) → update balance (version + 1) → `audit.record` → commit. Allocation
+    follows the same locking without HTTP.
+  - Commands that visit every business (`stock-check`, the maintenance step): list tenant
+    ids in operator context (`enter_operator`), then one `tenant_transaction` per business
+    (R45, R50).
   - Product save: lock the product row `FOR UPDATE` → compare `version` → (when variants are
     archived or deleted) lock their balances in ascending order → write → `product.updated`
     → commit. Unique-index violations on `sku_key` / `code_key` become 409 with field
-    errors; `CHECK` violations on balances become `not_enough_stock`.
+    errors; `CHECK` violations on balances are answered by constraint name
+    (`stock_balances_not_oversold` → `not_enough_stock`, the on-hand range → `quantity:
+    too_large`, R42).
   - Photos: write both WebP files before the transaction references them, register
     `on_rollback` deletes; files of removed photos are deleted with `on_commit` (M0 R36).
   - Lock timeout (`55P03`) and deadlock (`40P01`) anywhere in a request → 503 `try_again`
@@ -304,8 +310,10 @@ an M1 task (details in research R57):
   `BOS_ENVIRONMENT=development`.
 - **F-15**: replace the 18-entry common-password list with a larger published list filtered to
   10+ characters, shipped as a data file.
-- **`me.stores` going stale** after store access changes: the web app re-reads `/me` on each
-  screen change and on returning to the foreground; catalog store pills use the fresh list.
+- **`me.stores` going stale** after store access changes: M0's `useMeRefresh`
+  (`SessionGuard.tsx`) already re-reads `/me` on each screen change and on returning to the
+  foreground; M1 makes store lists use the refreshed list (catalog store pills,
+  `StoresProvider` fallback).
 - **Development database clean-up**: `local_api.py purge-test-businesses` removes
   end-to-end test businesses from the development database only.
 - **History filter arrow keys (F12)**: roving focus in the filter sheet's radio groups, via a
