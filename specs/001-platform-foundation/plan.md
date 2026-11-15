@@ -141,9 +141,8 @@ backend/
 │   │   ├── audit.py           # append-only writer
 │   │   ├── identifiers.py     # phone/email normalization
 │   │   └── storage.py         # file storage interface + local-disk backend
-│   ├── models/                # SQLAlchemy models (one module per aggregate)
 │   ├── api/                   # blueprints: auth, me, business, stores, staff, audit, ops
-│   ├── services/              # business rules: onboarding, invitations, staff, stores, settings, seed
+│   ├── services/              # rules + data access (SQL via text()): onboarding, invitations, staff, stores, settings, seed
 │   └── cli.py                 # seed-demo, create-operator, maintenance
 ├── migrations/                # Alembic, incl. RLS policies and audit trigger
 └── tests/
@@ -182,7 +181,8 @@ README.md
 
 **Structure Decision**: Web application with `backend/` and `frontend/` at the repository
 root, matching the brief's stack. Backend code is layered as `api` (HTTP) → `services`
-(rules) → `models` (data), with cross-cutting concerns in `core/`. The frontend groups routes
+(rules and data access, plain SQL through SQLAlchemy `text()`; no ORM models, see M0
+T021), with cross-cutting concerns in `core/`. The frontend groups routes
 by signed-out, shell and operator areas. Later milestones add modules inside these same
 directories; nothing here anticipates their internals.
 

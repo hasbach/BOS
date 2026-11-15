@@ -46,7 +46,7 @@ describe("settings (screen 91)", () => {
     expect(screen.getByLabelText(RATE)).toHaveValue("89,500");
     expect(screen.getByLabelText(FEE)).toHaveValue("3.00");
     expect(screen.getAllByRole("radio", { checked: true }).map((radio) => radio.textContent)).toEqual(["USD", "USD"]);
-    expect(screen.getByText("Digits 0–9 only. Use a dot for decimals.")).toBeInTheDocument();
+    expect(screen.getByText("Digits 0–9 or ٠–٩ both work. Use a dot or ٫ for decimals.")).toBeInTheDocument();
   });
 
   it("keeps Latin digits in Arabic", async () => {
@@ -110,13 +110,32 @@ describe("settings (screen 91)", () => {
     expect(writes(calls)).toHaveLength(0);
   });
 
-  it("refuses Arabic-Indic digits and a decimal comma instead of converting them", async () => {
+  it("accepts Arabic-Indic digits and separators and sends ASCII decimal strings (R48)", async () => {
     const calls = businessApi();
     await open();
-    type(RATE, "٨٩٥٠٠");
+    type(RATE, "٨٩٬٥٠٠");
+    type(FEE, "٢٫٥");
+    save();
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0]!.body).toMatchObject({ usd_lbp_rate: "89500", default_delivery_fee: "2.5" });
+  });
+
+  it("accepts extended Arabic-Indic digits and the Arabic screen too", async () => {
+    const calls = businessApi();
+    await open("owner", "ar");
+    type(/سعر الصرف/, "۹۰٬۰۰۰");
+    type("رسم التوصيل الافتراضي", "٣٫٥٠");
+    fireEvent.click(screen.getByRole("button", { name: "حفظ التغييرات" }));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0]!.body).toMatchObject({ usd_lbp_rate: "90000", default_delivery_fee: "3.50" });
+  });
+
+  it("still refuses a decimal comma instead of guessing (3,50 is not 350)", async () => {
+    const calls = businessApi();
+    await open();
+    type(RATE, "89,500");
     type(FEE, "3,50");
     save();
-    expect(screen.getByText(/Enter the rate as a number above 0/)).toBeInTheDocument();
     expect(screen.getByText("Enter an amount with up to 2 decimals. Example: 3.50")).toBeInTheDocument();
     expect(writes(calls)).toHaveLength(0);
   });

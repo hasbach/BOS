@@ -261,6 +261,77 @@ describe("History (screens 109 to 114)", () => {
     expect(await screen.findByText("Settings changed")).toBeInTheDocument();
   });
 
+  it("moves between event options with the arrow keys in every radio group of the filter sheet (F12)", async () => {
+    api();
+    renderMe(<HistoryScreen />);
+    await screen.findByText("Settings changed");
+    fireEvent.click(screen.getByRole("button", { name: /All events/ }));
+    const sheet = await screen.findByRole("dialog", { name: "Show events" });
+
+    const groups = within(sheet).getAllByRole("radiogroup");
+    expect(groups.length).toBeGreaterThan(2);
+    for (const group of groups) {
+      // One Tab stop per group.
+      const radios = within(group).getAllByRole("radio");
+      expect(radios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1);
+      if (radios.length < 2) continue;
+      // Down selects and focuses the next radio; Up goes back; Home and End jump.
+      fireEvent.keyDown(radios[0]!, { key: "ArrowDown" });
+      expect(radios[1]).toHaveAttribute("aria-checked", "true");
+      expect(radios[1]).toHaveFocus();
+      expect(radios[1]!.tabIndex).toBe(0);
+      expect(radios[0]!.tabIndex).toBe(-1);
+      fireEvent.keyDown(radios[1]!, { key: "End" });
+      expect(radios.at(-1)).toHaveAttribute("aria-checked", "true");
+      fireEvent.keyDown(radios.at(-1)!, { key: "ArrowDown" });
+      expect(radios[0]).toHaveAttribute("aria-checked", "true");
+      expect(radios[0]).toHaveFocus();
+    }
+  });
+
+  it("moves between people with the arrow keys and applies the one chosen (F12)", async () => {
+    const calls = api();
+    renderMe(<HistoryScreen />);
+    await screen.findByText("Settings changed");
+    fireEvent.click(screen.getByRole("button", { name: /Everyone/ }));
+    const sheet = await screen.findByRole("dialog", { name: "Show entries by" });
+    const group = await within(sheet).findByRole("radiogroup", { name: "Person" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((radio) => radio.tabIndex)).toEqual([0, -1, -1, -1, -1]);
+    fireEvent.keyDown(radios[0]!, { key: "ArrowDown" });
+    fireEvent.keyDown(radios[1]!, { key: "ArrowDown" });
+    expect(radios[2]).toHaveAttribute("aria-checked", "true");
+    expect(radios[2]).toHaveFocus();
+    fireEvent.keyDown(radios[2]!, { key: "Home" });
+    expect(radios[0]).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(radios[0]!, { key: "ArrowUp" });
+    expect(radios[4]).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(radios[4]!, { key: "Home" });
+    fireEvent.keyDown(radios[0]!, { key: "ArrowDown" });
+    fireEvent.keyDown(radios[1]!, { key: "ArrowDown" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Show results" }));
+    await waitFor(() => expect(auditCalls(calls).at(-1)?.searchParams.get("actor_id")).toBe("u-karim"));
+  });
+
+  it("reverses Left and Right in Arabic (F12)", async () => {
+    // The page sets dir on <html>; jsdom has no layout, so set it as the app does.
+    document.documentElement.setAttribute("dir", "rtl");
+    try {
+      api();
+      renderMe(<HistoryScreen />, meWith({ user: { locale: "ar" } }), "ar");
+      fireEvent.click(await screen.findByRole("button", { name: new RegExp(ar.history.allEvents) }));
+      const sheet = await screen.findByRole("dialog");
+      const group = within(sheet).getAllByRole("radiogroup")[1]!;
+      const radios = within(group).getAllByRole("radio");
+      fireEvent.keyDown(radios[0]!, { key: "ArrowLeft" });
+      expect(radios[1]).toHaveAttribute("aria-checked", "true");
+      fireEvent.keyDown(radios[1]!, { key: "ArrowRight" });
+      expect(radios[0]).toHaveAttribute("aria-checked", "true");
+    } finally {
+      document.documentElement.removeAttribute("dir");
+    }
+  });
+
   it("reads in Arabic with Arabic event names, day headings and Beirut times", async () => {
     api();
     renderMe(<HistoryScreen />, meWith({ user: { locale: "ar" } }), "ar");

@@ -16,15 +16,15 @@ export interface MoneyRule {
 export const RATE_RULE: MoneyRule = { max: 10_000_000, positive: true };
 export const FEE_RULE: MoneyRule = { max: 100_000_000, positive: false };
 
-// Digits 0-9 only: a run of digits, or groups of three after one to three digits (89,500). A comma
+// Digits 0-9 only (callers run the input through normaliseDigits first): a run of digits, or groups of three after one to three digits (89,500). A comma
 // anywhere else is refused rather than guessed at, because "3,50" typed as a decimal comma would
 // otherwise silently become 350.
 const SHAPE = /^(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/;
 
 /**
  * Turns what was typed into the plain decimal string the API accepts, or says what is wrong.
- * Arabic-Indic digits and the Arabic comma and decimal mark are refused (not converted): the
- * approved hint says "Digits 0-9 only. Use a dot for decimals", and refusing is never ambiguous.
+ * ASCII only: this refuses Arabic-Indic digits and the Arabic comma and decimal mark because the
+ * API accepts ASCII only (R48). Callers normalise first (lib/digits.ts normaliseDigits).
  */
 export function parseMoney(input: string, rule: MoneyRule): MoneyResult {
   const typed = input.trim();
