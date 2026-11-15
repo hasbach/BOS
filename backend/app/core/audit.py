@@ -20,7 +20,8 @@ from app.core.tenancy import tenant_transaction
 
 ActorType = Literal["user", "operator", "system", "anonymous"]
 
-# Must equal the list in specs/001-platform-foundation/data-model.md (a test checks this).
+# Must equal the union of the "Events:" lists of every feature's data-model.md
+# (specs/001-platform-foundation, specs/002-native-catalog-inventory); a test checks this.
 EVENTS: frozenset[str] = frozenset(
     {
         "auth.sign_in",
@@ -55,6 +56,17 @@ EVENTS: frozenset[str] = frozenset(
         "email.failed",
         "operator.sign_in",
         "maintenance.run",
+        # M1: catalog and stock (research R54)
+        "product.created",
+        "product.updated",
+        "product.archived",
+        "product.restored",
+        "product.deleted",
+        "stock.adjusted",
+        "stock.allocated",
+        "stock.released",
+        "stock.consumed",
+        "catalog.imported",
     }
 )
 

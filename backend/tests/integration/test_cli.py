@@ -74,6 +74,7 @@ def _snapshot(owner: Engine) -> dict[str, list[Any]]:
         "login_attempts",
         "idempotency_keys",
         "audit_entries",
+        "warehouses",
     ]
     with owner.connect() as conn:
         return {
@@ -390,6 +391,11 @@ def test_seed_demo_creates_exactly_the_documented_rows(
             assert user.phone_e164 in result.output
         for store in demo.stores:
             assert normalize_phone(store.whatsapp) == store.whatsapp
+        # Every business has exactly one default warehouse (FR-011, research R39).
+        warehouses = _rows(
+            owner_engine, "SELECT name, is_default FROM warehouses WHERE tenant_id = :t", t=demo.id
+        )
+        assert [(w.name, w.is_default) for w in warehouses] == [("Main", True)]
         history = _rows(
             owner_engine,
             "SELECT event, actor_type, actor_id, target_type, target_id FROM audit_entries "

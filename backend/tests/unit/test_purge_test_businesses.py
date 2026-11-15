@@ -45,6 +45,23 @@ TENANTS = [
 ]
 
 TENANT_TABLES = ["audit_entries", "users", "stores", "files", "sessions", "idempotency_keys"]
+# M1 (migration 0003): every catalog and stock table has a tenant_id column too.
+CATALOG_TABLES = [
+    "warehouses",
+    "import_batches",
+    "products",
+    "product_stores",
+    "product_options",
+    "option_values",
+    "product_photos",
+    "inventory_items",
+    "variants",
+    "stock_balances",
+    "allocations",
+    "allocation_lines",
+    "stock_movements",
+]
+TENANT_TABLES += CATALOG_TABLES
 
 
 class FakeResult:
@@ -230,6 +247,36 @@ def test_with_yes_it_removes_only_the_selected_businesses_and_their_files(
 
     assert "E2E Business 1731" in out and "E2E Business abc-def" in out
     assert "Removed 2" in out
+
+
+def test_catalog_rows_ledger_included_and_product_photo_files_are_removed_too(
+    run: tuple[FakeConnection, list[str], Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """T034: the M1 tables and the product photos stored beside the logo go with the business."""
+    conn, _connected, uploads = run
+    for tenant_id in (E2E_1, DEMO):
+        folder = uploads / "tenant" / str(tenant_id)
+        (folder / "photo-thumb.webp").write_bytes(b"t")
+        (folder / "photo-large.webp").write_bytes(b"l")
+
+    code = local_api.main(["purge-test-businesses", "--yes"])
+
+    assert code == 0
+    deleted = {sql.split()[2] for sql, _ in conn.deletes()}
+    assert set(CATALOG_TABLES) <= deleted
+    # The append-only ledger can only be emptied with triggers switched off first.
+    replica = next(i for i, (sql, _) in enumerate(conn.statements) if "replica" in sql)
+    ledger = next(
+        i
+        for i, (sql, _) in enumerate(conn.statements)
+        if sql.startswith("DELETE FROM stock_movements")
+    )
+    assert replica < ledger
+    assert not (uploads / "tenant" / str(E2E_1)).exists()
+    assert (uploads / "tenant" / str(DEMO) / "photo-thumb.webp").is_file()
+    assert (uploads / "tenant" / str(DEMO) / "photo-large.webp").is_file()
+    out = capsys.readouterr().out
+    assert "stock_movements" in out and "products" in out
 
 
 def test_with_nothing_to_remove_it_says_so(

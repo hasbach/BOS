@@ -7,6 +7,7 @@ Creates, if absent:
   dispatch, each with every store) and one sales user limited to Store A.
 * **Demo Second Shop** — edition ``social``, active, rate 89500, one store "Main Store" and
   one owner.
+* Each business's one default warehouse ("Main", research R39), as for every business.
 * The **seed operator** ``demo-seed@bos.invalid``: the recorded creator of both businesses.
   It is inactive, has a password hash that matches no password, and is not on the operator
   allow-list, so it can never sign in.
@@ -35,6 +36,7 @@ from app.core import audit
 from app.core.db import transaction
 from app.core.security import hash_password, validate_password
 from app.core.tenancy import enter_operator, enter_tenant_from_operator
+from app.services import inventory
 
 SEED_OPERATOR_EMAIL = "demo-seed@bos.invalid"
 SEED_OPERATOR_NAME = "BOS demo seed (system)"
@@ -233,6 +235,7 @@ def _create_tenant(db: Session, demo: DemoTenant, operator_id: uuid.UUID, passwo
         },
     )
     enter_tenant_from_operator(db, demo.id)
+    inventory.create_default_warehouse(db, demo.id)
     audit.record(
         db,
         tenant_id=demo.id,

@@ -53,14 +53,57 @@
     "unknown": "Something went wrong. Please try again.",
     "user_inactive": "This person is deactivated. Reactivate them first.",
     "code_invalid": "This code is wrong or has expired. Check it or send a new code.",
-    "code_not_required": "This link doesn't need a code."
+    "code_not_required": "This link doesn't need a code.",
+    "product_code_in_use": "This product code is already used. Choose a different one.",
+    "sku_in_use": "This SKU is already used by another variant.",
+    "product_changed": "Someone else changed this product. Reload it and try again.",
+    "product_archived": "This product is archived. Restore it first.",
+    "options_locked": "The number of options can't change once a variant has stock history.",
+    "variant_has_allocations": "Some of this variant is reserved for orders, so it can't be archived or removed.",
+    "combination_in_use": "A variant with these options already exists.",
+    "value_in_use": "An option value with the same name is already in use. Rename it first.",
+    "has_history": "This product has history, so it can't be deleted. Archive it instead.",
+    "stock_changed": "The stock changed while you were looking. Check the new numbers and try again.",
+    "not_enough_stock": "There isn't enough stock for this.",
+    "try_again": "BOS is busy right now. Nothing was saved. Please try again.",
+    "file_not_csv": "Please choose a CSV file saved as UTF-8.",
+    "too_many_rows": "The file has more than 2,000 rows. Split it into smaller files.",
+    "missing_columns": "The file is missing some columns. Use the template.",
+    "unknown_columns": "The file has columns that aren't in the template. Photos can't be imported.",
+    "import_has_errors": "The file has errors. Fix them and upload it again.",
+    "import_conflict": "Something changed since the preview. Upload the file again.",
+    "import_expired": "This preview has expired. Upload the file again."
   },
   "fieldErrors": {
     "required": "Required",
     "invalid_phone": "Enter a valid phone number",
     "invalid_email": "Enter a valid email address",
     "invalid": "This value is not valid",
-    "too_long": "Too long"
+    "too_long": "Too long",
+    "too_large": "Too large",
+    "too_many": "Too many",
+    "duplicate": "Listed twice",
+    "not_whole": "Enter a whole number",
+    "in_use": "Already used"
+  },
+  "importErrors": {
+    "required": "Required",
+    "invalid": "This value is not valid",
+    "too_long": "Too long",
+    "too_large": "Too large",
+    "negative": "Can't be negative",
+    "not_whole": "Enter a whole number",
+    "invalid_currency": "Currency must be USD or LBP",
+    "sku_in_use": "This SKU is already used",
+    "product_code_in_use": "This product code is already used",
+    "duplicate_in_file": "Repeated in this file",
+    "unknown_store": "No store has this name",
+    "inconsistent_product": "Rows of the same product don't match",
+    "duplicate_combination": "Two variants of this product have the same options",
+    "missing_option_value": "An option has a name but no value",
+    "too_many_options": "Too many options (2 at most)",
+    "too_many_values": "Too many values for one option (20 at most)",
+    "too_many_variants": "Too many variants for one product (100 at most)"
   },
   "common": {
     "language": "Language",
@@ -805,7 +848,8 @@
       "stores": "Stores",
       "business": "Business and settings",
       "refused": "Refused access",
-      "emails": "Emails"
+      "emails": "Emails",
+      "catalog": "Catalog and stock"
     },
     "event": {
       "auth_sign_in": "Sign-in",
@@ -839,7 +883,17 @@
       "email_sent": "Email sent",
       "email_failed": "Email not sent",
       "operator_sign_in": "Beta team sign-in",
-      "maintenance_run": "Maintenance run"
+      "maintenance_run": "Maintenance run",
+      "product_created": "Product added",
+      "product_updated": "Product changed",
+      "product_archived": "Product archived",
+      "product_restored": "Product restored",
+      "product_deleted": "Product deleted",
+      "stock_adjusted": "Stock changed",
+      "stock_allocated": "Stock reserved",
+      "stock_released": "Reserved stock released",
+      "stock_consumed": "Reserved stock used",
+      "catalog_imported": "Catalog imported"
     }
   }
 }

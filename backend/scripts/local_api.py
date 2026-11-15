@@ -21,7 +21,9 @@ server on this computer: email (reset links, invitation codes) is written as JSO
 ``%LOCALAPPDATA%``.
 
 ``purge-test-businesses`` removes the non-demo businesses the end-to-end tests leave behind
-(named ``E2E Business ...``) with all their rows, their history and their uploaded files.
+(named ``E2E Business ...``) with all their rows, their history and their uploaded files:
+every table with a ``tenant_id`` column (so M1's catalog, stock ledger and allocations too)
+and the whole ``tenant/<id>/`` upload folder (store logos and product photos).
 Without ``--yes`` it only lists what it would remove. It works only on ``POSTGRES_DB`` on
 127.0.0.1, built from ``.env`` (never from environment variables), and refuses the test
 database.

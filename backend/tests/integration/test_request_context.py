@@ -27,6 +27,7 @@ from app.core.permissions import authenticated, operator_only, public, require
 from app.core.request_context import (
     current_operator,
     current_user,
+    not_found_in_scope,
     not_found_in_tenant,
     on_commit,
     on_rollback,
@@ -80,6 +81,14 @@ def _add_test_routes(app: Flask) -> None:
         if row is None:
             not_found_in_tenant("store", store_id)
         return jsonify(id=str(row.id), name=row.name)
+
+    @app.get("/api/v1/_t/listed-in/<uuid:store_id>")
+    @require("catalog.view", store_filtered=True)
+    def listed(store_id: uuid.UUID) -> ResponseReturnValue:
+        # A stand-in for a record listed in one store: the view applies the store scope.
+        if not current_user().access.can_see_store(store_id):
+            not_found_in_scope("product", store_id, "catalog.view")
+        return jsonify(ok=True)
 
     @app.post("/api/v1/_t/stores")
     @require("store.manage")
@@ -464,6 +473,26 @@ def test_store_limited_user_on_another_store_gets_not_found_and_it_is_recorded(
     assert entry.actor_id == a.user("sales_limited")
     assert entry.data["path"] == f"/api/v1/_t/stores/{a.second_store_id}"
     assert entry.data["store_id"] == str(a.second_store_id)
+
+
+def test_store_filtered_record_out_of_scope_is_not_found_and_recorded_with_its_target(
+    user_client: UserClient, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    a = worlds.a
+    client = _as(user_client, a, "sales_limited")
+
+    own = client.get(f"/api/v1/_t/listed-in/{a.store_id}")
+    other = client.get(f"/api/v1/_t/listed-in/{a.second_store_id}")
+    no_route = client.get("/api/v1/_t/nothing-here")
+
+    assert own.status_code == 200
+    assert other.status_code == 404
+    assert other.get_data() == no_route.get_data()
+    [entry] = _history(owner_engine, a.tenant_id, "access.denied_store")
+    assert entry.actor_id == a.user("sales_limited")
+    assert (entry.target_type, entry.target_id) == ("product", a.second_store_id)
+    assert entry.data["permission"] == "catalog.view"
+    assert entry.data["path"] == f"/api/v1/_t/listed-in/{a.second_store_id}"
 
 
 def test_record_of_another_business_is_not_found_exactly_like_an_unknown_one(

@@ -11,7 +11,9 @@
    history, in a separate transaction so they survive the refused request's rollback.
 6. After the view: commit if the response status is below 400, otherwise roll back. The
    transaction is always closed, which also forgets the tenant context, so nothing leaks to
-   the next request that reuses the pooled connection.
+   the next request that reuses the pooled connection. A lock timeout or deadlock, in the
+   view (``app.errors``) or at commit (here), is answered 503 ``try_again`` with
+   ``Retry-After: 1`` and nothing applied (research R42).
 7. Only after a successful commit, callbacks registered with ``on_commit`` run (for
    example sending an email), so nothing leaves the system for work that was rolled back.
    Callbacks registered with ``on_rollback`` run instead when the transaction does not
@@ -39,7 +41,7 @@ from app.core.permissions import Access, Decision, Policy, PolicyKind, Role, pol
 from app.core.security import csrf_ok
 from app.core.sessions import SessionRecord
 from app.core.tenancy import enter_operator, enter_tenant
-from app.errors import ApiError, error_body
+from app.errors import ApiError, error_body, is_lock_error, try_again_response
 
 API_PREFIX = "/api/v1/"
 OPS_PREFIX = "/api/v1/ops/"
@@ -168,6 +170,26 @@ def not_found_in_store(store_id: uuid.UUID, permission: str) -> NoReturn:
     if isinstance(principal, UserPrincipal):
         _record_denied(
             principal, "access.denied_store", permission=permission, store_id=str(store_id)
+        )
+    raise _not_found()
+
+
+def not_found_in_scope(target_type: str, target_id: uuid.UUID, permission: str) -> NoReturn:
+    """Refuse a record of this business that lies outside the caller's stores: 404 ``not_found``.
+
+    For ``store_filtered`` routes (research R52): the record exists in the caller's business
+    but none of its stores is one the caller may work in. The answer is identical to a
+    missing record (``not_found_in_tenant``); the refusal is recorded as
+    ``access.denied_store`` with the permission and the target.
+    """
+    principal = current_principal()
+    if isinstance(principal, UserPrincipal):
+        _record_denied(
+            principal,
+            "access.denied_store",
+            target_type=target_type,
+            target_id=target_id,
+            permission=permission,
         )
     raise _not_found()
 
@@ -427,10 +449,15 @@ def _after(response: Response) -> Response:
             committed = True
         else:
             db.rollback()
-    except Exception:
-        log.exception("could not finish the request transaction")
-        response = jsonify(error_body("internal_error", "Internal error"))
-        response.status_code = 500
+    except Exception as exc:
+        if is_lock_error(exc):
+            # A lock timeout or deadlock at commit: nothing was applied (research R42).
+            log.warning("lock timeout or deadlock at commit; answered try_again")
+            response = try_again_response()
+        else:
+            log.exception("could not finish the request transaction")
+            response = jsonify(error_body("internal_error", "Internal error"))
+            response.status_code = 500
     finally:
         db.close()
     if committed:

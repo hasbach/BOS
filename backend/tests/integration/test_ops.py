@@ -256,6 +256,24 @@ def test_setting_up_a_business_creates_one_pending_tenant_store_and_owner_link(
     assert token not in str([e.data for e in created])
 
 
+def test_a_new_business_gets_exactly_one_default_warehouse_in_the_same_transaction(
+    ops: FlaskClient, owner_engine: Engine
+) -> None:
+    """FR-011, research R39: created with the business, never shown to anyone in M1."""
+    tenant_id = uuid.UUID(_created(ops)["business"]["id"])
+
+    warehouses = owner_rows(
+        owner_engine,
+        "SELECT w.name, w.is_default, w.created_at = t.created_at AS same_transaction "
+        "FROM warehouses w JOIN tenants t ON t.id = w.tenant_id WHERE w.tenant_id = :t",
+        t=tenant_id,
+    )
+    # now() is the transaction's start time, so equal timestamps mean one transaction.
+    assert [(w.name, w.is_default, w.same_transaction) for w in warehouses] == [
+        ("Main", True, True)
+    ]
+
+
 def test_the_activation_link_is_not_stored_or_shown_again(
     ops: FlaskClient, owner_engine: Engine
 ) -> None:
