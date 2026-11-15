@@ -89,7 +89,7 @@ Indexes: `(tenant_id, created_at DESC, id DESC)` for paging; GIN `gin_trgm_ops` 
 |---|---|---|
 | tenant_id | uuid | part of both composite FKs |
 | product_id | uuid | FK `(tenant_id, product_id)` → products |
-| store_id | uuid | FK `(tenant_id, store_id)` → stores; any store of the business (active or not) |
+| store_id | uuid | FK `(tenant_id, store_id)` → stores; a store of the business; new listings (form and import) accept active stores only, existing listings in a store deactivated later are kept |
 
 PK `(product_id, store_id)`; index `(tenant_id, store_id)`. Grants: `SELECT, INSERT, DELETE`.
 A product with no rows is listed in no store and is visible only to owners and managers.
@@ -172,7 +172,7 @@ GIN `gin_trgm_ops` on `sku_key`. Grants: `SELECT, INSERT, UPDATE, DELETE`.
 | updated_at | timestamptz | |
 
 PK `(warehouse_id, inventory_item_id)`; unique `(tenant_id, warehouse_id, inventory_item_id)`
-(FR-011, one authoritative balance). `CHECK (allocated >= 0 AND on_hand >= allocated)`.
+(FR-011, one authoritative balance). `CHECK (allocated >= 0 AND on_hand >= allocated AND on_hand <= 1000000)` (R40).
 Grants: `SELECT, INSERT, UPDATE, DELETE` (delete only with a history-less variant).
 
 ### stock_movements (append-only)
@@ -303,7 +303,7 @@ means the business is consistent.
 | product code | 1–32, allowed characters (R46), unique in business incl. archived | `validation_failed` (`code: required/too_long/invalid`), 409 `product_code_in_use` |
 | names | at least one of `name_en`, `name_ar`; each 1–120 | `name_en: required` when both missing; `too_long` |
 | descriptions | ≤ 2,000 each | `too_long` |
-| stores | ids of this business's stores | `store_ids: invalid` |
+| stores | ids of this business's active stores (a store already listed and later deactivated may stay) | `store_ids: invalid` |
 | photos | ≤ 8 ids, each a staged photo of this business or already this product's | `photo_ids: too_many / invalid` |
 | options | 0–2 types; name 1–40; 1–20 values each, label 1–40, no duplicate labels (ASCII case ignored) | `options: too_many`, `options.0.values: too_many / duplicate` |
 | variants | exactly the combinations of the active values, ≤ 100 | `variants: invalid / too_many` |
@@ -315,6 +315,7 @@ means the business is consistent.
 | adjustment quantity | integer 1–1,000,000; counted quantity 0–1,000,000 | `quantity: required / invalid / too_large` |
 | adjustment result | 0 ≤ on hand after ≤ 1,000,000 and on hand after ≥ allocated | 409 `not_enough_stock`, `quantity: too_large` |
 | note | ≤ 500; required for `other` | `note: required / too_long` |
+| direction | `in` / `out`; required for `other`, ignored for every other reason (each has a fixed sign) | `direction: required / invalid` |
 
 Text fields are trimmed; an empty string counts as missing. Field paths in
 `validation_failed.fields` use dots for nesting (`variants.2.sku`).

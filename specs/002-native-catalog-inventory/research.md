@@ -72,7 +72,7 @@ rejected.
   | `damaged` | person | < 0 |
   | `lost` | person | < 0 |
   | `count_correction` | person | any, 0 allowed; `counted_quantity` required |
-  | `other` | person, note required | ≠ 0 |
+  | `other` | person, note and `direction` (`in` / `out`) required | ≠ 0, sign from `direction` |
   | `allocation_consumed` | system path (M3 dispatch) | < 0, `allocation_id` required |
 
   The balance row and the movement are written in the same transaction, after the balance row
@@ -128,6 +128,10 @@ rejected.
     resource type `stock_movement`, key kept 24 hours). The replay returns the original
     movement and the balance as it is now. The adjustment sheet creates one key when it opens
     and reuses it for every retry of that save.
+  - **Product create** (`POST /catalog/products`) also uses `core/idempotency.py` (resource
+    type `product`): a double tap or a retry on a weak connection must not create two
+    products with opening stock. The form creates one key when it opens. Product edits are
+    protected by the product `version` instead (R43).
   - **Allocations** have their own durable key, because the M2 caller is an order and must
     be replayable forever: `allocations(tenant_id, request_key)` is unique, and
     `request_hash` is SHA-256 of the canonical list of `(inventory_item_id, quantity)` sorted
@@ -278,7 +282,9 @@ rejected.
   - The Low stock list (`GET /catalog/low-stock`, permission `stock.adjust`) lists active
     variants of active products whose effective level > 0 and available ≤ level, out of
     stock first, then by available ascending, then SKU. A variant with level 0 is never in
-    the list but still shows "Out" when it has nothing available.
+    the list but still shows "Out" when it has nothing available. An optional `store_id`
+    filter (one of the caller's stores, refused like the catalog filter otherwise) narrows the
+    list to products listed in that store.
   - Product-level search filter (everyone, FR-009): `in_stock` = some active variant has
     available > 0; `out` = none has; `low` = some active variant is low or out with a level
     > 0.
