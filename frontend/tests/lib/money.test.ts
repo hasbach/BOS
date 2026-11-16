@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FEE_RULE, RATE_RULE, formatMoney, parseMoney } from "@/lib/money";
+import { FEE_RULE, RATE_RULE, approximate, formatMoney, parseMoney } from "@/lib/money";
 
 describe("parseMoney", () => {
   it("strips typed thousands separators and sends a plain decimal string", () => {
@@ -56,5 +56,34 @@ describe("formatMoney", () => {
 
   it("returns something it cannot read as it was", () => {
     expect(formatMoney("n/a")).toBe("n/a");
+  });
+});
+
+describe("approximate", () => {
+  it("turns USD into whole pounds at the rate, rounding half up", () => {
+    expect(approximate("12.50", "USD", "89500")).toEqual({ currency: "LBP", amount: "1118750" });
+    expect(approximate("0.01", "USD", "89500")).toEqual({ currency: "LBP", amount: "895" });
+    expect(approximate("1", "USD", "89500.50")).toEqual({ currency: "LBP", amount: "89501" });
+    expect(approximate("0", "USD", "89500")).toEqual({ currency: "LBP", amount: "0" });
+  });
+
+  it("turns LBP into dollars rounded to cents, always with two decimals", () => {
+    expect(approximate("895000", "LBP", "89500")).toEqual({ currency: "USD", amount: "10.00" });
+    expect(approximate("100000", "LBP", "89500")).toEqual({ currency: "USD", amount: "1.12" });
+    expect(approximate("447", "LBP", "89500")).toEqual({ currency: "USD", amount: "0.00" });
+    expect(approximate("448", "LBP", "89500")).toEqual({ currency: "USD", amount: "0.01" });
+    expect(approximate("0", "LBP", "89500")).toEqual({ currency: "USD", amount: "0.00" });
+  });
+
+  it("is exact for the largest price (no floating point)", () => {
+    expect(approximate("99999999999.99", "USD", "10000000")).toEqual({ currency: "LBP", amount: "999999999999900000" });
+  });
+
+  it("gives nothing when the price or rate is not a usable decimal", () => {
+    expect(approximate("abc", "USD", "89500")).toBeNull();
+    expect(approximate("10", "USD", "0")).toBeNull();
+    expect(approximate("10", "LBP", "0.00")).toBeNull();
+    expect(approximate("10", "USD", "")).toBeNull();
+    expect(approximate("-5", "USD", "89500")).toBeNull();
   });
 });

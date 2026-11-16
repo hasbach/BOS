@@ -895,5 +895,67 @@
       "stock_consumed": "استهلاك مخزون محجوز",
       "catalog_imported": "استيراد كتالوج"
     }
+  },
+  "catalog": {
+    "title": "الكتالوج",
+    "search": "ابحث بالاسم أو الرمز أو SKU",
+    "loading": "جارٍ تحميل الكتالوج…",
+    "loadMore": "عرض المزيد",
+    "empty": {
+      "title": "لا توجد منتجات بعد",
+      "text": "أضف أول منتج لتبدأ البيع.",
+      "noMatch": "لا توجد منتجات مطابقة."
+    },
+    "loadError": {
+      "title": "تعذّر تحميل الكتالوج",
+      "text": "تحقق من اتصالك وحاول مرة أخرى."
+    },
+    "filters": {
+      "all": "الكل",
+      "inStock": "متوفر",
+      "low": "منخفض",
+      "out": "نفد",
+      "archived": "المؤرشفة",
+      "noPhoto": "بلا صورة"
+    },
+    "stock": {
+      "onHand": "في المخزون",
+      "reserved": "محجوز",
+      "available": "المتاح",
+      "low": "منخفض",
+      "out": "نفد"
+    },
+    "price": "السعر",
+    "approx": "≈ {amount}",
+    "approxHint": "تقريبي، بسعر الصرف المعتمد في النشاط",
+    "priceRange": "{min} – {max}",
+    "variantCount": "{count, plural, zero {لا متغيّرات} one {متغيّر واحد} two {متغيّران} few {# متغيّرات} many {# متغيّرًا} other {# متغيّر}}",
+    "detail": {
+      "variants": "المتغيّرات",
+      "sku": "SKU",
+      "options": "الخيارات",
+      "stores": "معروض في",
+      "edit": "تعديل",
+      "archive": "أرشفة",
+      "restore": "استعادة",
+      "delete": "حذف",
+      "archived": "مؤرشف",
+      "archiveConfirm": "أرشفة هذا المنتج؟ يبقى مخزونه وسجله محفوظين.",
+      "deleteConfirm": "حذف هذا المنتج؟ لا يمكن التراجع عن ذلك.",
+      "archivedVariant": "متغيّر مؤرشف"
+    },
+    "photos": {
+      "add": "إضافة صورة",
+      "retry": "حاول مرة أخرى",
+      "remove": "إزالة",
+      "uploading": "جارٍ الرفع {percent}%",
+      "main": "الصورة الرئيسية",
+      "tooLarge": "حجم هذه الصورة أكبر من 5 ميغابايت.",
+      "notImage": "اختر صورة PNG أو JPEG أو WebP.",
+      "moveUp": "تقديم",
+      "moveDown": "تأخير"
+    },
+    "saved": "تم الحفظ",
+    "conflict": "غيّر شخص آخر هذا المنتج. أعد تحميله وحاول مرة أخرى."
   }
 }

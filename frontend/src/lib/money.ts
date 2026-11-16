@@ -50,3 +50,28 @@ export function formatMoney(value: string, options: { trimZeros?: boolean } = {}
   if (options.trimZeros) decimals = decimals.replace(/0+$/, "");
   return decimals ? `${whole}.${decimals}` : whole;
 }
+
+const DECIMAL = /^(\d+)(?:\.(\d{1,2}))?$/;
+
+/** A plain decimal string as hundredths (BigInt, so nothing is lost to floating point), or null. */
+function hundredths(value: string): bigint | null {
+  const match = DECIMAL.exec(value.trim());
+  if (!match) return null;
+  return BigInt(`${match[1]}${(match[2] ?? "").padEnd(2, "0")}`);
+}
+
+/**
+ * The approximate amount in the other currency, for display only and always labelled "≈" (FR-006, R48).
+ * `rate` is the business's LBP for 1 USD (a decimal string). USD becomes whole pounds, LBP becomes
+ * dollars to the cent, both rounded half up. Returns null when the price or rate is not a usable
+ * decimal or the rate is zero. Nothing converted is ever stored or sent.
+ */
+export function approximate(price: string, currency: "USD" | "LBP", rate: string): { currency: "USD" | "LBP"; amount: string } | null {
+  const p = hundredths(price);
+  const r = hundredths(rate);
+  if (p === null || r === null || r === 0n) return null;
+  if (currency === "USD") return { currency: "LBP", amount: ((p * r + 5000n) / 10000n).toString() };
+  const cents = (200n * p + r) / (2n * r);
+  const digits = cents.toString().padStart(3, "0");
+  return { currency: "USD", amount: `${digits.slice(0, -2)}.${digits.slice(-2)}` };
+}

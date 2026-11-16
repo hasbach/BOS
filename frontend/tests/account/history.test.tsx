@@ -185,6 +185,9 @@ describe("History (screens 109 to 114)", () => {
     fireEvent.click(screen.getByRole("button", { name: /All events/ }));
     const sheet = await screen.findByRole("dialog", { name: "Show events" });
     expect(within(sheet).getByRole("radiogroup", { name: "Employees and invitations" })).toBeInTheDocument();
+    // The M1 "Catalog and stock" group is offered with its events.
+    expect(within(sheet).getByRole("radiogroup", { name: "Catalog and stock" })).toBeInTheDocument();
+    expect(within(sheet).getByRole("radio", { name: "Catalog imported" })).toBeInTheDocument();
     // Operator sign-ins and maintenance runs are platform events and are never offered.
     expect(within(sheet).queryByRole("radio", { name: /Beta team sign-in|Maintenance/ })).not.toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole("radio", { name: "Roles changed" }));

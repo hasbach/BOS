@@ -895,5 +895,67 @@
       "stock_consumed": "Reserved stock used",
       "catalog_imported": "Catalog imported"
     }
+  },
+  "catalog": {
+    "title": "Catalog",
+    "search": "Search by name, code or SKU",
+    "loading": "Loading the catalog…",
+    "loadMore": "Load more",
+    "empty": {
+      "title": "No products yet",
+      "text": "Add your first product to start selling.",
+      "noMatch": "No products match."
+    },
+    "loadError": {
+      "title": "Couldn’t load the catalog",
+      "text": "Check your connection and try again."
+    },
+    "filters": {
+      "all": "All",
+      "inStock": "In stock",
+      "low": "Low",
+      "out": "Out",
+      "archived": "Archived",
+      "noPhoto": "No photo"
+    },
+    "stock": {
+      "onHand": "On hand",
+      "reserved": "Reserved",
+      "available": "Available",
+      "low": "Low",
+      "out": "Out"
+    },
+    "price": "Price",
+    "approx": "≈ {amount}",
+    "approxHint": "Approximate, at the business rate",
+    "priceRange": "{min} – {max}",
+    "variantCount": "{count, plural, one {# variant} other {# variants}}",
+    "detail": {
+      "variants": "Variants",
+      "sku": "SKU",
+      "options": "Options",
+      "stores": "Listed in",
+      "edit": "Edit",
+      "archive": "Archive",
+      "restore": "Restore",
+      "delete": "Delete",
+      "archived": "Archived",
+      "archiveConfirm": "Archive this product? It keeps its stock and history.",
+      "deleteConfirm": "Delete this product? This can’t be undone.",
+      "archivedVariant": "Archived variant"
+    },
+    "photos": {
+      "add": "Add photo",
+      "retry": "Try again",
+      "remove": "Remove",
+      "uploading": "Uploading {percent}%",
+      "main": "Main photo",
+      "tooLarge": "This photo is over 5 MB.",
+      "notImage": "Choose a PNG, JPEG or WebP photo.",
+      "moveUp": "Move earlier",
+      "moveDown": "Move later"
+    },
+    "saved": "Saved",
+    "conflict": "Someone else changed this product. Reload it and try again."
   }
 }
