@@ -7,7 +7,7 @@
 - [x] Frontend, from `frontend/`: `npm test` → `Tests 700 passed (700)`; `npm run typecheck` clean; `npm run lint` clean
 - [x] Migration 0003 upgrades from 0002 with M0 data (warehouse and low-stock backfill) and downgrades back to 0002, tested in `backend/tests/integration/test_migration_0003.py`
 - [x] Contract, permission and events tests read both features (backend T027, frontend T028)
-- [ ] T035 screen designs approved by the product owner (blocks every new screen task)
+- [x] T035 screen designs approved by the product owner on 2026-11-16 (recorded in spec.md Clarifications)
 
 Notes:
 - The development database still needs `uv run python scripts/local_api.py migrate` to reach 0003.

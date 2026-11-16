@@ -202,6 +202,10 @@ An owner who already keeps products in a spreadsheet uploads a CSV file. BOS che
 - Q: When a product is listed in several stores, is its price the same in all of them? → A: Yes, one price per variant for the whole business; no per-store prices in M1 (FR-006).
 - Q: Does the CSV import bring in photos? → A: No; imported products start without photos, which are added on the phone, helped by a "no photo" filter (FR-029). BOS does not download images from web links.
 
+### Session 2026-11-16
+
+- Q: Are the M1 screen designs (`design/bos-screens.html`, "M1 additions", screens 132–183) approved, including the changes from the approved M0 designs? → A: Yes, all approved by the product owner. Approved changes: (1) screen 12: the Low stock list is its own screen of variant rows, opened from the Catalog app bar and the start-tab row, and the "Low" stock filter stays on the Catalog; (2) screen 13: "Add variant" becomes "Edit product", new variants come from adding option values; (3) screen 02: only the low-stock row is built in M1, at the top of the owner's and manager's start tab, hidden when nothing is low or it cannot load (FR-024); (4) screen 12: the row of store pills becomes a stock filter plus a single store menu, to keep 44 px touch targets at 360 px. The "Reserved" wording on screens 13 and 14 is kept. The decisions marked "Decision for the product owner" in the designs are approved as drawn.
+
 ## Assumptions
 
 - Builds on M0: businesses, stores, employees, roles and permissions (`catalog.view`, `catalog.manage`, `stock.adjust` already defined), history/audit, the bilingual mobile shell and its states.
