@@ -1,6 +1,6 @@
 // Catalog API calls and types (specs/002-native-catalog-inventory/contracts/openapi.yaml: /catalog/products, /catalog/photos).
 
-import { api } from "./api";
+import { api, isApiError } from "./api";
 import type { UploadOptions } from "./api";
 import type { Currency } from "./types";
 
@@ -171,4 +171,36 @@ export const mainPhotoOf = (product: Pick<Product, "photos">): string | null => 
 export function productName(product: Pick<Product, "name_en" | "name_ar">, locale: string): string {
   const [first, second] = locale === "ar" ? [product.name_ar, product.name_en] : [product.name_en, product.name_ar];
   return first?.trim() || second?.trim() || "";
+}
+
+export const CATALOG = "/more/catalog";
+
+export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+export const PHOTO_TYPES: readonly string[] = ["image/png", "image/jpeg", "image/webp"];
+export const MAX_PHOTOS = 8;
+
+/** The error code the server would give this file, or null when it looks fine. The server still decides. */
+export function checkPhotoFile(file: { type: string; size: number }): "file_not_image" | "file_too_large" | null {
+  if (!PHOTO_TYPES.includes(file.type)) return "file_not_image";
+  if (file.size > PHOTO_MAX_BYTES) return "file_too_large";
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The product as it is now, from a 409 `product_changed` (its extra member `current`), or null. */
+export function changedProduct(error: unknown): Product | null {
+  if (!isApiError(error) || error.code !== "product_changed") return null;
+  const current = error.extra.current;
+  return isRecord(current) && typeof current.id === "string" && typeof current.version === "number" ? (current as unknown as Product) : null;
+}
+
+/** The SKUs another product already uses, from a 409 `sku_in_use` (its extra member `conflicts`). */
+export function skuConflicts(error: unknown): SkuConflict[] {
+  if (!isApiError(error) || error.code !== "sku_in_use" || !Array.isArray(error.extra.conflicts)) return [];
+  return error.extra.conflicts.filter(
+    (entry): entry is SkuConflict => isRecord(entry) && typeof entry.sku === "string" && typeof entry.product_name === "string",
+  );
 }

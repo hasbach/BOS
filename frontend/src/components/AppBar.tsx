@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Link } from "@/i18n/navigation";
 
 import { BackIcon, LogoutIcon } from "./icons";
@@ -14,9 +16,11 @@ export interface AppBarProps {
   badge?: string;
   onSignOut?: () => void;
   signOutLabel?: string;
+  /** One icon link at the end of the bar (for example Edit product); the label names it for assistive technology. */
+  action?: { href: string; label: string; icon: ReactNode };
 }
 
-export function AppBar({ title, subtitle, backHref, backLabel, ops, badge, onSignOut, signOutLabel }: AppBarProps) {
+export function AppBar({ title, subtitle, backHref, backLabel, ops, badge, onSignOut, signOutLabel, action }: AppBarProps) {
   return (
     <header className={[styles.bar, ops ? styles.ops : ""].filter(Boolean).join(" ")}>
       {backHref ? (
@@ -29,6 +33,11 @@ export function AppBar({ title, subtitle, backHref, backLabel, ops, badge, onSig
         {subtitle ? <span className={styles.sub}>{subtitle}</span> : null}
       </div>
       {badge ? <span className={styles.badge}>{badge}</span> : null}
+      {action ? (
+        <Link href={action.href} className={styles.icon} aria-label={action.label}>
+          {action.icon}
+        </Link>
+      ) : null}
       {onSignOut ? (
         <button type="button" className={styles.icon} onClick={onSignOut} aria-label={signOutLabel}>
           <LogoutIcon className={styles.flip} />

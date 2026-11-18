@@ -75,3 +75,25 @@ export function approximate(price: string, currency: "USD" | "LBP", rate: string
   const digits = cents.toString().padStart(3, "0");
   return { currency: "USD", amount: `${digits.slice(0, -2)}.${digits.slice(-2)}` };
 }
+
+/** Product and variant prices: 0 up to 99,999,999,999.99 (M1 contract `Money`). LBP prices must also be whole. */
+export const PRICE_RULE: MoneyRule = { max: 99_999_999_999.99, positive: false };
+
+/**
+ * A price as people read it, with Latin digits and thousands separators in both languages:
+ * "$45.00" (always two decimals), "LBP 89,500,000" in English and "89,500,000 ل.ل." in Arabic.
+ */
+export function formatAmount(amount: string, currency: "USD" | "LBP", locale: string): string {
+  if (currency === "USD") {
+    const [whole = "0", decimals = ""] = amount.trim().split(".");
+    return `$${formatMoney(`${whole}.${decimals.padEnd(2, "0").slice(0, 2)}`)}`;
+  }
+  const figure = formatMoney(amount, { trimZeros: true });
+  return locale === "ar" ? `${figure} ل.ل.` : `LBP ${figure}`;
+}
+
+/** The approximate amount in the other currency, labelled with "≈" (FR-006), or null when it cannot be worked out. */
+export function formatApproximate(price: string, currency: "USD" | "LBP", rate: string, locale: string): string | null {
+  const other = approximate(price, currency, rate);
+  return other ? `≈ ${formatAmount(other.amount, other.currency, locale)}` : null;
+}

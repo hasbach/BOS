@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FEE_RULE, RATE_RULE, approximate, formatMoney, parseMoney } from "@/lib/money";
+import { FEE_RULE, PRICE_RULE, RATE_RULE, approximate, formatAmount, formatApproximate, formatMoney, parseMoney } from "@/lib/money";
 
 describe("parseMoney", () => {
   it("strips typed thousands separators and sends a plain decimal string", () => {
@@ -85,5 +85,35 @@ describe("approximate", () => {
     expect(approximate("10", "LBP", "0.00")).toBeNull();
     expect(approximate("10", "USD", "")).toBeNull();
     expect(approximate("-5", "USD", "89500")).toBeNull();
+  });
+});
+
+describe("formatAmount", () => {
+  it("writes large LBP amounts with thousands separators and Latin digits in both languages", () => {
+    expect(formatAmount("89500000", "LBP", "en")).toBe("LBP 89,500,000");
+    expect(formatAmount("89500000", "LBP", "ar")).toBe("89,500,000 ل.ل.");
+    expect(formatAmount("89500000.00", "LBP", "en")).toBe("LBP 89,500,000");
+  });
+
+  it("writes dollars with the sign and two decimals", () => {
+    expect(formatAmount("45", "USD", "en")).toBe("$45.00");
+    expect(formatAmount("1000.5", "USD", "ar")).toBe("$1,000.50");
+  });
+});
+
+describe("formatApproximate", () => {
+  it("labels the converted amount as approximate: USD to whole pounds, LBP to cents", () => {
+    expect(formatApproximate("45.00", "USD", "89500", "en")).toBe("≈ LBP 4,027,500");
+    expect(formatApproximate("45.00", "USD", "89500", "ar")).toBe("≈ 4,027,500 ل.ل.");
+    expect(formatApproximate("1200000", "LBP", "89500", "en")).toBe("≈ $13.41");
+    expect(formatApproximate("10", "USD", "0", "en")).toBeNull();
+  });
+});
+
+describe("PRICE_RULE", () => {
+  it("allows 0 up to 99,999,999,999.99", () => {
+    expect(parseMoney("0", PRICE_RULE)).toEqual({ ok: true, value: "0" });
+    expect(parseMoney("99999999999.99", PRICE_RULE)).toEqual({ ok: true, value: "99999999999.99" });
+    expect(parseMoney("100000000000", PRICE_RULE)).toEqual({ ok: false, problem: "too_large" });
   });
 });

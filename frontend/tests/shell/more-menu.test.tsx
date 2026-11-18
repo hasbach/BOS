@@ -69,4 +69,16 @@ describe("More menu (screens 107 and 108)", () => {
     expect(screen.getByText(ar.more.devices)).toBeInTheDocument();
     expect(screen.getByText("العربية")).toBeInTheDocument();
   });
+
+  it("shows Catalog to every catalog.view holder and links to the catalog", () => {
+    renderMe(<MoreMenu />, meWith({ permissions: [...AGENT_PERMISSIONS, "catalog.view"] }));
+    expect(linksIn("Business")).toEqual(["/more/catalog", "/more/stores"]);
+    renderMe(<MoreMenu />, meWith({ permissions: ["catalog.view"] }));
+    expect(screen.getAllByRole("link", { name: /Catalog/ }).at(-1)).toHaveAttribute("href", "/more/catalog");
+  });
+
+  it("does not show Catalog without catalog.view", () => {
+    renderMe(<MoreMenu />, salesAgent());
+    expect(screen.queryByRole("link", { name: /Catalog/ })).not.toBeInTheDocument();
+  });
 });
