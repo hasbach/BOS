@@ -9,10 +9,12 @@ import { CatalogList } from "./CatalogList";
 
 export const generateMetadata = titleFrom("catalog.title");
 
-export default async function CatalogPage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function CatalogPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { locale } = await params;
+  const { no_photo: noPhoto } = await searchParams;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
-  return <CatalogList />;
+  // `?no_photo=1` opens the list with the no-photo filter on (the import result's Add photos).
+  return <CatalogList initialNoPhoto={noPhoto === "1"} />;
 }

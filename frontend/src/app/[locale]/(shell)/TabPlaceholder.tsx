@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 
 import { AppBar } from "@/components/AppBar";
 import { Card } from "@/components/Card";
@@ -20,8 +20,11 @@ type PlaceholderTab = "sales" | "packing" | "delivery" | "orders";
 
 const ICONS: Record<PlaceholderTab, ComponentType<SVGProps<SVGSVGElement>>> = { sales: CartIcon, packing: BoxIcon, delivery: TruckIcon, orders: ListIcon };
 
-/** Screen 106: the calm "coming soon" state for areas that later milestones fill (FR-029). Not an error. */
-export function TabPlaceholder({ tab }: { tab: PlaceholderTab }) {
+/**
+ * Screen 106: the calm "coming soon" state for areas that later milestones fill (FR-029). Not an error.
+ * `top` sits above it (screen 157: the low-stock row on the owner's and manager's start tab).
+ */
+export function TabPlaceholder({ tab, top }: { tab: PlaceholderTab; top?: ReactNode }) {
   const t = useTranslations();
   const router = useRouter();
   const me = useMe();
@@ -41,40 +44,50 @@ export function TabPlaceholder({ tab }: { tab: PlaceholderTab }) {
   if (can("settings.manage")) ready.push({ href: "/more/settings", label: t("more.settings"), Icon: GearIcon });
 
   const Icon = ICONS[tab];
+  const content = (
+    <>
+      <div className={styles.soon}>
+        <div className={styles.circle} aria-hidden="true">
+          <Icon width={32} height={32} />
+        </div>
+        <Chip tone="info">
+          <ClockIcon width={14} height={14} /> {t("soon.chip")}
+        </Chip>
+        <p className={styles.big}>{t(`tabs.${tab}`)}</p>
+        <p className={styles.text}>{t(`soon.${tab}`)}</p>
+        <p className={styles.note}>{t("soon.note")}</p>
+      </div>
+      {ready.length > 0 ? (
+        <section aria-label={t("soon.ready")} className={styles.ready}>
+          <p className={screenStyles.label}>{t("soon.ready")}</p>
+          <Card style={{ padding: "0 12px" }}>
+            <ul className={styles.list}>
+              {ready.map((item) => (
+                <li key={item.href} className={styles.item}>
+                  <Link href={item.href} className={styles.link}>
+                    <item.Icon width={22} height={22} aria-hidden="true" />
+                    <span className={styles.name}>{item.label}</span>
+                    <ChevronIcon className={styles.chevron} width={18} height={18} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      ) : null}
+    </>
+  );
   return (
     <Screen>
       <AppBar title={t(`tabs.${tab}`)} subtitle={me.business.name} />
-      <ScreenBody center>
-        <div className={styles.soon}>
-          <div className={styles.circle} aria-hidden="true">
-            <Icon width={32} height={32} />
-          </div>
-          <Chip tone="info">
-            <ClockIcon width={14} height={14} /> {t("soon.chip")}
-          </Chip>
-          <p className={styles.big}>{t(`tabs.${tab}`)}</p>
-          <p className={styles.text}>{t(`soon.${tab}`)}</p>
-          <p className={styles.note}>{t("soon.note")}</p>
-        </div>
-        {ready.length > 0 ? (
-          <section aria-label={t("soon.ready")} className={styles.ready}>
-            <p className={screenStyles.label}>{t("soon.ready")}</p>
-            <Card style={{ padding: "0 12px" }}>
-              <ul className={styles.list}>
-                {ready.map((item) => (
-                  <li key={item.href} className={styles.item}>
-                    <Link href={item.href} className={styles.link}>
-                      <item.Icon width={22} height={22} aria-hidden="true" />
-                      <span className={styles.name}>{item.label}</span>
-                      <ChevronIcon className={styles.chevron} width={18} height={18} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </section>
-        ) : null}
-      </ScreenBody>
+      {top ? (
+        <ScreenBody>
+          {top}
+          <div className={styles.middle}>{content}</div>
+        </ScreenBody>
+      ) : (
+        <ScreenBody center>{content}</ScreenBody>
+      )}
     </Screen>
   );
 }

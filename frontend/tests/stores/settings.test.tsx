@@ -229,3 +229,68 @@ describe("settings for a sales agent (screen 99)", () => {
     expect(screen.getByText("لا يمكنك فتح الإعدادات")).toBeInTheDocument();
   });
 });
+
+describe("settings: low-stock default (screens 162 and 163)", () => {
+  const M1: Business = { ...BUSINESS, low_stock_default: 2 };
+  const LOW = "Low-stock warning level";
+  const m1Api = (handler: Parameters<typeof mockApi>[0] = (call) => reply(200, { ...M1, ...(call.body as object) })) =>
+    mockApi((call) => (call.url === "/api/v1/business" && call.method === "GET" ? reply(200, M1) : handler(call)));
+
+  it("shows the saved level with its hint and sends it with the other settings", async () => {
+    const calls = m1Api();
+    await open();
+    expect(screen.getByLabelText(LOW)).toHaveValue("2");
+    expect(screen.getByText(/0 turns warnings off/)).toBeInTheDocument();
+    type(LOW, "5");
+    save();
+    await screen.findByText("Saved. The new values apply from now on.");
+    expect(writes(calls)[0]!.body).toMatchObject({ low_stock_default: 5 });
+    expect(screen.getByLabelText(LOW)).toHaveValue("5");
+  });
+
+  it("accepts Arabic-Indic digits and 0 (warnings off)", async () => {
+    const calls = m1Api();
+    await open();
+    type(LOW, "١٢");
+    save();
+    await screen.findByText("Saved. The new values apply from now on.");
+    expect(writes(calls)[0]!.body).toMatchObject({ low_stock_default: 12 });
+    type(LOW, "٠");
+    save();
+    await waitFor(() => expect(writes(calls)).toHaveLength(2));
+    expect(writes(calls)[1]!.body).toMatchObject({ low_stock_default: 0 });
+  });
+
+  it.each([["2.5"], ["-1"], ["abc"], [""], ["1000001"]])("refuses %j under the field and sends nothing", async (value) => {
+    const calls = m1Api();
+    await open();
+    type(LOW, value);
+    save();
+    expect(screen.getByText("Enter a whole number from 0 to 1,000,000. 0 turns warnings off.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("1 thing to fix before saving.");
+    expect(writes(calls)).toHaveLength(0);
+  });
+
+  it("shows the server's refusal of the level under the field", async () => {
+    m1Api(() => apiError(400, "validation_failed", { low_stock_default: "too_large" }));
+    await open();
+    save();
+    expect(await screen.findByText("Enter a whole number from 0 to 1,000,000. 0 turns warnings off.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("1 thing to fix before saving.");
+  });
+
+  it("is in Arabic", async () => {
+    m1Api();
+    await open("owner", "ar");
+    expect(screen.getByLabelText("حدّ التنبيه لانخفاض المخزون")).toHaveValue("2");
+  });
+
+  it("is left out when the server does not send a level (nothing extra is sent)", async () => {
+    const calls = businessApi(() => reply(200, BUSINESS));
+    await open();
+    expect(screen.queryByLabelText(LOW)).not.toBeInTheDocument();
+    save();
+    await screen.findByText("Saved. The new values apply from now on.");
+    expect(writes(calls)[0]!.body).not.toHaveProperty("low_stock_default");
+  });
+});

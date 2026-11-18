@@ -667,8 +667,11 @@
       "rateMax": "The rate can’t be more than 10,000,000.",
       "decimals": "Use at most 2 decimals. Example: 3.50",
       "fee": "Enter an amount with up to 2 decimals. Example: 3.50",
-      "feeMax": "The fee can’t be more than 100,000,000."
-    }
+      "feeMax": "The fee can’t be more than 100,000,000.",
+      "low": "Enter a whole number from 0 to 1,000,000. 0 turns warnings off."
+    },
+    "low": "Low-stock warning level",
+    "lowHint": "Warn when a variant has this many or fewer available. 0 turns warnings off. A variant can have its own level in Edit product. Digits 0–9 or ٠–٩."
   },
   "tabs": {
     "aria": "Main",
@@ -1254,6 +1257,87 @@
       "notFound": {
         "title": "Not found",
         "text": "This variant is no longer in your catalog. Go back to refresh it."
+      }
+    },
+    "lowStockList": "Low stock list",
+    "importCsv": "Import from CSV",
+    "lowStock": {
+      "title": "Low stock",
+      "subtitle": "Out of stock first",
+      "figures": "Stock numbers",
+      "warnAt": "Warn at",
+      "reserved": "Reserved {count}",
+      "note": "Business default: warn at {level} or fewer available (Settings). A variant can have its own level in Edit product. Recording stock on the product takes a variant off this list.",
+      "noteNoDefault": "A variant can have its own level in Edit product. Recording stock on the product takes a variant off this list.",
+      "loading": "Loading low stock…",
+      "loadError": {
+        "title": "Couldn’t load low stock",
+        "text": "Check your connection and try again. Nothing was changed."
+      },
+      "empty": {
+        "title": "Nothing is low",
+        "text": "Every variant has more available than its warning level ({level} by default).",
+        "textNoDefault": "Every variant has more available than its warning level.",
+        "change": "Change the default"
+      },
+      "notAllowed": {
+        "title": "You can’t open the Low stock list",
+        "text": "Only owners and managers see the Low stock list. Low and Out still show on every product."
+      },
+      "row": {
+        "label": "Needs attention",
+        "count": "{count, plural, one {# variant low or out of stock} other {# variants low or out of stock}}",
+        "more": "{names} and {count} more"
+      }
+    },
+    "import": {
+      "title": "Import products",
+      "subtitle": "From a CSV file",
+      "how": "How it works",
+      "step1": "1. Download the template",
+      "step1Text": "Column names and one example product with two variants.",
+      "step2": "2. Fill one row per variant",
+      "step2Text": "Rows of the same product share its product code.",
+      "step3": "3. Upload and check the preview",
+      "step3Text": "Nothing is saved until the file has no errors and you confirm.",
+      "template": "Download template",
+      "limits": "CSV saved as UTF-8, up to 2,000 rows and 2 MB. Arabic and English text both work. Import only adds new products: codes or SKUs already in your catalog are reported as errors.",
+      "photos": "Photos can’t be imported. Imported products start without photos; add them on the phone with the “no photo” filter.",
+      "choose": "Choose CSV file",
+      "chooseAnother": "Choose another file",
+      "uploadFixed": "Upload fixed file",
+      "uploadAgain": "Upload the file again",
+      "checking": "Checking…",
+      "checkingText": "Checking every row… Nothing is saved yet.",
+      "progress": "Upload progress",
+      "rows": "{count, plural, one {# row} other {# rows}}",
+      "notChecked": "not checked",
+      "columns": "Columns: {columns}",
+      "rowsToFix": "{count, plural, one {1 row needs fixing.} other {# rows need fixing.}} Nothing can be imported until the file has no errors. Nothing was saved.",
+      "problems": "Problems",
+      "row": "Row {row}",
+      "wholeRow": "Whole row",
+      "importBlocked": "{count, plural, one {Import — fix 1 row first} other {Import — fix # rows first}}",
+      "noErrors": "No errors",
+      "ifImport": "If you import this file",
+      "products": "Products",
+      "variants": "Variants",
+      "units": "Units of opening stock",
+      "rowsChecked": "Rows checked",
+      "keptUntil": "Nothing is saved yet. This preview is kept until {when}.",
+      "confirm": "{count, plural, one {Import 1 product} other {Import # products}}",
+      "importing": "Importing…",
+      "done": {
+        "title": "Imported",
+        "text": "{products, plural, one {# product} other {# products}}, {variants, plural, one {# variant} other {# variants}} and {units, plural, one {# unit} other {# units}} of opening stock are now in your catalog.",
+        "photos": "Imported products have no photos yet. Add them from the catalog with the “no photo” filter.",
+        "addPhotos": "Add photos",
+        "viewCatalog": "View catalog"
+      },
+      "conflict": "Nothing was imported. Something changed in your catalog since the preview:",
+      "expired": {
+        "title": "This preview has expired",
+        "text": "Previews are kept for 24 hours. Nothing was imported. Upload the file again to check it."
       }
     }
   }

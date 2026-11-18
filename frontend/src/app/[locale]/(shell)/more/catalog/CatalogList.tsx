@@ -8,7 +8,8 @@ import { Banner } from "@/components/Banner";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Chip } from "@/components/Chip";
-import { BoxIcon, CheckIcon, ChevronIcon, CloseIcon, FilterIcon, ImageIcon, PlusIcon, SearchIcon, StoreIcon, SyncIcon } from "@/components/icons";
+import type { AppBarAction } from "@/components/AppBar";
+import { AlertIcon, BoxIcon, CheckIcon, ChevronIcon, CloseIcon, FilterIcon, ImageIcon, PlusIcon, SearchIcon, StoreIcon, SyncIcon, UploadIcon } from "@/components/icons";
 import { LinkButton } from "@/components/LinkButton";
 import { OfflineNotice } from "@/components/OfflineNotice";
 import { Screen, ScreenBody, ScreenFooter } from "@/components/Screen";
@@ -43,8 +44,11 @@ type More = "idle" | "loading" | "error";
 /** Search typed with Arabic-Indic digits is searched with 0-9; the API takes at most 100 characters. */
 const searchOf = (typed: string) => normaliseDigits(typed).trim().slice(0, 100);
 
-/** Screens 132 to 139: the catalog for everyone with catalog.view, 20 products at a time. */
-export function CatalogList() {
+/**
+ * Screens 132 to 139: the catalog for everyone with catalog.view, 20 products at a time.
+ * `initialNoPhoto` opens it with the no-photo filter on (the import result's Add photos; catalog.manage only).
+ */
+export function CatalogList({ initialNoPhoto = false }: { initialNoPhoto?: boolean } = {}) {
   const t = useTranslations();
   const c = useTranslations("catalog");
   const access = useCatalogAccess();
@@ -55,7 +59,7 @@ export function CatalogList() {
   const [query, setQuery] = useState("");
   const [storeId, setStoreId] = useState("");
   const [stock, setStock] = useState<Stock>("all");
-  const [extra, setExtra] = useState<Extra>(NO_EXTRA);
+  const [extra, setExtra] = useState<Extra>(() => (initialNoPhoto && access.manage ? { archived: false, noPhoto: true } : NO_EXTRA));
   const [page, setPage] = useState<Page>({ k: "loading" });
   const [counts, setCounts] = useState<ProductCounts | null>(null);
   const [more, setMore] = useState<More>("idle");
@@ -154,10 +158,14 @@ export function CatalogList() {
   const emptyCatalog = page.k === "ready" && page.items.length === 0 && !filtered;
   const extraLabel = extra.archived && extra.noPhoto ? c("activeFilter.both") : extra.archived ? c("activeFilter.archived") : extra.noPhoto ? c("activeFilter.noPhoto") : "";
   const storeName = stores.find((candidate) => candidate.id === store)?.name;
+  // Screen 132: the Low stock list (stock.adjust) and CSV import (catalog.manage) for owners and managers.
+  const barLinks: AppBarAction[] = [];
+  if (access.adjust) barLinks.push({ href: `${CATALOG}/low-stock`, label: c("lowStockList"), icon: <AlertIcon width={22} height={22} /> });
+  if (access.manage) barLinks.push({ href: `${CATALOG}/import`, label: c("importCsv"), icon: <UploadIcon width={22} height={22} /> });
 
   return (
     <Screen>
-      <AppBar title={c("title")} subtitle={me.business.name} backHref="/more" backLabel={t("common.back")} />
+      <AppBar title={c("title")} subtitle={me.business.name} backHref="/more" backLabel={t("common.back")} actions={barLinks} />
       <ScreenBody>
         <OfflineNotice />
         <div className={styles.search}>
@@ -374,6 +382,13 @@ function Nothing({ emptyCatalog, query, onClearSearch, onClearFilters }: { empty
         <p className={styles.muted} style={{ maxInlineSize: 280 }}>
           {access.manage ? c("empty.manage") : c("empty.staff")}
         </p>
+        {access.manage ? (
+          <div style={{ inlineSize: "100%", maxInlineSize: 260 }}>
+            <LinkButton href={`${CATALOG}/import`} variant="ghost">
+              <UploadIcon width={16} height={16} /> {c("importCsv")}
+            </LinkButton>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -393,7 +408,8 @@ function Nothing({ emptyCatalog, query, onClearSearch, onClearFilters }: { empty
   );
 }
 
-function StoreSheet({ current, onClose, onPick }: { current: string; onClose: () => void; onPick: (id: string) => void }) {
+/** The store menu's sheet (also used by the Low stock list): "All stores" and the person's own stores. */
+export function StoreSheet({ current, onClose, onPick }: { current: string; onClose: () => void; onPick: (id: string) => void }) {
   const c = useTranslations("catalog");
   const stores = useMeStores();
   const values = ["", ...stores.map((store) => store.id)];

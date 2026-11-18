@@ -48,6 +48,31 @@ export interface MovementPage {
   next_cursor: string | null;
 }
 
+/** One variant at or below its low-stock level (contracts LowStockItem). */
+export interface LowStockItem {
+  product_id: string;
+  product_name_en: string | null;
+  product_name_ar: string | null;
+  variant_id: string;
+  sku: string;
+  option_values: string[];
+  main_photo_id: string | null;
+  on_hand: number;
+  /** Shown to people as "Reserved". */
+  allocated: number;
+  available: number;
+  /** The effective level: the variant's own, else the business default. */
+  level: number;
+  stock_state: StockState;
+}
+
+export interface LowStockPage {
+  items: LowStockItem[];
+  next_cursor: string | null;
+  /** Low and out variants in all; first page only. */
+  total?: number;
+}
+
 export const MAX_QUANTITY = 1_000_000;
 export const NOTE_MAX = 500;
 
@@ -67,6 +92,10 @@ export const adjustStock = (variantId: string, input: AdjustmentInput, idempoten
 /** Newest first, 50 per page. */
 export const listMovements = (variantId: string, cursor?: string, signal?: AbortSignal) =>
   api.get<MovementPage>(`/catalog/variants/${variantId}/movements`, { query: { cursor }, signal });
+
+/** Out of stock first, then the fewest available, then SKU; 20 per page (owners and managers: stock.adjust). */
+export const listLowStock = (filters: { store_id?: string; cursor?: string } = {}, signal?: AbortSignal) =>
+  api.get<LowStockPage>("/catalog/low-stock", { query: { ...filters }, signal });
 
 /** The request body for what the sheet shows. `amount` is the quantity, or the number counted for Set count. */
 export function buildAdjustment(mode: AdjustMode, reason: AdjustReason | null, amount: number, note: string, balanceVersion: number): AdjustmentInput {

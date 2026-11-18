@@ -53,7 +53,7 @@
   gap: 8px;
 }
 
-.figures > div {
+.figures > * {
   display: flex;
   flex-direction: column;
   gap: 2px;

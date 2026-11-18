@@ -17,10 +17,19 @@ export interface AppBarProps {
   onSignOut?: () => void;
   signOutLabel?: string;
   /** One icon link at the end of the bar (for example Edit product); the label names it for assistive technology. */
-  action?: { href: string; label: string; icon: ReactNode };
+  action?: AppBarAction;
+  /** Several icon links at the end of the bar, in order (for example Low stock list and Import on the Catalog). */
+  actions?: AppBarAction[];
 }
 
-export function AppBar({ title, subtitle, backHref, backLabel, ops, badge, onSignOut, signOutLabel, action }: AppBarProps) {
+export interface AppBarAction {
+  href: string;
+  label: string;
+  icon: ReactNode;
+}
+
+export function AppBar({ title, subtitle, backHref, backLabel, ops, badge, onSignOut, signOutLabel, action, actions = [] }: AppBarProps) {
+  const links = action ? [action, ...actions] : actions;
   return (
     <header className={[styles.bar, ops ? styles.ops : ""].filter(Boolean).join(" ")}>
       {backHref ? (
@@ -33,11 +42,11 @@ export function AppBar({ title, subtitle, backHref, backLabel, ops, badge, onSig
         {subtitle ? <span className={styles.sub}>{subtitle}</span> : null}
       </div>
       {badge ? <span className={styles.badge}>{badge}</span> : null}
-      {action ? (
-        <Link href={action.href} className={styles.icon} aria-label={action.label}>
-          {action.icon}
+      {links.map((link) => (
+        <Link key={link.href} href={link.href} className={styles.icon} aria-label={link.label}>
+          {link.icon}
         </Link>
-      ) : null}
+      ))}
       {onSignOut ? (
         <button type="button" className={styles.icon} onClick={onSignOut} aria-label={signOutLabel}>
           <LogoutIcon className={styles.flip} />

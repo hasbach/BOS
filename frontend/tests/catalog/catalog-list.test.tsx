@@ -167,6 +167,34 @@ describe("catalog list (screens 132 to 139)", () => {
     expect(await screen.findByText("No products yet")).toBeInTheDocument();
     expect(screen.getByText(/Add your first product/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Add product/ })).toHaveAttribute("href", "/more/catalog/new");
+    // The empty state's own Import from CSV button (screen 136), besides the app bar's.
+    const imports = screen.getAllByRole("link", { name: /Import from CSV/ });
+    expect(imports).toHaveLength(2);
+    for (const link of imports) expect(link).toHaveAttribute("href", "/more/catalog/import");
+  });
+
+  it("opens the Low stock list and CSV import from the app bar for owners and managers (screen 132)", async () => {
+    mockApi(() => reply(200, page([JEANS])));
+    renderMe(<CatalogList />, catalogOwner());
+    await screen.findByText("Slim blue jeans");
+    expect(screen.getByRole("link", { name: "Low stock list" })).toHaveAttribute("href", "/more/catalog/low-stock");
+    expect(screen.getByRole("link", { name: "Import from CSV" })).toHaveAttribute("href", "/more/catalog/import");
+  });
+
+  it("gives staff neither app bar link nor the empty-state import (screen 133)", async () => {
+    mockApi(() => reply(200, page([], { counts: { all: 0, in_stock: 0, low: 0, out: 0 } })));
+    renderMe(<CatalogList />, catalogStaff());
+    await screen.findByText(/No products in your stores yet/);
+    expect(screen.queryByRole("link", { name: "Low stock list" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Import from CSV/ })).not.toBeInTheDocument();
+  });
+
+  it("can open with the no-photo filter on (from the import result)", async () => {
+    const calls = mockApi(() => reply(200, page([TOTE])));
+    renderMe(<CatalogList initialNoPhoto />, catalogOwner());
+    await screen.findByText("Canvas tote bag");
+    expect(queryOf(productCalls(calls)[0]!)).toEqual({ no_photo: "true" });
+    expect(screen.getByRole("button", { name: "No photo" })).toBeInTheDocument();
   });
 
   it("tells staff products appear when an owner or manager adds them", async () => {
