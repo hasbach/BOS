@@ -165,18 +165,28 @@ def maintenance_history(counts: dict[str, int]) -> dict[str, int]:
 
 @bos_cli.command("maintenance")
 def maintenance() -> None:
-    """Expire old invitations; delete ended sessions, old sign-in attempts and old keys."""
+    """Expire old invitations; delete ended sessions, old sign-in attempts and old keys;
+    delete staged product photos older than 24 hours (each business on its own)."""
     from app.core import audit
     from app.core.db import get_engine, transaction
+    from app.core.storage import storage_for
+    from app.services.maintenance import run_tenant_steps
 
     engine = get_engine()
     with transaction(engine) as db:
-        counts = db.execute(text("SELECT platform_maintenance()")).scalar_one()
+        counts = dict(db.execute(text("SELECT platform_maintenance()")).scalar_one())
+    per_tenant = run_tenant_steps(engine, storage_for(current_app))
+    counts.update(per_tenant.counts())
     audit.record_platform(
         engine, actor_type="system", event="maintenance.run", data=maintenance_history(counts)
     )
     for name, count in sorted(counts.items()):
         click.echo(f"{name}: {count}")
+    if per_tenant.failed:
+        raise click.ClickException(
+            f"{len(per_tenant.failed)} business(es) failed and were rolled back: "
+            + ", ".join(str(t) for t in per_tenant.failed)
+        )
 
 
 @bos_cli.command("seed-demo")

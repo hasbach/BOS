@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -110,3 +114,19 @@ def clear_cookie(response: Response, *, operator: bool) -> None:
     from app import get_config
 
     sessions.clear_session_cookie(response, operator=operator, config=get_config(current_app))
+
+
+def encode_cursor(at: datetime, record_id: uuid.UUID) -> str:
+    """An opaque keyset position (a time and an id), as the history and catalog lists use."""
+    raw = json.dumps([at.isoformat(), str(record_id)]).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def decode_cursor(raw: str) -> tuple[datetime, uuid.UUID] | None:
+    """The position in a cursor from ``encode_cursor``; None if it is not one."""
+    try:
+        at, record_id = json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
+        position = (datetime.fromisoformat(at), uuid.UUID(record_id))
+    except (ValueError, TypeError, binascii.Error):
+        return None
+    return position if position[0].tzinfo is not None else None

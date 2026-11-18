@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 import pytest
 
+from app.core import security
 from app.core.security import (
     MIN_PASSWORD_LENGTH,
     WeakPassword,
@@ -49,9 +51,9 @@ def test_verify_returns_false_for_a_malformed_stored_hash() -> None:
 
 def test_minimum_length_is_ten() -> None:
     assert MIN_PASSWORD_LENGTH == 10
-    validate_password("a1b2c3d4e5")  # exactly 10: accepted
+    validate_password("k7Rv2Lq9Xz")  # exactly 10: accepted ("a1b2c3d4e5" is a listed one)
     with pytest.raises(WeakPassword):
-        validate_password("a1b2c3d4e")  # 9
+        validate_password("k7Rv2Lq9X")  # 9
 
 
 @pytest.mark.parametrize(
@@ -151,3 +153,88 @@ def test_a_code_hash_needs_the_key_and_is_tied_to_its_scope() -> None:
     assert not code_matches("key-one", "invitation-2", "123456", stored)
     assert not code_matches("key-one", "invitation-1", "123457", stored)
     assert stored != hashlib.sha256(b"123456").digest()
+
+
+# ---- F-15: the common-password list (M1 T003, research R57) ------------------------------------
+
+COMMON_PASSWORDS_FILE = (
+    Path(security.__file__).resolve().parents[1] / "data" / "common_passwords.txt"
+)
+M0_ENTRIES = (
+    "1234567890",
+    "0123456789",
+    "12345678910",
+    "123456789a",
+    "1q2w3e4r5t",
+    "1qaz2wsx3edc",
+    "abcdefghij",
+    "administrator",
+    "iloveyou123",
+    "letmein123",
+    "password12",
+    "password123",
+    "password1234",
+    "passwordpassword",
+    "qwerty12345",
+    "qwertyuiop",
+    "welcome123",
+    "bospassword",
+)
+
+
+def _file_entries() -> list[str]:
+    lines = COMMON_PASSWORDS_FILE.read_text(encoding="utf-8").splitlines()
+    return [line for line in lines if line and not line.startswith("#")]
+
+
+def test_the_list_file_names_its_source_and_licence_in_its_header() -> None:
+    header = [
+        line
+        for line in COMMON_PASSWORDS_FILE.read_text(encoding="utf-8").splitlines()
+        if line.startswith("#")
+    ]
+    text = "\n".join(header)
+    assert "SecLists" in text
+    assert "MIT" in text
+
+
+def test_every_entry_is_lower_case_and_at_least_10_characters() -> None:
+    entries = _file_entries()
+    assert len(entries) > 1000
+    assert all(entry == entry.lower() for entry in entries)
+    assert all(len(entry) >= MIN_PASSWORD_LENGTH for entry in entries)
+    assert all(entry == entry.strip() for entry in entries)
+
+
+def test_the_list_is_loaded_once_from_the_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+    real = security.load_common_passwords
+
+    def counting() -> frozenset[str]:
+        calls.append(None)
+        return real()
+
+    loaded = security.common_passwords()
+    monkeypatch.setattr(security, "load_common_passwords", counting)
+    for _ in range(3):
+        assert security.common_passwords() is loaded
+    assert calls == []
+    assert set(_file_entries()) <= loaded
+    assert not any(entry.startswith("#") for entry in loaded)
+
+
+@pytest.mark.parametrize("password", ["usuckballz1", "4815162342", "q1w2e3r4t5", "12345qwert"])
+def test_well_known_passwords_from_the_list_are_refused_in_any_case(password: str) -> None:
+    for variant in (password, password.upper(), password.capitalize()):
+        with pytest.raises(WeakPassword):
+            validate_password(variant)
+
+
+@pytest.mark.parametrize("password", M0_ENTRIES)
+def test_the_m0_entries_are_still_refused(password: str) -> None:
+    with pytest.raises(WeakPassword):
+        validate_password(password)
+
+
+def test_a_strong_password_is_still_accepted() -> None:
+    validate_password("Correct-Horse-42")

@@ -22,7 +22,7 @@ from flask.testing import FlaskClient
 from sqlalchemy import Engine
 
 from app.config import Config
-from tests.dbsupport import TwoTenants, World
+from tests.dbsupport import TwoTenants, World, insert_catalog_rows
 from tests.integration.us1_support import (
     CSRF,
     app_for,
@@ -36,6 +36,14 @@ UserClient = Callable[[uuid.UUID, uuid.UUID], FlaskClient]
 
 STAFF = "/api/v1/staff"
 STORES = "/api/v1/stores"
+PRODUCTS = "/api/v1/catalog/products"
+PHOTOS = "/api/v1/catalog/photos"
+_PRODUCT = {
+    "version": 1,
+    "code": "TAKEN",
+    "name_en": "Taken",
+    "variants": [{"option_values": [], "price": "1.00", "currency": "USD"}],
+}
 
 
 @pytest.fixture()
@@ -85,13 +93,25 @@ _WRITES: list[Call] = [
     ("logo-read", "GET", STORES + "/{id}/logo", "json", None),
     ("session-end", "DELETE", "/api/v1/me/sessions/{id}", "json", None),
     ("session-end-junk", "DELETE", "/api/v1/me/sessions/{id}", "raw", "[1]"),
+    # M1 catalog (T042): the product is looked up before the body or the version is checked.
+    ("product-read", "GET", PRODUCTS + "/{id}", "json", None),
+    ("product-put-no-version", "PUT", PRODUCTS + "/{id}", "json", {"code": "x y"}),
+    ("product-put-junk", "PUT", PRODUCTS + "/{id}", "raw", "[1]"),
+    ("product-put-valid", "PUT", PRODUCTS + "/{id}", "json", _PRODUCT),
+    ("product-delete-no-version", "DELETE", PRODUCTS + "/{id}", "json", None),
+    ("product-archive-bad-version", "POST", PRODUCTS + "/{id}/archive", "json", {"version": 0}),
+    ("product-archive", "POST", PRODUCTS + "/{id}/archive", "json", {"version": 1}),
+    ("product-restore-junk", "POST", PRODUCTS + "/{id}/restore", "raw", "[1]"),
+    ("product-restore", "POST", PRODUCTS + "/{id}/restore", "json", {"version": 1}),
+    ("photo-read", "GET", PHOTOS + "/{id}/thumb", "json", None),
 ]
 
 
 def test_every_business_route_with_an_id_in_its_path_is_in_the_list_above(app: Flask) -> None:
     """A new route with a record id must be added to ``_WRITES`` (with its invalid bodies)."""
     routes = {
-        (method, re.sub(r"<uuid:\w+>", "{id}", rule.rule))
+        # A photo's size is listed as one real size.
+        (method, re.sub(r"<uuid:\w+>", "{id}", rule.rule).replace("<size>", "thumb"))
         for rule in app.url_map.iter_rules()
         if rule.rule.startswith("/api/v1/")
         and not rule.rule.startswith("/api/v1/ops/")
@@ -123,6 +143,10 @@ def _send(client: FlaskClient, method: str, path: str, how: str, payload: Any) -
 
 def _foreign_ids(a: World, path: str) -> list[uuid.UUID]:
     """Real ids of business A that fit the route (including its owner and its stores)."""
+    if path.startswith(PHOTOS):
+        return [a.catalog.photo_id]
+    if path.startswith(PRODUCTS):
+        return [a.catalog.product_id]
     if "/invitations/" in path:
         return [a.invitation_id]
     if "/staff/" in path:
@@ -149,6 +173,9 @@ def test_foreign_and_made_up_ids_get_one_answer_whatever_the_body(
 ) -> None:
     a, b = worlds.a, worlds.b
     attacker = user_client(b.user(role), b.tenant_id)
+    if "/catalog/" in template:
+        with owner_engine.begin() as conn:
+            a._catalog = insert_catalog_rows(conn, a)
     foreign_ids = _foreign_ids(a, template)
     if not foreign_ids:
         # Sessions: ids of another business's sessions are found through the database only.

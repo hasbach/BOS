@@ -4,6 +4,8 @@
   business (onboarding, demo seed; migration 0003 backfilled the existing ones).
 * ``default_warehouse_id`` — the warehouse stock code works in. Fails closed: a business
   without one is a broken invariant, answered 500 and logged, never guessed around.
+* ``create_item`` / ``delete_items`` — a variant's stable inventory item and its balance (with
+  the ``opening`` movement of its opening quantity), and removing history-less ones (R38).
 * ``lock_balances`` — the one way to lock balance rows before deciding on their numbers:
   ``SELECT ... FOR UPDATE`` in ascending ``inventory_item_id`` order, so two stock operations
   can never deadlock each other (R42).
@@ -20,6 +22,7 @@ import logging
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -50,6 +53,81 @@ def default_warehouse_id(db: Session) -> uuid.UUID:
         log.error("business has no default warehouse; refusing the stock operation")
         raise ApiError(500, "internal_error", "Internal error")
     return found
+
+
+MovementSource = Literal["product_form", "import"]
+
+
+def create_item(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    warehouse_id: uuid.UUID,
+    opening_quantity: int,
+    source: MovementSource,
+    actor_id: uuid.UUID,
+    request_key: str | None = None,
+    import_batch_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    """A new inventory item with its balance, and its ``opening`` movement if quantity > 0.
+
+    The stable inventory identity of a new variant (R38): insert the variant after this, in
+    the same transaction. ``source`` is ``product_form`` for the product form and ``import``
+    (with ``import_batch_id``) for a CSV import. An opening quantity of 0 writes no movement.
+    """
+    item_id = uuid.uuid4()
+    db.execute(
+        text("INSERT INTO inventory_items (id, tenant_id) VALUES (:id, :tenant_id)"),
+        {"id": item_id, "tenant_id": tenant_id},
+    )
+    db.execute(
+        text(
+            "INSERT INTO stock_balances (tenant_id, warehouse_id, inventory_item_id, on_hand) "
+            "VALUES (:tenant_id, :warehouse_id, :item_id, :on_hand)"
+        ),
+        {
+            "tenant_id": tenant_id,
+            "warehouse_id": warehouse_id,
+            "item_id": item_id,
+            "on_hand": opening_quantity,
+        },
+    )
+    if opening_quantity > 0:
+        db.execute(
+            text(
+                "INSERT INTO stock_movements (id, tenant_id, warehouse_id, inventory_item_id, "
+                "quantity, reason, on_hand_after, import_batch_id, source, actor_type, actor_id, "
+                "request_key) VALUES (:id, :tenant_id, :warehouse_id, :item_id, :quantity, "
+                "'opening', :quantity, :batch, :source, 'user', :actor_id, :request_key)"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "tenant_id": tenant_id,
+                "warehouse_id": warehouse_id,
+                "item_id": item_id,
+                "quantity": opening_quantity,
+                "batch": import_batch_id,
+                "source": source,
+                "actor_id": actor_id,
+                "request_key": request_key,
+            },
+        )
+    return item_id
+
+
+def delete_items(db: Session, item_ids: Iterable[uuid.UUID]) -> None:
+    """Remove inventory items that never had history, with their balances.
+
+    Delete their variants first. The database refuses an item with movements or allocation
+    lines (no ``ON DELETE`` on those references), so history can never be lost here.
+    """
+    items = list(item_ids)
+    if not items:
+        return
+    db.execute(
+        text("DELETE FROM stock_balances WHERE inventory_item_id = ANY(:items)"), {"items": items}
+    )
+    db.execute(text("DELETE FROM inventory_items WHERE id = ANY(:items)"), {"items": items})
 
 
 @dataclass(frozen=True)
