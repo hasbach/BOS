@@ -17,7 +17,9 @@
     "emptyTitle": "Nothing here yet",
     "offlineTitle": "You’re offline.",
     "offlineText": "You can look around, but nothing can be saved until you’re back online.",
-    "writeFailed": "Didn’t go through. Nothing was saved because we couldn’t reach BOS. Check your connection and try again. What you typed is still here."
+    "writeFailed": "Didn’t go through. Nothing was saved because we couldn’t reach BOS. Check your connection and try again. What you typed is still here.",
+    "decrease": "Decrease",
+    "increase": "Increase"
   },
   "errors": {
     "network_error": "Can't reach the server. Check your connection and try again.",
@@ -1004,7 +1006,9 @@
       "savedCreated": "Saved. {variants, plural, one {# variant} other {# variants}} and {units, plural, one {# unit} other {# units}} of opening stock.",
       "saved": "Saved.",
       "archivedVariants": "Archived variants",
-      "archivedVariant": "Archived"
+      "archivedVariant": "Archived",
+      "tapHint": "Tap a variant to adjust its stock or open its history.",
+      "adjust": "Adjust stock"
     },
     "form": {
       "addTitle": "Add product",
@@ -1081,8 +1085,6 @@
       "noPrice": "Price not set",
       "opening": "Opening stock",
       "openingFor": "Opening stock for {variant}",
-      "decrease": "Decrease",
-      "increase": "Increase",
       "details": "Details of {variant}",
       "newChip": "New",
       "willArchiveChip": "Will be archived",
@@ -1172,6 +1174,87 @@
         "text": "Restore it on the product screen before editing it."
       },
       "backToProduct": "Back to product"
+    },
+    "reasons": {
+      "opening": "Opening stock",
+      "received": "Received",
+      "found": "Found",
+      "damaged": "Damaged",
+      "lost": "Lost",
+      "count_correction": "Count correction",
+      "other": "Other",
+      "allocation_consumed": "Sent with an order"
+    },
+    "adjust": {
+      "title": "Adjust stock",
+      "history": "History",
+      "variant": "Variant",
+      "archivedVariant": "{variant} (archived)",
+      "numbers": "Stock numbers",
+      "onHandNow": "On hand now",
+      "modeGroup": "Kind of change",
+      "modes": {
+        "add": "Add",
+        "remove": "Remove",
+        "count": "Set count"
+      },
+      "reasonGroup": "Reason",
+      "reasonLabel": "Reason (required)",
+      "quantity": "Quantity",
+      "counted": "Counted on the shelf",
+      "noteRequired": "Note (required)",
+      "noteOptional": "Note (optional)",
+      "notePlaceholder": "Supplier invoice, shelf, etc.",
+      "save": "Save adjustment",
+      "saving": "Saving…",
+      "retry": "Try again",
+      "once": "Recorded with your name and time, once, even if you tap twice.",
+      "preview": "After saving: on hand {onHand}, available {available}.",
+      "previewCount": "Difference {change}. After saving: on hand {onHand}, available {available}.",
+      "saved": "Saved. {variant}: on hand {onHand}, available {available}.",
+      "changed": "Not saved. The stock changed while you had this open. The numbers below are the latest; check your change and save again.",
+      "failed": "Didn’t go through. Nothing was saved. Check your connection and try again; it won’t be recorded twice.",
+      "fe": {
+        "reason": "Choose a reason.",
+        "quantity": "Enter a whole number from 1 to 1,000,000.",
+        "counted": "Enter a whole number from 0 to 1,000,000.",
+        "note": "Add a note saying why.",
+        "noteLong": "Keep the note to 500 characters or fewer.",
+        "maxRemove": "You can remove at most {max}: {reserved} of the {onHand} on hand {reserved, plural, one {is} other {are}} reserved.",
+        "maxRemoveAll": "You can remove at most {max}: that is all there is on hand.",
+        "nothingToRemove": "Nothing can be removed: {onHand, plural, =0 {there is nothing on hand} other {all of it is reserved}}.",
+        "countBelowReserved": "The count can’t be less than {reserved}: that many are reserved.",
+        "tooLarge": "On hand can’t go above 1,000,000."
+      }
+    },
+    "history": {
+      "title": "Stock history",
+      "counted": "Counted {n}",
+      "noteLine": "Note: {note}",
+      "onHandAfter": "On hand after",
+      "source": {
+        "product_form": "From the product form, when it was created",
+        "import": "From a CSV import",
+        "manual": "Recorded with Adjust stock"
+      },
+      "end": "This is the start of this variant’s history.",
+      "loading": "Loading the stock history…",
+      "loadError": {
+        "title": "Couldn’t load the stock history",
+        "text": "We couldn’t reach BOS. Check your connection and try again."
+      },
+      "empty": {
+        "title": "No stock changes yet",
+        "text": "This variant was added with 0 in stock. Changes you record with Adjust stock appear here."
+      },
+      "notAllowed": {
+        "title": "You can’t open stock history",
+        "text": "Only owners and managers can see and change stock. If something looks wrong, ask your manager."
+      },
+      "notFound": {
+        "title": "Not found",
+        "text": "This variant is no longer in your catalog. Go back to refresh it."
+      }
     }
   }
 }

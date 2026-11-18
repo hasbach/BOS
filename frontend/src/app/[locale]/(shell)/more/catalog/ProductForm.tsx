@@ -11,7 +11,7 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Chip } from "@/components/Chip";
 import { Field } from "@/components/Field";
-import { AlertIcon, CheckIcon, CloseIcon, EditIcon, InfoIcon, LockIcon, MinusIcon, PlusIcon, SyncIcon } from "@/components/icons";
+import { AlertIcon, CheckIcon, CloseIcon, EditIcon, InfoIcon, LockIcon, PlusIcon, SyncIcon } from "@/components/icons";
 import { LinkButton } from "@/components/LinkButton";
 import { OfflineNotice } from "@/components/OfflineNotice";
 import { PhotoPicker, photoFromId, waitingPhotos } from "@/components/PhotoPicker";
@@ -20,6 +20,7 @@ import { Screen, ScreenBody, ScreenFooter } from "@/components/Screen";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { SessionEnded } from "@/components/SessionEnded";
 import { Sheet } from "@/components/Sheet";
+import { Stepper } from "@/components/Stepper";
 import { useStoreChoices } from "@/components/StoresProvider";
 import { useRovingRadio } from "@/components/useRovingRadio";
 import { useRouter } from "@/i18n/navigation";
@@ -658,55 +659,6 @@ function PriceField({
       <Field label={label} value={price} inputMode="decimal" dir="ltr" autoComplete="off" placeholder="0" helper={helper} error={error} onChange={(event) => onPrice(event.target.value)} />
       <SegmentedControl label={c("currency")} options={CURRENCIES} value={currency} onChange={onCurrency} />
     </div>
-  );
-}
-
-/** A quantity typed in 0-9 or ٠-٩, with − and + beside it. */
-function Stepper({ value, label, visibleLabel, error, onChange }: { value: string; label: string; visibleLabel?: boolean; error?: string; onChange: (value: string) => void }) {
-  const c = useTranslations("catalog.form");
-  const id = useId();
-  const errorId = `${id}-error`;
-  const current = parseCount(value, 0) ?? 0;
-  const control = (
-    <span className={`${styles.stepper} ${error ? styles.stepperBad : ""}`}>
-      <button type="button" aria-label={c("decrease")} disabled={current <= 0} onClick={() => onChange(String(Math.max(0, current - 1)))}>
-        <MinusIcon width={16} height={16} />
-      </button>
-      <input
-        id={id}
-        value={value}
-        inputMode="numeric"
-        placeholder="0"
-        autoComplete="off"
-        aria-label={visibleLabel ? undefined : label}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <button type="button" aria-label={c("increase")} onClick={() => onChange(String(Math.min(1_000_000, current + 1)))}>
-        <PlusIcon width={16} height={16} />
-      </button>
-    </span>
-  );
-  return (
-    <>
-      {visibleLabel ? (
-        <div className={styles.between}>
-          <label htmlFor={id} className={styles.name}>
-            {label}
-          </label>
-          {control}
-        </div>
-      ) : (
-        control
-      )}
-      {error && visibleLabel ? <FieldError text={error} id={errorId} /> : null}
-      {error && !visibleLabel ? (
-        <span id={errorId} className={styles.hiddenText}>
-          {error}
-        </span>
-      ) : null}
-    </>
   );
 }
 

@@ -19,12 +19,16 @@ import { Sheet } from "@/components/Sheet";
 import { useRouter } from "@/i18n/navigation";
 import { isApiError, isSessionEnded } from "@/lib/api";
 import { CATALOG, archiveProduct, changedProduct, deleteProduct, getProduct, photoUrl, productName, restoreProduct } from "@/lib/catalog";
-import type { Product, Variant } from "@/lib/catalog";
+import type { Product, StockNumbers, Variant } from "@/lib/catalog";
 import { writeFailureMessage } from "@/lib/errors";
 import { formatApproximate, formatMoney } from "@/lib/money";
+import { stockStateOf } from "@/lib/stock";
+import type { AdjustmentResult } from "@/lib/stock";
 
 import styles from "../catalog.module.css";
 import { CatalogStatus, NotAllowedToEdit, Price, PriceRange, ProductNotFound, StockChip, StoreChips, useBusinessSettings, useCatalogAccess, variantLabel } from "../parts";
+import { AdjustStockSheet } from "./AdjustStockSheet";
+import own from "./stock.module.css";
 
 type Load = { k: "loading" } | { k: "error"; error: unknown } | { k: "gone" } | { k: "ready"; product: Product };
 
@@ -120,6 +124,10 @@ function Loaded({ initial, saved }: { initial: Product; saved?: Saved }) {
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [gone, setGone] = useState(false);
+  /** The variant the adjust-stock sheet opened with, while it is open. */
+  const [adjusting, setAdjusting] = useState<string | null>(null);
+  /** The variant whose new numbers were just confirmed (design 151). */
+  const [highlight, setHighlight] = useState<string | null>(null);
 
   if (gone) return <ProductNotFound />;
 
@@ -128,6 +136,9 @@ function Loaded({ initial, saved }: { initial: Product; saved?: Saved }) {
   const editable = access.manage && !archived;
   const active = product.variants.filter((variant) => variant.status === "active");
   const archivedVariants = access.manage ? product.variants.filter((variant) => variant.status === "archived") : [];
+  // Stock changes are allowed on archived variants, but an archived product only offers Restore (design 143).
+  const canAdjust = access.adjust && !archived;
+  const single = product.options.length === 0;
   const description = (locale === "ar" ? product.description_ar || product.description_en : product.description_en || product.description_ar)?.trim();
 
   /** What a refused or failed action means: the product changed (show it), it is gone, or a message. */
@@ -195,6 +206,28 @@ function Loaded({ initial, saved }: { initial: Product; saved?: Saved }) {
     }
   }
 
+  /** Puts confirmed numbers on a variant; a recorded movement also means the product now has history. */
+  function setStock(variantId: string, balance: StockNumbers, recorded: boolean) {
+    setProduct((p) => ({
+      ...p,
+      has_history: p.has_history || recorded,
+      variants: p.variants.map((variant) =>
+        variant.id === variantId
+          ? { ...variant, stock: balance, stock_state: stockStateOf(balance, variant.effective_low_stock_level), has_history: variant.has_history || recorded }
+          : variant,
+      ),
+    }));
+  }
+
+  function adjusted(variantId: string, result: AdjustmentResult) {
+    setStock(variantId, result.balance, true);
+    const variant = product.variants.find((v) => v.id === variantId);
+    const label = variant && !single ? variantLabel(variant.option_values) : c("detail.onlyVariant");
+    setNotice({ tone: "ok", icon: "check", text: c("adjust.saved", { variant: label, onHand: result.balance.on_hand, available: result.balance.available }) });
+    setHighlight(variantId);
+    setAdjusting(null);
+  }
+
   function openSheet(kind: "archive" | "delete") {
     setSheetError(null);
     setSheet(kind);
@@ -241,7 +274,12 @@ function Loaded({ initial, saved }: { initial: Product; saved?: Saved }) {
             </span>
             <span className={styles.small}>{c("detail.availableRule")}</span>
           </div>
-          <VariantTable variants={active} single={product.options.length === 0} sharedPrice={sharedPrice(active)} />
+          <VariantTable variants={active} single={single} sharedPrice={sharedPrice(active)} onAdjust={canAdjust ? setAdjusting : undefined} highlight={highlight} />
+          {canAdjust && active.length > 0 ? (
+            <p className={styles.small} style={{ marginBlockStart: 6 }}>
+              {c("detail.tapHint")}
+            </p>
+          ) : null}
         </Card>
 
         {archivedVariants.length > 0 ? (
@@ -249,7 +287,7 @@ function Loaded({ initial, saved }: { initial: Product; saved?: Saved }) {
             <span className={styles.label}>
               {c("detail.archivedVariants")} · {archivedVariants.length}
             </span>
-            <VariantTable variants={archivedVariants} single={product.options.length === 0} sharedPrice={sharedPrice(active)} />
+            <VariantTable variants={archivedVariants} single={single} sharedPrice={sharedPrice(active)} onAdjust={canAdjust ? setAdjusting : undefined} highlight={highlight} />
           </Card>
         ) : null}
 
@@ -291,13 +329,33 @@ function Loaded({ initial, saved }: { initial: Product; saved?: Saved }) {
           </Card>
         ) : null}
       </ScreenBody>
-      {editable ? (
+      {editable || canAdjust ? (
         <ScreenFooter>
-          <LinkButton href={`${CATALOG}/${product.id}/edit`} variant="ghost">
-            <EditIcon width={16} height={16} /> {c("detail.edit")}
-          </LinkButton>
+          <div className={editable && canAdjust ? own.btns : own.one}>
+            {editable ? (
+              <LinkButton href={`${CATALOG}/${product.id}/edit`} variant="ghost">
+                <EditIcon width={16} height={16} /> {c("detail.edit")}
+              </LinkButton>
+            ) : null}
+            {canAdjust ? (
+              <Button variant="ink" onClick={() => setAdjusting((active[0] ?? product.variants[0])?.id ?? null)}>
+                {c("detail.adjust")}
+              </Button>
+            ) : null}
+          </div>
         </ScreenFooter>
       ) : null}
+
+      <AdjustStockSheet
+        open={adjusting !== null}
+        variants={[...active, ...archivedVariants]}
+        variantId={adjusting ?? ""}
+        single={single}
+        historyHref={(variantId) => `${CATALOG}/${product.id}/variants/${variantId}/history`}
+        onClose={() => setAdjusting(null)}
+        onSaved={adjusted}
+        onBalance={(variantId, balance) => setStock(variantId, balance, false)}
+      />
 
       <Sheet
         open={sheet === "archive"}
@@ -396,7 +454,20 @@ function ProductPrice({ variants, rate }: { variants: Variant[]; rate: string | 
   );
 }
 
-function VariantTable({ variants, single, sharedPrice: shared }: { variants: Variant[]; single: boolean; sharedPrice: { price: string; currency: Variant["currency"] } | null }) {
+function VariantTable({
+  variants,
+  single,
+  sharedPrice: shared,
+  onAdjust,
+  highlight,
+}: {
+  variants: Variant[];
+  single: boolean;
+  sharedPrice: { price: string; currency: Variant["currency"] } | null;
+  /** For stock.adjust holders: tapping a variant opens the adjust-stock sheet for it (design 146). */
+  onAdjust?: (variantId: string) => void;
+  highlight?: string | null;
+}) {
   const c = useTranslations("catalog");
   return (
     <table className={styles.table}>
@@ -417,11 +488,31 @@ function VariantTable({ variants, single, sharedPrice: shared }: { variants: Var
       <tbody>
         {variants.map((variant) => {
           const ownPrice = shared === null || variant.currency !== shared.currency || Number(variant.price) !== Number(shared.price);
+          const lit = highlight === variant.id ? own.highlight : "";
+          const name = <span className={styles.name}>{single ? c("detail.onlyVariant") : variantLabel(variant.option_values)}</span>;
+          const chip = variant.status === "archived" ? <Chip>{c("detail.archivedVariant")}</Chip> : <StockChip state={variant.stock_state} />;
+          // The button is the keyboard and screen-reader way in; the whole row is a larger target for a pointer.
+          const open = onAdjust ? () => onAdjust(variant.id) : undefined;
+          const rowClass = [lit, open ? own.tappable : ""].filter(Boolean).join(" ");
           return [
-            <tr key={variant.id}>
+            <tr key={variant.id} className={rowClass || undefined} onClick={open}>
               <td>
-                <span className={styles.name}>{single ? c("detail.onlyVariant") : variantLabel(variant.option_values)}</span>{" "}
-                {variant.status === "archived" ? <Chip>{c("detail.archivedVariant")}</Chip> : <StockChip state={variant.stock_state} />}
+                {open ? (
+                  <button
+                    type="button"
+                    className={own.variantButton}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      open();
+                    }}
+                  >
+                    {name} {chip}
+                  </button>
+                ) : (
+                  <>
+                    {name} {chip}
+                  </>
+                )}
               </td>
               <td className={styles.num}>{variant.stock.on_hand}</td>
               <td className={styles.num}>{variant.stock.allocated}</td>
@@ -429,7 +520,7 @@ function VariantTable({ variants, single, sharedPrice: shared }: { variants: Var
                 <b>{variant.stock.available}</b>
               </td>
             </tr>,
-            <tr key={`${variant.id}-sku`} className={styles.sub}>
+            <tr key={`${variant.id}-sku`} className={[styles.sub, rowClass].filter(Boolean).join(" ")} onClick={open}>
               <td colSpan={4}>
                 <bdi dir="ltr" className={styles.nowrap}>
                   {variant.sku}
