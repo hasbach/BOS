@@ -189,6 +189,49 @@ def maintenance() -> None:
         )
 
 
+@bos_cli.command("stock-check")
+@click.option("--tenant", "tenant", default=None, help="Check only this business (its id).")
+def stock_check(tenant: str | None) -> None:
+    """Check every business's stock: on hand against the ledger, allocated against active
+    allocations, no negative availability (FR-022). Exits non-zero on any difference.
+
+    Businesses are listed in operator context (row-level security is forced on every table);
+    each is then checked in its own tenant transaction, which changes nothing.
+    """
+    from app.core.db import get_engine
+    from app.core.tenancy import operator_transaction, tenant_transaction
+    from app.services.inventory import integrity_report
+
+    wanted: uuid.UUID | None = None
+    if tenant is not None:
+        try:
+            wanted = uuid.UUID(tenant)
+        except ValueError:
+            raise click.ClickException(f"{tenant!r} is not a business id.") from None
+    engine = get_engine()
+    with operator_transaction(engine) as db:
+        businesses = db.execute(
+            text(
+                "SELECT id, name FROM tenants "
+                "WHERE CAST(:wanted AS uuid) IS NULL OR id = CAST(:wanted AS uuid) ORDER BY id"
+            ),
+            {"wanted": wanted},
+        ).all()
+    if wanted is not None and not businesses:
+        raise click.ClickException(f"No business has the id {wanted}.")
+
+    inconsistent = 0
+    for business in businesses:
+        with tenant_transaction(engine, business.id) as db:
+            problems = integrity_report(db)
+        click.echo(f"business {business.id} ({business.name}): {len(problems)} differences")
+        for problem in problems:
+            click.echo(f"  {problem}")
+        inconsistent += bool(problems)
+    if inconsistent:
+        raise click.ClickException(f"{inconsistent} business(es) with differences.")
+
+
 @bos_cli.command("seed-demo")
 def seed_demo() -> None:
     """Create the demonstration businesses if absent (password from BOS_DEMO_PASSWORD).

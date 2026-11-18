@@ -38,6 +38,7 @@ STAFF = "/api/v1/staff"
 STORES = "/api/v1/stores"
 PRODUCTS = "/api/v1/catalog/products"
 PHOTOS = "/api/v1/catalog/photos"
+VARIANTS = "/api/v1/catalog/variants"
 _PRODUCT = {
     "version": 1,
     "code": "TAKEN",
@@ -104,6 +105,18 @@ _WRITES: list[Call] = [
     ("product-restore-junk", "POST", PRODUCTS + "/{id}/restore", "raw", "[1]"),
     ("product-restore", "POST", PRODUCTS + "/{id}/restore", "json", {"version": 1}),
     ("photo-read", "GET", PHOTOS + "/{id}/thumb", "json", None),
+    # M1 stock (T061): the variant is looked up before the body is checked.
+    ("adjust-no-body", "POST", VARIANTS + "/{id}/adjustments", "json", None),
+    ("adjust-junk", "POST", VARIANTS + "/{id}/adjustments", "raw", "[1]"),
+    ("adjust-bad-reason", "POST", VARIANTS + "/{id}/adjustments", "json", {"reason": "x"}),
+    (
+        "adjust-valid",
+        "POST",
+        VARIANTS + "/{id}/adjustments",
+        "json",
+        {"reason": "received", "quantity": 1, "balance_version": 1},
+    ),
+    ("movements-read", "GET", VARIANTS + "/{id}/movements", "json", None),
 ]
 
 
@@ -147,6 +160,8 @@ def _foreign_ids(a: World, path: str) -> list[uuid.UUID]:
         return [a.catalog.photo_id]
     if path.startswith(PRODUCTS):
         return [a.catalog.product_id]
+    if path.startswith(VARIANTS):
+        return [a.catalog.variant_id]
     if "/invitations/" in path:
         return [a.invitation_id]
     if "/staff/" in path:

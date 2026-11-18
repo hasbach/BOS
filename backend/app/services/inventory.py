@@ -9,6 +9,9 @@
 * ``lock_balances`` — the one way to lock balance rows before deciding on their numbers:
   ``SELECT ... FOR UPDATE`` in ascending ``inventory_item_id`` order, so two stock operations
   can never deadlock each other (R42).
+* ``adjust`` / ``movements_page`` — a person's stock change (one ``manual`` movement and its
+  balance, under the balance lock, refused when stale or impossible) and a variant's stock
+  history, newest first (User Story 2, FR-012 to FR-017, R41 to R43).
 * ``integrity_report`` — data-model.md "Integrity rules" for the business of the current
   transaction; an empty list means consistent (FR-022).
 
@@ -22,12 +25,16 @@ import logging
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import audit
 from app.errors import ApiError
+from app.services.common import NotFound
 
 log = logging.getLogger("bos.inventory")
 
@@ -170,6 +177,318 @@ def lock_balances(db: Session, item_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID,
         )
         for row in rows
     }
+
+
+# ---- who changes stock --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StockActor:
+    """Who changes stock: a user, or a system process (``user_id`` None)."""
+
+    tenant_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+    ip: str | None = None
+
+    @property
+    def actor_type(self) -> Literal["user", "system"]:
+        return "user" if self.user_id is not None else "system"
+
+
+def stock_numbers(balance: LockedBalance) -> dict[str, int]:
+    """The contract's ``StockNumbers`` of a balance."""
+    return {
+        "on_hand": balance.on_hand,
+        "allocated": balance.allocated,
+        "available": balance.available,
+        "version": balance.version,
+    }
+
+
+def current_numbers(db: Session, item_id: uuid.UUID) -> dict[str, int]:
+    """The ``StockNumbers`` of an item's default-warehouse balance as they are now."""
+    row = db.execute(
+        text(
+            "SELECT b.inventory_item_id, b.warehouse_id, b.on_hand, b.allocated, b.version "
+            "FROM stock_balances b JOIN warehouses w ON w.id = b.warehouse_id AND w.is_default "
+            "WHERE b.inventory_item_id = :item"
+        ),
+        {"item": item_id},
+    ).one()
+    return stock_numbers(
+        LockedBalance(
+            row.inventory_item_id, row.warehouse_id, row.on_hand, row.allocated, row.version
+        )
+    )
+
+
+# ---- adjustments (User Story 2, FR-012 to FR-017, R41 to R43) ----------------------------------
+
+MAX_ON_HAND = 1_000_000
+
+Reason = Literal["opening", "received", "found", "damaged", "lost", "count_correction", "other"]
+REASONS: tuple[str, ...] = (
+    "opening",
+    "received",
+    "found",
+    "damaged",
+    "lost",
+    "count_correction",
+    "other",
+)
+_INCREASING = frozenset({"opening", "received", "found"})
+_DECREASING = frozenset({"damaged", "lost"})
+
+
+@dataclass(frozen=True)
+class AdjustmentIn:
+    """A stock change whose shape the API checked (the contract's ``AdjustmentInput``).
+
+    ``quantity`` is set for every reason but ``count_correction``, which has
+    ``counted_quantity`` instead; ``direction`` only for ``other``, where it sets the sign.
+    """
+
+    reason: Reason
+    balance_version: int
+    quantity: int | None = None
+    counted_quantity: int | None = None
+    direction: Literal["in", "out"] | None = None
+    note: str | None = None
+
+
+@dataclass(frozen=True)
+class StockVariant:
+    variant_id: uuid.UUID
+    inventory_item_id: uuid.UUID
+    sku: str
+
+
+def find_variant(db: Session, variant_id: uuid.UUID) -> StockVariant:
+    """A variant of this business, whatever its status (``NotFound`` otherwise)."""
+    row = db.execute(
+        text("SELECT id, inventory_item_id, sku FROM variants WHERE id = :id"), {"id": variant_id}
+    ).one_or_none()
+    if row is None:
+        raise NotFound("variant", variant_id)
+    return StockVariant(row.id, row.inventory_item_id, row.sku)
+
+
+def lock_balance(db: Session, item_id: uuid.UUID) -> LockedBalance:
+    """Lock one item's balance; an item without one is a broken invariant (500, logged)."""
+    found = lock_balances(db, [item_id]).get(item_id)
+    if found is None:
+        log.error("inventory item %s has no balance; refusing the stock operation", item_id)
+        raise ApiError(500, "internal_error", "Internal error")
+    return found
+
+
+def _stock_conflict(code: str, message: str, balance: LockedBalance) -> ApiError:
+    return ApiError(409, code, message, extra={"balance": stock_numbers(balance)})
+
+
+def _too_large() -> ApiError:
+    return ApiError(
+        400,
+        "validation_failed",
+        "On hand would be above 1000000",
+        fields={"quantity": "too_large"},
+    )
+
+
+def _not_enough(balance: LockedBalance) -> ApiError:
+    return _stock_conflict(
+        "not_enough_stock", "On hand may not go below zero or below the reserved quantity", balance
+    )
+
+
+def check_adjustment_limits(balance: LockedBalance, on_hand_after: int) -> None:
+    """0 <= on hand after <= 1,000,000 and on hand after >= allocated (FR-015, R40).
+
+    The balance CHECKs repeat this rule and are answered the same way, by constraint name
+    (``adjust``), so a code path that forgets the rule still never answers 500.
+    """
+    if on_hand_after < 0 or on_hand_after < balance.allocated:
+        raise _not_enough(balance)
+    if on_hand_after > MAX_ON_HAND:
+        raise _too_large()
+
+
+def signed_quantity(data: AdjustmentIn, on_hand: int) -> int:
+    """The movement's quantity: signed by reason (by ``direction`` for ``other``), or, for a
+    count correction, the difference between the counted number and the current on hand."""
+    if data.reason == "count_correction":
+        assert data.counted_quantity is not None
+        return data.counted_quantity - on_hand
+    assert data.quantity is not None
+    if data.reason in _INCREASING:
+        return data.quantity
+    if data.reason in _DECREASING:
+        return -data.quantity
+    assert data.direction is not None  # "other"
+    return data.quantity if data.direction == "in" else -data.quantity
+
+
+UPDATE_ON_HAND = text(
+    "UPDATE stock_balances SET on_hand = on_hand + :delta, version = version + 1, "
+    "updated_at = now() WHERE warehouse_id = :warehouse AND inventory_item_id = :item "
+    "RETURNING on_hand"
+)
+
+INSERT_MOVEMENT = text(
+    "INSERT INTO stock_movements (id, tenant_id, warehouse_id, inventory_item_id, quantity, "
+    "reason, counted_quantity, on_hand_after, allocation_id, source, actor_type, actor_id, "
+    "note, request_key) VALUES (:id, :tenant_id, :warehouse, :item, :quantity, :reason, "
+    ":counted, :after, :allocation_id, :source, :actor_type, :actor_id, :note, :request_key)"
+)
+
+
+def adjust(
+    db: Session,
+    actor: StockActor,
+    variant: StockVariant,
+    data: AdjustmentIn,
+    *,
+    request_key: str | None = None,
+) -> uuid.UUID:
+    """Record a person's stock change; returns the new movement's id.
+
+    Locks the balance, refuses a different ``balance_version`` (409 ``stock_changed``) and an
+    impossible result (409 ``not_enough_stock``, 400 ``quantity: too_large``), then updates
+    the balance (``version + 1``), writes one ``manual`` movement with its ``on_hand_after``
+    and records ``stock.adjusted``. Allowed on archived variants. Refused: nothing written.
+    """
+    balance = lock_balance(db, variant.inventory_item_id)
+    if balance.version != data.balance_version:
+        raise _stock_conflict("stock_changed", "The stock changed since it was loaded", balance)
+    quantity = signed_quantity(data, balance.on_hand)
+    check_adjustment_limits(balance, balance.on_hand + quantity)
+
+    movement_id = uuid.uuid4()
+    try:
+        with db.begin_nested():
+            # The balance first: a negative result then fails stock_balances_not_oversold
+            # (not_enough_stock) before the movement's on_hand_after range is checked.
+            after = db.execute(
+                UPDATE_ON_HAND,
+                {
+                    "delta": quantity,
+                    "warehouse": balance.warehouse_id,
+                    "item": variant.inventory_item_id,
+                },
+            ).scalar_one()
+            counted = data.counted_quantity if data.reason == "count_correction" else None
+            db.execute(
+                INSERT_MOVEMENT,
+                {
+                    "id": movement_id,
+                    "tenant_id": actor.tenant_id,
+                    "warehouse": balance.warehouse_id,
+                    "item": variant.inventory_item_id,
+                    "quantity": quantity,
+                    "reason": data.reason,
+                    "counted": counted,
+                    "after": after,
+                    "allocation_id": None,
+                    "source": "manual",
+                    "actor_type": actor.actor_type,
+                    "actor_id": actor.user_id,
+                    "note": data.note,
+                    "request_key": request_key,
+                },
+            )
+    except IntegrityError as exc:
+        constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint == "stock_balances_not_oversold":
+            raise _not_enough(balance) from None
+        if constraint in ("stock_balances_on_hand_range", "stock_movements_on_hand_after_range"):
+            raise _too_large() from None
+        raise
+
+    details: dict[str, Any] = {"sku": variant.sku, "reason": data.reason, "quantity": quantity}
+    if data.reason == "count_correction":
+        details["counted_quantity"] = data.counted_quantity
+    details.update({"on_hand_before": balance.on_hand, "on_hand_after": after, "note": data.note})
+    audit.record(
+        db,
+        tenant_id=actor.tenant_id,
+        actor_type=actor.actor_type,
+        actor_id=actor.user_id,
+        event="stock.adjusted",
+        target_type="variant",
+        target_id=variant.variant_id,
+        data=details,
+        ip=actor.ip,
+    )
+    return movement_id
+
+
+# ---- stock history (FR-017) ---------------------------------------------------------------------
+
+MOVEMENTS_PER_PAGE = 50
+
+_MOVEMENT_COLUMNS = (
+    "m.id, m.seq, m.inventory_item_id, m.created_at, m.reason, m.quantity, m.counted_quantity, "
+    "m.on_hand_after, m.actor_type, u.name AS actor_name, m.note, m.source"
+)
+
+
+def _iso(moment: datetime) -> str:
+    return moment.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def movement_json(row: Any) -> dict[str, Any]:
+    """The contract's ``Movement``, with the actor's current name (none for the system)."""
+    return {
+        "id": str(row.id),
+        "at": _iso(row.created_at),
+        "reason": row.reason,
+        "quantity": row.quantity,
+        "counted_quantity": row.counted_quantity,
+        "on_hand_after": row.on_hand_after,
+        "actor_type": row.actor_type,
+        "actor_name": row.actor_name if row.actor_type == "user" else None,
+        "note": row.note,
+        "source": row.source,
+    }
+
+
+def read_movement(db: Session, movement_id: uuid.UUID) -> tuple[dict[str, Any], uuid.UUID]:
+    """One movement as ``Movement``, and its inventory item."""
+    row = db.execute(
+        text(
+            f"SELECT {_MOVEMENT_COLUMNS} FROM stock_movements m "  # noqa: S608 (constant)
+            "LEFT JOIN users u ON u.id = m.actor_id WHERE m.id = :id"
+        ),
+        {"id": movement_id},
+    ).one()
+    return movement_json(row), row.inventory_item_id
+
+
+@dataclass(frozen=True)
+class MovementPage:
+    items: list[dict[str, Any]]
+    next_seq: int | None
+
+
+def movements_page(db: Session, variant: StockVariant, before_seq: int | None) -> MovementPage:
+    """A variant's movements, newest first, 50 per page; ``before_seq`` is the keyset cursor.
+
+    Ordered by the ledger's identity ``seq``, so a movement recorded while someone pages
+    never shifts the next page.
+    """
+    rows = db.execute(
+        text(
+            f"SELECT {_MOVEMENT_COLUMNS} FROM stock_movements m "  # noqa: S608 (constant)
+            "LEFT JOIN users u ON u.id = m.actor_id "
+            "WHERE m.inventory_item_id = :item "
+            "AND (CAST(:before AS bigint) IS NULL OR m.seq < CAST(:before AS bigint)) "
+            "ORDER BY m.seq DESC LIMIT :limit"
+        ),
+        {"item": variant.inventory_item_id, "before": before_seq, "limit": MOVEMENTS_PER_PAGE + 1},
+    ).all()
+    more = len(rows) > MOVEMENTS_PER_PAGE
+    rows = rows[:MOVEMENTS_PER_PAGE]
+    return MovementPage([movement_json(row) for row in rows], rows[-1].seq if more else None)
 
 
 # ---- integrity (FR-013, FR-018, FR-022) --------------------------------------------------------

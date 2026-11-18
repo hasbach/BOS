@@ -8,6 +8,8 @@ Usage (from the ``backend`` folder, with the private PostgreSQL running: ``pytho
     uv run python scripts/local_api.py serve       # the API on http://127.0.0.1:5100
     uv run python scripts/local_api.py purge-test-businesses [--yes]
                                                    # remove "E2E Business ..." test businesses
+    uv run python scripts/local_api.py stock-check [--tenant ID]
+                                                   # stock integrity of every business
 
 Options for any subcommand: ``--public-base-url URL`` (the web origin the API puts in
 activation and reset links; default http://127.0.0.1:3100, the development web server) and,
@@ -137,6 +139,12 @@ def cmd_bootstrap(environment: dict[str, str], _args: argparse.Namespace) -> int
         return flask(["bos", "seed-demo"], environment)
     print("BOS_ALLOW_DEMO_SEED is not true in .env: demo data not created.")
     return 0
+
+
+def cmd_stock_check(environment: dict[str, str], args: argparse.Namespace) -> int:
+    """``flask bos stock-check`` on the development database (read-only)."""
+    tenant = ["--tenant", args.tenant] if args.tenant else []
+    return flask(["bos", "stock-check", *tenant], environment)
 
 
 def cmd_serve(environment: dict[str, str], args: argparse.Namespace) -> int:
@@ -355,7 +363,8 @@ def cmd_purge_test_businesses(environment: dict[str, str], args: argparse.Namesp
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument(
-        "command", choices=["migrate", "bootstrap", "serve", "purge-test-businesses"]
+        "command",
+        choices=["migrate", "bootstrap", "serve", "purge-test-businesses", "stock-check"],
     )
     parser.add_argument("--public-base-url", default=DEFAULT_PUBLIC_BASE_URL)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -364,6 +373,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="purge-test-businesses: really remove them (without it, only list)",
     )
+    parser.add_argument("--tenant", default=None, help="stock-check: check only this business")
     args = parser.parse_args(argv)
     dotenv = read_env_file(ROOT / ".env")
     # The purge builds its own database address from .env and checks it again.
@@ -374,6 +384,7 @@ def main(argv: list[str] | None = None) -> int:
         "bootstrap": cmd_bootstrap,
         "serve": cmd_serve,
         "purge-test-businesses": cmd_purge_test_businesses,
+        "stock-check": cmd_stock_check,
     }
     return handlers[args.command](environment, args)
 

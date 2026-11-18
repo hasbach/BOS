@@ -460,3 +460,95 @@ def test_seed_demo_leaves_other_businesses_alone(
         assert set(rows) <= set(after[table]), table
     demo_ids = {str(t.id) for t in seed.DEMO_TENANTS}
     assert {row[0] for row in after["tenants"]} - {row[0] for row in before["tenants"]} == demo_ids
+
+
+# ---- stock-check (M1 T073, FR-022, R45) -----------------------------------------------------------
+
+
+def _report_lines(output: str, tenant_id: uuid.UUID) -> list[str]:
+    """The lines about one business: its summary line and the problems listed under it."""
+    lines = output.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"business {tenant_id}"))
+    block = [lines[start]]
+    for line in lines[start + 1 :]:
+        if not line.startswith("  "):
+            break
+        block.append(line)
+    return block
+
+
+def test_stock_check_reports_0_differences_for_every_business(
+    app: Flask, owner_engine: Engine, fresh_catalog_tenants: TwoTenants
+) -> None:
+    worlds = fresh_catalog_tenants
+
+    result = _run(app, "stock-check")
+
+    assert result.exit_code == 0, result.output
+    # Both businesses are found although row-level security is forced on ``tenants``.
+    for world in (worlds.a, worlds.b):
+        assert _report_lines(result.output, world.tenant_id) == [
+            f"business {world.tenant_id} (Tenant {world.label}): 0 differences"
+        ]
+
+
+def test_stock_check_lists_each_difference_and_exits_non_zero(
+    app: Flask, owner_engine: Engine, fresh_catalog_tenants: TwoTenants
+) -> None:
+    a, b = fresh_catalog_tenants.a, fresh_catalog_tenants.b
+    item = a.catalog.item_id
+    with owner_engine.begin() as conn:
+        # On hand 5 -> 7 without a movement; allocated 1 -> 2 without an allocation line.
+        conn.execute(
+            text(
+                "UPDATE stock_balances SET on_hand = 7, allocated = 2 WHERE inventory_item_id = :i"
+            ),
+            {"i": item},
+        )
+
+    result = _run(app, "stock-check")
+
+    assert result.exit_code != 0
+    assert _report_lines(result.output, a.tenant_id) == [
+        f"business {a.tenant_id} (Tenant a): 3 differences",
+        f"  rule 2 (on hand equals the sum of movements) broken for item {item}: "
+        "expected 5, found 7",
+        f"  rule 3 (on hand equals the latest movement's on hand after) broken for item {item}: "
+        "expected 5, found 7",
+        f"  rule 4 (allocated equals the active allocation lines) broken for item {item}: "
+        "expected 1, found 2",
+    ]
+    assert _report_lines(result.output, b.tenant_id) == [
+        f"business {b.tenant_id} (Tenant b): 0 differences"
+    ]
+    assert "1 business(es) with differences" in result.output
+
+
+def test_stock_check_can_check_one_business(
+    app: Flask, owner_engine: Engine, fresh_catalog_tenants: TwoTenants
+) -> None:
+    a, b = fresh_catalog_tenants.a, fresh_catalog_tenants.b
+    with owner_engine.begin() as conn:
+        conn.execute(
+            text("UPDATE stock_balances SET on_hand = 9 WHERE inventory_item_id = :i"),
+            {"i": b.catalog.item_id},
+        )
+
+    only_a = _run(app, "stock-check", "--tenant", str(a.tenant_id))
+    only_b = _run(app, "stock-check", "--tenant", str(b.tenant_id))
+
+    assert only_a.exit_code == 0, only_a.output
+    assert f"business {a.tenant_id}" in only_a.output
+    assert str(b.tenant_id) not in only_a.output
+    assert only_b.exit_code != 0
+    assert str(a.tenant_id) not in only_b.output
+
+
+@pytest.mark.parametrize("tenant", ["not-a-uuid", str(uuid.UUID(int=7))])
+def test_stock_check_refuses_an_unknown_business(
+    app: Flask, fresh_catalog_tenants: TwoTenants, tenant: str
+) -> None:
+    result = _run(app, "stock-check", "--tenant", tenant)
+
+    assert result.exit_code != 0
+    assert "differences" not in result.output

@@ -1,4 +1,4 @@
-"""T042 — isolation, permission and cross-store cases for every M1 User Story 1 route.
+"""T042, T061 — isolation, permission and cross-store cases for every M1 route so far.
 
 * Sales, packing and dispatch are refused on every ``catalog.manage`` route (403
   ``forbidden``, ``access.denied_permission`` with ``catalog.manage``) and nothing changes.
@@ -9,6 +9,9 @@
   ``not_found``), recorded as ``access.denied_tenant`` in the caller's history.
 * A store-limited agent asking for a product (or its photo) listed only in another store
   gets the same 404, recorded as ``access.denied_store`` (``catalog.view``).
+* Stock adjustments and a variant's stock history need ``stock.adjust`` (owners and
+  managers): every other role is refused and recorded, and another business's variants are
+  answered like made-up ids (T061).
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ from sqlalchemy import Engine
 from app.config import Config
 from app.core import permissions
 from app.core.permissions import Role
-from tests.dbsupport import TwoTenants, World
+from tests.dbsupport import CatalogProduct, TwoTenants, World
 from tests.integration.catalog_support import (
     PHOTO_RULE,
     PHOTOS,
@@ -42,7 +45,15 @@ from tests.integration.catalog_support import (
     simple,
     upload_photo,
 )
-from tests.integration.us1_support import CSRF, app_for, history, shared_app_fixture
+from tests.integration.stock_support import (
+    ADJUST_RULE,
+    MOVEMENTS_RULE,
+    adjust,
+    arrange_product,
+    change,
+    movements_path,
+)
+from tests.integration.us1_support import CSRF, app_for, history, owner_rows, shared_app_fixture
 from tests.integration.us3_support import stored_files, with_upload_dir
 from tests.isolation.coverage import covers
 
@@ -353,3 +364,90 @@ def test_the_list_hides_other_stores_and_refuses_their_filter(
     assert filtered.status_code == 404
     [denied] = history(owner_engine, a.tenant_id, "access.denied_store")
     assert denied.data["store_id"] == str(a.second_store_id)
+
+
+# ---- stock: adjustments and a variant's stock history (US2, FR-014, SC-007) -------------------
+
+
+STOCK_CALLS: list[tuple[str, str, str]] = [
+    ("POST", ADJUST_RULE, "adjust"),
+    ("GET", MOVEMENTS_RULE, "movements"),
+]
+
+
+def _stocked(owner_engine: Engine, world: World) -> CatalogProduct:
+    return arrange_product(owner_engine, world.tenant_id, world.user_id, on_hand=10, code="STK-1")
+
+
+def _stock_call(client: FlaskClient, kind: str, variant_id: Any) -> Any:
+    if kind == "adjust":
+        return adjust(client, variant_id, change("damaged", 1))
+    return client.get(movements_path(variant_id))
+
+
+def _stock_snapshot(owner_engine: Engine, world: World) -> list[Any]:
+    return [
+        catalog_snapshot(owner_engine, world.tenant_id),
+        owner_rows(
+            owner_engine,
+            "SELECT key FROM idempotency_keys WHERE tenant_id = :t ORDER BY key",
+            t=world.tenant_id,
+        ),
+    ]
+
+
+@covers("POST", ADJUST_RULE, "missing_permission")
+@covers("GET", MOVEMENTS_RULE, "missing_permission")
+@pytest.mark.parametrize(("method", "rule", "kind"), STOCK_CALLS, ids=[c[2] for c in STOCK_CALLS])
+@pytest.mark.parametrize("role", ["sales", "packing", "dispatch", "sales_limited"])
+def test_roles_without_stock_adjust_are_refused_and_recorded(
+    user_client: UserClient,
+    owner_engine: Engine,
+    worlds: TwoTenants,
+    role: str,
+    method: str,
+    rule: str,
+    kind: str,
+) -> None:
+    a = worlds.a
+    product = _stocked(owner_engine, a)
+    before = _stock_snapshot(owner_engine, a)
+
+    response = _stock_call(user_client(a.user(role), a.tenant_id), kind, product.variant_ids[0])
+
+    assert response.status_code == 403, response.get_data(as_text=True)
+    assert response.get_json()["error"]["code"] == "forbidden"
+    assert "STK-1" not in response.get_data(as_text=True)
+    assert _stock_snapshot(owner_engine, a) == before
+    [entry] = history(owner_engine, a.tenant_id, "access.denied_permission")
+    assert (entry.actor_id, entry.data["permission"]) == (a.user(role), "stock.adjust")
+    assert history(owner_engine, a.tenant_id, "stock.adjusted") == []
+
+
+@covers("POST", ADJUST_RULE, "cross_tenant")
+@covers("GET", MOVEMENTS_RULE, "cross_tenant")
+@pytest.mark.parametrize(("method", "rule", "kind"), STOCK_CALLS, ids=[c[2] for c in STOCK_CALLS])
+@pytest.mark.parametrize("role", ["owner", "manager"])
+def test_another_business_variants_are_not_found_like_made_up_ones(
+    user_client: UserClient,
+    owner_engine: Engine,
+    worlds: TwoTenants,
+    role: str,
+    method: str,
+    rule: str,
+    kind: str,
+) -> None:
+    a, b = worlds.a, worlds.b
+    product = _stocked(owner_engine, a)
+    attacker = user_client(b.user(role), b.tenant_id)
+    victim_before = _stock_snapshot(owner_engine, a)
+
+    foreign = _stock_call(attacker, kind, product.variant_ids[0])
+    made_up = _stock_call(attacker, kind, uuid.uuid4())
+
+    assert foreign.status_code == made_up.status_code == 404
+    assert foreign.get_data() == made_up.get_data()
+    assert _stock_snapshot(owner_engine, a) == victim_before
+    denied = history(owner_engine, b.tenant_id, "access.denied_tenant")
+    assert len(denied) == 2 and {e.actor_id for e in denied} == {b.user(role)}
+    assert history(owner_engine, a.tenant_id, "access.denied_tenant") == []
