@@ -57,6 +57,16 @@ export const EVENT_ICONS: Record<string, { icon: EventIcon; flip?: boolean }> = 
   "email.failed": { icon: "alert" },
   "operator.sign_in": { icon: "user" },
   "maintenance.run": { icon: "gear" },
+  "product.created": { icon: "check" },
+  "product.updated": { icon: "edit" },
+  "product.archived": { icon: "ban" },
+  "product.restored": { icon: "check" },
+  "product.deleted": { icon: "x" },
+  "stock.adjusted": { icon: "edit" },
+  "stock.allocated": { icon: "flag" },
+  "stock.released": { icon: "x" },
+  "stock.consumed": { icon: "check" },
+  "catalog.imported": { icon: "send", flip: true },
 };
 
 /** The filter sheet's groups (screen 110). Platform events (operator sign-in, maintenance) never appear in a business's history. */
@@ -67,6 +77,7 @@ export const EVENT_GROUPS: Array<{ key: string; events: string[] }> = [
   { key: "stores", events: ["store.created", "store.updated", "store.deactivated", "store.reactivated"] },
   { key: "business", events: ["tenant.settings_changed", "tenant.created", "tenant.suspended", "tenant.reactivated"] },
   { key: "refused", events: ["access.denied_permission", "access.denied_tenant", "access.denied_store"] },
+  { key: "catalog", events: ["product.created", "product.updated", "product.archived", "product.restored", "product.deleted", "stock.adjusted", "stock.allocated", "stock.released", "stock.consumed", "catalog.imported"] },
   { key: "emails", events: ["email.sent", "email.failed"] },
 ];
 

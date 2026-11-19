@@ -42,6 +42,7 @@ from tests.integration.us1_support import (
     with_valid_phones,
 )
 from tests.integration.us3_support import STORES, image_bytes, upload, with_upload_dir
+from tests.paths import DATA_MODELS, documented_events
 
 UserClient = Callable[[uuid.UUID, uuid.UUID], FlaskClient]
 OperatorClient = Callable[[uuid.UUID], FlaskClient]
@@ -398,7 +399,11 @@ def test_every_action_leaves_exactly_one_entry(
     expected = Counter(log.rows)
     assert recorded - expected == Counter(), "recorded but not expected"
     assert expected - recorded == Counter(), "expected but not recorded"
-    assert {r.event for r in rows} == set(audit.EVENTS)
+    # Every event of M0's fixed list. M1's events are registered (audit.EVENTS) but have no
+    # action to exercise until their stories exist; T105 extends this test to them.
+    m0_events = documented_events(DATA_MODELS[0])
+    assert m0_events <= set(audit.EVENTS)
+    assert {r.event for r in rows} == m0_events
     assert all(started <= r.at <= ended for r in rows)
     # Only the fixture's own entries were there before.
     assert (

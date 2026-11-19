@@ -4,6 +4,11 @@
 
 ``code`` values are stable and are what the web app translates into Arabic or English.
 ``message`` is an English fallback for developers; it is not shown to users.
+
+A lock timeout or a deadlock (SQLSTATE ``55P03`` / ``40P01``) anywhere in a request, in the
+view or at commit, is answered 503 ``try_again`` with ``Retry-After: 1`` (research R42): the
+request transaction is rolled back, so nothing was applied, and the client retries with the
+same Idempotency-Key.
 """
 
 from __future__ import annotations
@@ -11,8 +16,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from flask import Flask, jsonify
+from flask import Flask, Response, jsonify
 from flask.typing import ResponseReturnValue
+from sqlalchemy.exc import DBAPIError
 from werkzeug.exceptions import HTTPException
 
 log = logging.getLogger("bos.errors")
@@ -63,6 +69,22 @@ _HTTP_CODES = {
 }
 
 
+# lock_not_available (a lock_timeout expired) and deadlock_detected.
+LOCK_SQLSTATES = frozenset({"55P03", "40P01"})
+
+
+def is_lock_error(exc: BaseException) -> bool:
+    """A database error caused by waiting for a lock: retrying later can succeed."""
+    return isinstance(exc, DBAPIError) and getattr(exc.orig, "sqlstate", None) in LOCK_SQLSTATES
+
+
+def try_again_response() -> Response:
+    response = jsonify(error_body("try_again", "Busy; nothing was changed. Try again."))
+    response.status_code = 503
+    response.headers["Retry-After"] = "1"
+    return response
+
+
 def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(ApiError)
     def _api_error(exc: ApiError) -> ResponseReturnValue:
@@ -73,6 +95,14 @@ def register_error_handlers(app: Flask) -> None:
         status = exc.code or 500
         code = _HTTP_CODES.get(status, "error")
         return jsonify(error_body(code, exc.name)), status
+
+    @app.errorhandler(DBAPIError)
+    def _database_error(exc: DBAPIError) -> ResponseReturnValue:
+        if is_lock_error(exc):
+            log.warning("lock timeout or deadlock; answered try_again (%s)", exc.orig.sqlstate)  # type: ignore[union-attr]
+            return try_again_response()
+        log.exception("Unhandled database error")
+        return jsonify(error_body("internal_error", "Internal error")), 500
 
     @app.errorhandler(Exception)
     def _unexpected(exc: Exception) -> ResponseReturnValue:

@@ -1,0 +1,18 @@
+import { hasLocale } from "next-intl";
+import { setRequestLocale } from "next-intl/server";
+import { notFound } from "next/navigation";
+
+import { routing } from "@/i18n/routing";
+import { titleFrom } from "@/lib/metadata";
+
+import { EditProduct } from "../../ProductForm";
+
+export const generateMetadata = titleFrom("catalog.form.editTitle");
+
+export default async function EditProductPage({ params }: { params: Promise<{ locale: string; productId: string }> }) {
+  const { locale, productId } = await params;
+  if (!hasLocale(routing.locales, locale)) notFound();
+  setRequestLocale(locale);
+
+  return <EditProduct productId={productId} />;
+}

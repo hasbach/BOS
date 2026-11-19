@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FEE_RULE, RATE_RULE, formatMoney, parseMoney } from "@/lib/money";
+import { FEE_RULE, PRICE_RULE, RATE_RULE, approximate, formatAmount, formatApproximate, formatMoney, parseMoney } from "@/lib/money";
 
 describe("parseMoney", () => {
   it("strips typed thousands separators and sends a plain decimal string", () => {
@@ -56,5 +56,64 @@ describe("formatMoney", () => {
 
   it("returns something it cannot read as it was", () => {
     expect(formatMoney("n/a")).toBe("n/a");
+  });
+});
+
+describe("approximate", () => {
+  it("turns USD into whole pounds at the rate, rounding half up", () => {
+    expect(approximate("12.50", "USD", "89500")).toEqual({ currency: "LBP", amount: "1118750" });
+    expect(approximate("0.01", "USD", "89500")).toEqual({ currency: "LBP", amount: "895" });
+    expect(approximate("1", "USD", "89500.50")).toEqual({ currency: "LBP", amount: "89501" });
+    expect(approximate("0", "USD", "89500")).toEqual({ currency: "LBP", amount: "0" });
+  });
+
+  it("turns LBP into dollars rounded to cents, always with two decimals", () => {
+    expect(approximate("895000", "LBP", "89500")).toEqual({ currency: "USD", amount: "10.00" });
+    expect(approximate("100000", "LBP", "89500")).toEqual({ currency: "USD", amount: "1.12" });
+    expect(approximate("447", "LBP", "89500")).toEqual({ currency: "USD", amount: "0.00" });
+    expect(approximate("448", "LBP", "89500")).toEqual({ currency: "USD", amount: "0.01" });
+    expect(approximate("0", "LBP", "89500")).toEqual({ currency: "USD", amount: "0.00" });
+  });
+
+  it("is exact for the largest price (no floating point)", () => {
+    expect(approximate("99999999999.99", "USD", "10000000")).toEqual({ currency: "LBP", amount: "999999999999900000" });
+  });
+
+  it("gives nothing when the price or rate is not a usable decimal", () => {
+    expect(approximate("abc", "USD", "89500")).toBeNull();
+    expect(approximate("10", "USD", "0")).toBeNull();
+    expect(approximate("10", "LBP", "0.00")).toBeNull();
+    expect(approximate("10", "USD", "")).toBeNull();
+    expect(approximate("-5", "USD", "89500")).toBeNull();
+  });
+});
+
+describe("formatAmount", () => {
+  it("writes large LBP amounts with thousands separators and Latin digits in both languages", () => {
+    expect(formatAmount("89500000", "LBP", "en")).toBe("LBP 89,500,000");
+    expect(formatAmount("89500000", "LBP", "ar")).toBe("89,500,000 ل.ل.");
+    expect(formatAmount("89500000.00", "LBP", "en")).toBe("LBP 89,500,000");
+  });
+
+  it("writes dollars with the sign and two decimals", () => {
+    expect(formatAmount("45", "USD", "en")).toBe("$45.00");
+    expect(formatAmount("1000.5", "USD", "ar")).toBe("$1,000.50");
+  });
+});
+
+describe("formatApproximate", () => {
+  it("labels the converted amount as approximate: USD to whole pounds, LBP to cents", () => {
+    expect(formatApproximate("45.00", "USD", "89500", "en")).toBe("≈ LBP 4,027,500");
+    expect(formatApproximate("45.00", "USD", "89500", "ar")).toBe("≈ 4,027,500 ل.ل.");
+    expect(formatApproximate("1200000", "LBP", "89500", "en")).toBe("≈ $13.41");
+    expect(formatApproximate("10", "USD", "0", "en")).toBeNull();
+  });
+});
+
+describe("PRICE_RULE", () => {
+  it("allows 0 up to 99,999,999,999.99", () => {
+    expect(parseMoney("0", PRICE_RULE)).toEqual({ ok: true, value: "0" });
+    expect(parseMoney("99999999999.99", PRICE_RULE)).toEqual({ ok: true, value: "99999999999.99" });
+    expect(parseMoney("100000000000", PRICE_RULE)).toEqual({ ok: false, problem: "too_large" });
   });
 });

@@ -13,7 +13,7 @@ from flask.testing import FlaskClient
 from sqlalchemy import Engine, text
 
 from app.config import Config
-from tests.dbsupport import TwoTenants, insert
+from tests.dbsupport import TwoTenants, insert, insert_catalog_rows, insert_product
 from tests.integration.us1_support import app_for, ok, owner_value, shared_app_fixture
 
 UserClient = Callable[[uuid.UUID, uuid.UUID], FlaskClient]
@@ -178,6 +178,73 @@ def test_target_names_are_current_and_only_from_the_callers_business(
         assert item["target_name"] is None
     assert "Store b" not in str(by_id) and "Owner b" not in str(by_id)
     assert "Invitee b" not in str(by_id) and "Tenant b" not in str(by_id)
+
+
+def test_catalog_target_names_follow_the_m1_rules(
+    user_client: UserClient, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    """T032: product English name else Arabic, variant SKU, allocation key, import file name."""
+    a, b = worlds.a, worlds.b
+    with owner_engine.begin() as conn:
+        rows_a = insert_catalog_rows(conn, a)
+        rows_b = insert_catalog_rows(conn, b)
+        arabic_only = insert_product(
+            conn, a.tenant_id, a.user_id, code="AR-ONLY", name_en=None, name_ar="جينز أزرق"
+        )
+    entries = {
+        "product": _entry(
+            owner_engine, a.tenant_id, "product.updated", 1, target=("product", rows_a.product_id)
+        ),
+        "arabic": _entry(
+            owner_engine,
+            a.tenant_id,
+            "product.created",
+            2,
+            target=("product", arabic_only.product_id),
+        ),
+        "variant": _entry(
+            owner_engine, a.tenant_id, "stock.adjusted", 3, target=("variant", rows_a.variant_id)
+        ),
+        "allocation": _entry(
+            owner_engine,
+            a.tenant_id,
+            "stock.allocated",
+            4,
+            target=("allocation", rows_a.allocation_id),
+        ),
+        "import": _entry(
+            owner_engine,
+            a.tenant_id,
+            "catalog.imported",
+            5,
+            target=("import_batch", rows_a.import_batch_id),
+        ),
+    }
+    probes = [
+        _entry(owner_engine, a.tenant_id, "access.denied_tenant", 6 + i, target=target)
+        for i, target in enumerate(
+            [
+                ("product", rows_b.product_id),
+                ("variant", rows_b.variant_id),
+                ("allocation", rows_b.allocation_id),
+                ("import_batch", rows_b.import_batch_id),
+            ]
+        )
+    ]
+
+    by_id = {item["id"]: item for item in _page(_owner(user_client, worlds))["items"]}
+
+    names = {key: by_id[str(entry)]["target_name"] for key, entry in entries.items()}
+    assert names == {
+        "product": "Product a",
+        "arabic": "جينز أزرق",
+        "variant": rows_a.sku,
+        "allocation": "order-a",
+        "import": "catalog-a.csv",
+    }
+    assert by_id[str(entries["variant"])]["target_type"] == "variant"
+    for probe in probes:
+        assert by_id[str(probe)]["target_name"] is None
 
 
 def test_actor_name_of_another_business_never_resolves(

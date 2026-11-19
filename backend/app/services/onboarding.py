@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.core import audit
 from app.core.tenancy import enter_tenant_from_operator
 from app.errors import ApiError
-from app.services import invitations
+from app.services import inventory, invitations
 from app.services.accounts import issue_password_reset
 from app.services.common import IssuedLink, NotFound, lookup_identifier
 
@@ -68,7 +68,7 @@ def business_overview(db: Session, tenant_id: uuid.UUID | None = None) -> list[d
 def create_business(
     db: Session, *, operator_id: uuid.UUID, new: NewBusiness, ip: str | None
 ) -> tuple[uuid.UUID, IssuedLink]:
-    """The business (pending), its first store and the owner's activation link: one transaction.
+    """The business (pending) with its warehouse, first store and owner link: one transaction.
 
     Raises 409 ``identifier_unavailable`` if the owner's phone or email already belongs to a
     BOS user (a user belongs to exactly one business).
@@ -97,6 +97,8 @@ def create_business(
         },
     )
     enter_tenant_from_operator(db, tenant_id)
+    # Every business has exactly one warehouse, created with it (FR-011, research R39).
+    inventory.create_default_warehouse(db, tenant_id)
     store_id = uuid.uuid4()
     db.execute(
         text("INSERT INTO stores (id, tenant_id, name) VALUES (:id, :tenant_id, :name)"),

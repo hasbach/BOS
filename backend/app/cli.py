@@ -165,18 +165,71 @@ def maintenance_history(counts: dict[str, int]) -> dict[str, int]:
 
 @bos_cli.command("maintenance")
 def maintenance() -> None:
-    """Expire old invitations; delete ended sessions, old sign-in attempts and old keys."""
+    """Expire old invitations; delete ended sessions, old sign-in attempts and old keys;
+    delete staged product photos older than 24 hours (each business on its own)."""
     from app.core import audit
     from app.core.db import get_engine, transaction
+    from app.core.storage import storage_for
+    from app.services.maintenance import run_tenant_steps
 
     engine = get_engine()
     with transaction(engine) as db:
-        counts = db.execute(text("SELECT platform_maintenance()")).scalar_one()
+        counts = dict(db.execute(text("SELECT platform_maintenance()")).scalar_one())
+    per_tenant = run_tenant_steps(engine, storage_for(current_app))
+    counts.update(per_tenant.counts())
     audit.record_platform(
         engine, actor_type="system", event="maintenance.run", data=maintenance_history(counts)
     )
     for name, count in sorted(counts.items()):
         click.echo(f"{name}: {count}")
+    if per_tenant.failed:
+        raise click.ClickException(
+            f"{len(per_tenant.failed)} business(es) failed and were rolled back: "
+            + ", ".join(str(t) for t in per_tenant.failed)
+        )
+
+
+@bos_cli.command("stock-check")
+@click.option("--tenant", "tenant", default=None, help="Check only this business (its id).")
+def stock_check(tenant: str | None) -> None:
+    """Check every business's stock: on hand against the ledger, allocated against active
+    allocations, no negative availability (FR-022). Exits non-zero on any difference.
+
+    Businesses are listed in operator context (row-level security is forced on every table);
+    each is then checked in its own tenant transaction, which changes nothing.
+    """
+    from app.core.db import get_engine
+    from app.core.tenancy import operator_transaction, tenant_transaction
+    from app.services.inventory import integrity_report
+
+    wanted: uuid.UUID | None = None
+    if tenant is not None:
+        try:
+            wanted = uuid.UUID(tenant)
+        except ValueError:
+            raise click.ClickException(f"{tenant!r} is not a business id.") from None
+    engine = get_engine()
+    with operator_transaction(engine) as db:
+        businesses = db.execute(
+            text(
+                "SELECT id, name FROM tenants "
+                "WHERE CAST(:wanted AS uuid) IS NULL OR id = CAST(:wanted AS uuid) ORDER BY id"
+            ),
+            {"wanted": wanted},
+        ).all()
+    if wanted is not None and not businesses:
+        raise click.ClickException(f"No business has the id {wanted}.")
+
+    inconsistent = 0
+    for business in businesses:
+        with tenant_transaction(engine, business.id) as db:
+            problems = integrity_report(db)
+        click.echo(f"business {business.id} ({business.name}): {len(problems)} differences")
+        for problem in problems:
+            click.echo(f"  {problem}")
+        inconsistent += bool(problems)
+    if inconsistent:
+        raise click.ClickException(f"{inconsistent} business(es) with differences.")
 
 
 @bos_cli.command("seed-demo")

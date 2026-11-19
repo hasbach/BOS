@@ -16,15 +16,15 @@ export interface MoneyRule {
 export const RATE_RULE: MoneyRule = { max: 10_000_000, positive: true };
 export const FEE_RULE: MoneyRule = { max: 100_000_000, positive: false };
 
-// Digits 0-9 only: a run of digits, or groups of three after one to three digits (89,500). A comma
+// Digits 0-9 only (callers run the input through normaliseDigits first): a run of digits, or groups of three after one to three digits (89,500). A comma
 // anywhere else is refused rather than guessed at, because "3,50" typed as a decimal comma would
 // otherwise silently become 350.
 const SHAPE = /^(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/;
 
 /**
  * Turns what was typed into the plain decimal string the API accepts, or says what is wrong.
- * Arabic-Indic digits and the Arabic comma and decimal mark are refused (not converted): the
- * approved hint says "Digits 0-9 only. Use a dot for decimals", and refusing is never ambiguous.
+ * ASCII only: this refuses Arabic-Indic digits and the Arabic comma and decimal mark because the
+ * API accepts ASCII only (R48). Callers normalise first (lib/digits.ts normaliseDigits).
  */
 export function parseMoney(input: string, rule: MoneyRule): MoneyResult {
   const typed = input.trim();
@@ -49,4 +49,51 @@ export function formatMoney(value: string, options: { trimZeros?: boolean } = {}
   let decimals = match[2] ?? "";
   if (options.trimZeros) decimals = decimals.replace(/0+$/, "");
   return decimals ? `${whole}.${decimals}` : whole;
+}
+
+const DECIMAL = /^(\d+)(?:\.(\d{1,2}))?$/;
+
+/** A plain decimal string as hundredths (BigInt, so nothing is lost to floating point), or null. */
+function hundredths(value: string): bigint | null {
+  const match = DECIMAL.exec(value.trim());
+  if (!match) return null;
+  return BigInt(`${match[1]}${(match[2] ?? "").padEnd(2, "0")}`);
+}
+
+/**
+ * The approximate amount in the other currency, for display only and always labelled "≈" (FR-006, R48).
+ * `rate` is the business's LBP for 1 USD (a decimal string). USD becomes whole pounds, LBP becomes
+ * dollars to the cent, both rounded half up. Returns null when the price or rate is not a usable
+ * decimal or the rate is zero. Nothing converted is ever stored or sent.
+ */
+export function approximate(price: string, currency: "USD" | "LBP", rate: string): { currency: "USD" | "LBP"; amount: string } | null {
+  const p = hundredths(price);
+  const r = hundredths(rate);
+  if (p === null || r === null || r === 0n) return null;
+  if (currency === "USD") return { currency: "LBP", amount: ((p * r + 5000n) / 10000n).toString() };
+  const cents = (200n * p + r) / (2n * r);
+  const digits = cents.toString().padStart(3, "0");
+  return { currency: "USD", amount: `${digits.slice(0, -2)}.${digits.slice(-2)}` };
+}
+
+/** Product and variant prices: 0 up to 99,999,999,999.99 (M1 contract `Money`). LBP prices must also be whole. */
+export const PRICE_RULE: MoneyRule = { max: 99_999_999_999.99, positive: false };
+
+/**
+ * A price as people read it, with Latin digits and thousands separators in both languages:
+ * "$45.00" (always two decimals), "LBP 89,500,000" in English and "89,500,000 ل.ل." in Arabic.
+ */
+export function formatAmount(amount: string, currency: "USD" | "LBP", locale: string): string {
+  if (currency === "USD") {
+    const [whole = "0", decimals = ""] = amount.trim().split(".");
+    return `$${formatMoney(`${whole}.${decimals.padEnd(2, "0").slice(0, 2)}`)}`;
+  }
+  const figure = formatMoney(amount, { trimZeros: true });
+  return locale === "ar" ? `${figure} ل.ل.` : `LBP ${figure}`;
+}
+
+/** The approximate amount in the other currency, labelled with "≈" (FR-006), or null when it cannot be worked out. */
+export function formatApproximate(price: string, currency: "USD" | "LBP", rate: string, locale: string): string | null {
+  const other = approximate(price, currency, rate);
+  return other ? `≈ ${formatAmount(other.amount, other.currency, locale)}` : null;
 }

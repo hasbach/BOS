@@ -1,8 +1,9 @@
 """Roles, permissions and shell tabs.
 
-This module is the code form of ``specs/001-platform-foundation/contracts/permissions.md``.
-A test parses that document and fails if this map differs from it, so change the contract
-first, then this file.
+This module is the code form of ``specs/001-platform-foundation/contracts/permissions.md``
+and of M1's delta, ``specs/002-native-catalog-inventory/contracts/permissions.md``. A test
+parses both documents and fails if this map differs from them, so change the contract first,
+then this file.
 """
 
 from __future__ import annotations
@@ -40,10 +41,11 @@ _GRANTS: dict[str, frozenset[Role]] = {
     "staff.manage": _MANAGEMENT,
     "staff.manage_owners": _OWNER,
     "audit.view": _OWNER,
-    # --- Reserved for later milestones: defined now, not exercised in M0 ---
+    # --- M1: enforced now (catalog and stock) ---
     "catalog.view": _EVERYONE,
     "catalog.manage": _MANAGEMENT,
     "stock.adjust": _MANAGEMENT,
+    # --- Reserved for later milestones: defined now, not exercised yet ---
     "order.create": _SELLING,
     "order.confirm": _SELLING,
     "order.cancel": _SELLING,
@@ -62,7 +64,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
 }
 
 # Permissions that additionally require the action to concern one of the user's stores.
-STORE_SCOPED: frozenset[str] = frozenset({"store.view"})
+# ``catalog.view`` (M1) is scoped through the data: a product is listed in several stores.
+STORE_SCOPED: frozenset[str] = frozenset({"store.view", "catalog.view"})
 
 # Tab -> roles that see it, in display order.
 _TABS: tuple[tuple[str, frozenset[Role]], ...] = (
@@ -154,6 +157,11 @@ class Policy:
     permission: str | None = None
     # Name of the view argument holding a store id the permission is checked against.
     store_param: str | None = None
+    # Declares that the view applies the permission's store scope to the data it reads (a
+    # record belongs to several stores, so no single store id exists to check up front).
+    # Out-of-scope records are answered with ``request_context.not_found_in_scope``. The
+    # route-coverage harness requires a cross-store isolation case, as for ``store_param``.
+    store_filtered: bool = False
     # Declares that an AUTHENTICATED route only touches the caller's own data, so it needs no
     # cross-tenant isolation case. Must be explicit.
     self_only: bool = False
@@ -197,17 +205,34 @@ def authenticated[V: Callable[..., Any]](
     return declare if view is None else declare(view)
 
 
-def require(permission: str, store_param: str | None = None) -> _Declarer:
+def require(
+    permission: str, store_param: str | None = None, *, store_filtered: bool = False
+) -> _Declarer:
     """A signed-in business user with ``permission``.
 
     With ``store_param``, the view argument of that name is a store id, and the store must be
     one of the user's stores: otherwise 404 ``not_found`` and ``access.denied_store``.
+
+    With ``store_filtered=True``, the view itself limits what it reads to the user's stores
+    (research R52) and answers an out-of-scope record with
+    ``request_context.not_found_in_scope``; nothing is checked before the view runs.
     """
     if permission not in _GRANTS:
         raise ValueError(f"unknown permission {permission!r}")
     if store_param is not None and permission not in STORE_SCOPED:
         raise ValueError(f"{permission!r} is not store-scoped; store_param makes no sense")
-    return _Declarer(Policy(PolicyKind.PERMISSION, permission=permission, store_param=store_param))
+    if store_filtered and permission not in STORE_SCOPED:
+        raise ValueError(f"{permission!r} is not store-scoped; store_filtered makes no sense")
+    if store_filtered and store_param is not None:
+        raise ValueError("declare either store_param or store_filtered, not both")
+    return _Declarer(
+        Policy(
+            PolicyKind.PERMISSION,
+            permission=permission,
+            store_param=store_param,
+            store_filtered=store_filtered,
+        )
+    )
 
 
 def operator_only[V: Callable[..., Any]](view: V) -> V:

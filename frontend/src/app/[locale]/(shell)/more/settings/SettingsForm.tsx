@@ -16,6 +16,7 @@ import { SegmentedControl } from "@/components/SegmentedControl";
 import { SessionEnded } from "@/components/SessionEnded";
 import { api, isApiError, isSessionEnded } from "@/lib/api";
 import type { Business, BusinessChange } from "@/lib/business";
+import { normaliseDigits } from "@/lib/digits";
 import { errorMessage, fieldErrorMessageKey } from "@/lib/errors";
 import { FEE_RULE, RATE_RULE, formatMoney, parseMoney } from "@/lib/money";
 import type { MoneyProblem } from "@/lib/money";
@@ -24,15 +25,16 @@ import type { Seed } from "@/lib/seed";
 import { useMe } from "@/lib/session";
 import type { Currency } from "@/lib/types";
 
+import { parseCount } from "../catalog/validation";
 import styles from "../stores/stores.module.css";
 
-type Errors = { name?: string; rate?: string; fee?: string };
+type Errors = { name?: string; rate?: string; fee?: string; low?: string };
 type Notice = { tone: BannerTone; icon: BannerIcon; text: string };
 type Load = { k: "loading" } | { k: "error"; error: unknown } | { k: "ready"; value: Business };
 
 const CURRENCIES: Currency[] = ["USD", "LBP"];
 
-/** Screens 91 to 95 and 99: the business name, currency, exchange rate and delivery fee. */
+/** Screens 91 to 95, 99, 162 and 163: the business name, currency, exchange rate, delivery fee and low-stock default. */
 /** `initial` is GET /business as the server already loaded it for this page; then it is not loaded again. */
 export function SettingsForm({ initial }: { initial?: Seed<Business> }) {
   const { permissions } = useMe();
@@ -134,6 +136,9 @@ function Form({ initial }: { initial: Business }) {
   const [rate, setRate] = useState(formatMoney(initial.usd_lbp_rate, { trimZeros: true }));
   const [fee, setFee] = useState(formatMoney(initial.default_delivery_fee));
   const [feeCurrency, setFeeCurrency] = useState<Currency>(initial.default_delivery_fee_currency);
+  // The low-stock default (M1) is shown only when the server sends it, so nothing unknown is ever sent.
+  const hasLow = typeof initial.low_stock_default === "number";
+  const [low, setLow] = useState(hasLow ? String(initial.low_stock_default) : "");
   const [errors, setErrors] = useState<Errors>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
@@ -145,6 +150,7 @@ function Form({ initial }: { initial: Business }) {
     setRate(formatMoney(value.usd_lbp_rate, { trimZeros: true }));
     setFee(formatMoney(value.default_delivery_fee));
     setFeeCurrency(value.default_delivery_fee_currency);
+    if (typeof value.low_stock_default === "number") setLow(String(value.low_stock_default));
   }
 
   async function submit(event?: FormEvent) {
@@ -156,10 +162,12 @@ function Form({ initial }: { initial: Business }) {
     const trimmed = name.trim();
     if (trimmed === "") found.name = t("settings.fe.name");
     else if (Array.from(trimmed).length > 120) found.name = t("settings.fe.nameTooLong");
-    const rateResult = parseMoney(rate, RATE_RULE);
+    const rateResult = parseMoney(normaliseDigits(rate), RATE_RULE);
     if (!rateResult.ok) found.rate = t(rateKey(rateResult.problem));
-    const feeResult = parseMoney(fee, FEE_RULE);
+    const feeResult = parseMoney(normaliseDigits(fee), FEE_RULE);
     if (!feeResult.ok) found.fee = t(feeKey(feeResult.problem));
+    const lowValue = hasLow ? parseCount(low, null) : null;
+    if (hasLow && lowValue === null) found.low = t("settings.fe.low");
     const count = Object.keys(found).length;
     setNotice(null);
     setRetry(false);
@@ -178,6 +186,7 @@ function Form({ initial }: { initial: Business }) {
         usd_lbp_rate: rateResult.value,
         default_delivery_fee: feeResult.value,
         default_delivery_fee_currency: feeCurrency,
+        ...(hasLow && lowValue !== null ? { low_stock_default: lowValue } : {}),
       };
       const saved = await api.patch<Business>("/business", body);
       fill(saved);
@@ -190,6 +199,7 @@ function Form({ initial }: { initial: Business }) {
           if (field === "name") next.name = t(code === "too_long" ? "settings.fe.nameTooLong" : code === "required" ? "settings.fe.name" : fieldErrorMessageKey(code));
           else if (field === "usd_lbp_rate") next.rate = t("settings.fe.rate");
           else if (field === "default_delivery_fee") next.fee = t("settings.fe.fee");
+          else if (field === "low_stock_default") next.low = t("settings.fe.low");
         }
         setErrors(next);
         const total = Object.keys(next).length;
@@ -261,6 +271,19 @@ function Form({ initial }: { initial: Business }) {
                 </div>
               </div>
             </div>
+            {hasLow ? (
+              <Field
+                label={t("settings.low")}
+                inputMode="numeric"
+                dir="ltr"
+                autoComplete="off"
+                value={low}
+                disabled={busy}
+                helper={errors.low ? undefined : t("settings.lowHint")}
+                error={errors.low}
+                onChange={(event) => setLow(event.target.value)}
+              />
+            ) : null}
           </div>
           <Banner>{t("settings.info")}</Banner>
         </ScreenBody>

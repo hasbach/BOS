@@ -50,6 +50,12 @@ const ROUTES = [
   "/more/employees/invite",
   `/more/employees/${SAMPLE_ID}`,
   `/more/employees/invitations/${SAMPLE_ID}`,
+  // M1 (m1-catalog.spec.ts, m1-stock.spec.ts)
+  "/more/catalog",
+  "/more/catalog/new",
+  `/more/catalog/${SAMPLE_ID}`,
+  `/more/catalog/${SAMPLE_ID}/edit`,
+  `/more/catalog/${SAMPLE_ID}/variants/${SAMPLE_ID}/history`,
 ];
 
 const LOCALES = ["en", "ar"] as const;

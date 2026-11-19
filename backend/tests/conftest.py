@@ -9,9 +9,16 @@ Database fixtures come in two kinds, and a test module must use only one kind:
 * **fresh** — ``fresh_tenants`` (or ``fresh_staffed_tenants``): two populated tenants created
   for one test and wiped afterwards. Use it when the code under test commits.
 
-The plain variants have exactly one row per tenant-owned table per tenant (the isolation
-tests count on this). The staffed variants add, per tenant, a second store, one user per
-role and one store-limited sales user (see ``tests.dbsupport.World``).
+The plain variants have exactly one row per M0 tenant-owned table per tenant, plus the
+default warehouse (the isolation tests count on this). The staffed variants add, per tenant,
+a second store, one user per role and one store-limited sales user; the catalog variants
+(``two_catalog_tenants``, ``fresh_catalog_tenants``) add one row in every M1 catalog table
+(see ``tests.dbsupport.World``). Catalog and stock rows for a test are written directly with
+``tests.dbsupport.insert_product`` / ``insert_allocation`` / ``read_balance``.
+
+Catalog, stock, allocation and import test modules enable the ``integrity_check`` fixture
+for every test (``pytestmark = pytest.mark.usefixtures("integrity_check")``): after the
+test, every business in the database must pass ``app.services.inventory.integrity_report``.
 """
 
 from __future__ import annotations
@@ -23,13 +30,15 @@ import pytest
 from alembic import command
 from flask import Flask
 from flask.testing import FlaskClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 
 from app import create_app
 from app.cli import alembic_config
 from app.config import Config
 from app.core.db import engine_of
 from app.core.sessions import OPERATOR_COOKIE, USER_COOKIE
+from app.core.tenancy import tenant_transaction
+from app.services.inventory import integrity_report
 from tests.dbsupport import (
     TwoTenants,
     make_two_tenants,
@@ -104,6 +113,56 @@ def fresh_staffed_tenants(owner_engine: Engine) -> Iterator[TwoTenants]:
     worlds = make_two_tenants(owner_engine, staffed=True)
     yield worlds
     truncate_all(owner_engine)
+
+
+@pytest.fixture(scope="module")
+def two_catalog_tenants(owner_engine: Engine) -> Iterator[TwoTenants]:
+    worlds = make_two_tenants(owner_engine, catalog=True)
+    yield worlds
+    truncate_all(owner_engine)
+
+
+@pytest.fixture()
+def fresh_catalog_tenants(owner_engine: Engine) -> Iterator[TwoTenants]:
+    worlds = make_two_tenants(owner_engine, catalog=True)
+    yield worlds
+    truncate_all(owner_engine)
+
+
+# ---- stock integrity after every catalog and stock test (FR-022, SC-003) ----------------------
+
+
+@pytest.fixture()
+def integrity_check(owner_engine: Engine, app_engine: Engine) -> Callable[[], None]:
+    """Checks, right after the test body, that every business passes the integrity report.
+
+    The check runs in ``pytest_runtest_call`` below, before any fixture is torn down (so
+    before function-scoped data fixtures wipe the database). Businesses are listed by the
+    owner role (test set-up) and each is checked as the application role in its own
+    transaction, exactly as ``flask bos stock-check`` does.
+    """
+
+    def check() -> None:
+        with owner_engine.connect() as conn:
+            tenant_ids = list(conn.execute(text("SELECT id FROM tenants ORDER BY id")).scalars())
+        problems: list[str] = []
+        for tenant_id in tenant_ids:
+            with tenant_transaction(app_engine, tenant_id) as db:
+                problems.extend(f"business {tenant_id}: {p}" for p in integrity_report(db))
+        if problems:
+            pytest.fail("Stock integrity check failed:\n  " + "\n  ".join(problems))
+
+    return check
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> Iterator[None]:
+    result = yield  # a failing test raises here and is reported as it is
+    funcargs = getattr(item, "funcargs", {})
+    check = funcargs.get("integrity_check")
+    if callable(check):
+        check()
+    return result
 
 
 # ---- signed-in test clients -------------------------------------------------------------------

@@ -26,14 +26,16 @@ bp = Blueprint("audit", __name__, url_prefix="/api/v1")
 
 PAGE_SIZE = 50
 
-# Names are read now, so a renamed store or user shows its current name. Every lookup is one
-# join in this single query (no query per entry), and every join is narrowed to the entry's
-# own business on top of row-level security: an id of another business (for example one a
-# refused request probed for) never resolves to a name.
+# Names are read now, so a renamed store, user or product shows its current name (M1 targets:
+# a product's English name else its Arabic name, a variant's SKU, an allocation's request key,
+# an import's file name). Every lookup is one join in this single query (no query per entry),
+# and every join is narrowed to the entry's own business on top of row-level security: an id
+# of another business (for example one a refused request probed for) never resolves to a name.
 _QUERY = text(
     "SELECT e.id, e.at, e.event, e.actor_type, e.actor_id, e.target_type, e.target_id, e.data, "
     "actor.name AS actor_name, "
-    "COALESCE(tu.name, ts.name, ti.invitee_name, tt.name) AS target_name "
+    "COALESCE(tu.name, ts.name, ti.invitee_name, tt.name, "
+    "         tp.name_en, tp.name_ar, tv.sku, ta.request_key, tb.file_name) AS target_name "
     "FROM audit_entries e "
     "LEFT JOIN users actor ON e.actor_type = 'user' AND actor.id = e.actor_id "
     "     AND actor.tenant_id = e.tenant_id "
@@ -45,6 +47,14 @@ _QUERY = text(
     "     AND ti.tenant_id = e.tenant_id "
     "LEFT JOIN tenants tt ON e.target_type = 'tenant' AND tt.id = e.target_id "
     "     AND tt.id = e.tenant_id "
+    "LEFT JOIN products tp ON e.target_type = 'product' AND tp.id = e.target_id "
+    "     AND tp.tenant_id = e.tenant_id "
+    "LEFT JOIN variants tv ON e.target_type = 'variant' AND tv.id = e.target_id "
+    "     AND tv.tenant_id = e.tenant_id "
+    "LEFT JOIN allocations ta ON e.target_type = 'allocation' AND ta.id = e.target_id "
+    "     AND ta.tenant_id = e.tenant_id "
+    "LEFT JOIN import_batches tb ON e.target_type = 'import_batch' AND tb.id = e.target_id "
+    "     AND tb.tenant_id = e.tenant_id "
     "WHERE e.tenant_id = :tenant_id "
     "AND (CAST(:event AS text) IS NULL OR e.event = CAST(:event AS text)) "
     "AND (CAST(:actor_id AS uuid) IS NULL OR e.actor_id = CAST(:actor_id AS uuid)) "

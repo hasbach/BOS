@@ -8,14 +8,17 @@ import en from "../messages/en.json";
 import { ApiError } from "@/lib/api";
 import {
   ERROR_CODES,
+  IMPORT_ERROR_CODES,
   FIELD_ERROR_CODES,
   UNKNOWN_ERROR_KEY,
   errorMessage,
   errorMessageKey,
   fieldErrorMessageKey,
+  importErrorMessageKey,
 } from "@/lib/errors";
 
 const OPENAPI = resolve(process.cwd(), "../specs/001-platform-foundation/contracts/openapi.yaml");
+const OPENAPI_M1 = resolve(process.cwd(), "../specs/002-native-catalog-inventory/contracts/openapi.yaml");
 
 // Pulls the codes out of the backticks in each response description, for example
 //   a 409 line whose description is "`last_owner`", or "(`phone: invalid_phone`)" for a field code.
@@ -88,6 +91,65 @@ describe.skipIf(!contractVisible)("error codes in openapi.yaml", () => {
   it("lists every contract code in ERROR_CODES and FIELD_ERROR_CODES", () => {
     expect([...errorCodes].filter((code) => !(ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
     expect([...fieldCodes].filter((code) => !(FIELD_ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
+  });
+});
+
+const M1_ERROR_CODES = [
+  "validation_failed", "forbidden", "not_found", "product_code_in_use", "sku_in_use", "idempotency_conflict",
+  "product_changed", "product_archived", "options_locked", "variant_has_allocations", "combination_in_use",
+  "value_in_use", "has_history", "file_too_large", "file_not_image", "stock_changed", "not_enough_stock",
+  "try_again", "file_not_csv", "too_many_rows", "missing_columns", "unknown_columns", "import_has_errors",
+  "import_conflict", "import_expired",
+];
+const M1_FIELD_CODES = ["required", "invalid", "too_long", "too_large", "too_many", "duplicate", "not_whole", "in_use"];
+
+describe.skipIf(!existsSync(OPENAPI_M1))("error codes in the M1 openapi.yaml", () => {
+  const { errorCodes, fieldCodes } = codesIn(existsSync(OPENAPI_M1) ? readFileSync(OPENAPI_M1, "utf8") : "");
+
+  it("yields exactly the M1 error codes and field codes", () => {
+    expect([...errorCodes].sort()).toEqual([...M1_ERROR_CODES].sort());
+    expect([...fieldCodes].sort()).toEqual([...M1_FIELD_CODES].sort());
+  });
+
+  for (const [language, catalog] of Object.entries(catalogs)) {
+    it(`has ${language} text and a mapping for every M1 code`, () => {
+      for (const code of errorCodes) {
+        expect((catalog.errors as Record<string, string>)[code], code).toBeTruthy();
+        expect(ERROR_CODES as readonly string[], code).toContain(code);
+      }
+      for (const code of fieldCodes) {
+        expect((catalog.fieldErrors as Record<string, string>)[code], code).toBeTruthy();
+        expect(FIELD_ERROR_CODES as readonly string[], code).toContain(code);
+      }
+    });
+  }
+});
+
+describe("import row errors", () => {
+  const IMPORT_CODES = [
+    "required", "invalid", "too_long", "too_large", "negative", "not_whole", "invalid_currency", "sku_in_use",
+    "product_code_in_use", "duplicate_in_file", "unknown_store", "inconsistent_product", "duplicate_combination",
+    "missing_option_value", "too_many_options", "too_many_values", "too_many_variants",
+  ];
+
+  it("lists every ImportError code of the contract", () => {
+    expect([...IMPORT_ERROR_CODES].sort()).toEqual([...IMPORT_CODES].sort());
+    if (existsSync(OPENAPI_M1)) {
+      const yaml = readFileSync(OPENAPI_M1, "utf8");
+      const listed = /ImportError:[\s\S]*?enum: \[([^\]]+)\]/.exec(yaml)?.[1]?.split(",").map((c) => c.trim());
+      expect(listed?.sort()).toEqual([...IMPORT_CODES].sort());
+    }
+  });
+
+  it.each(Object.entries(catalogs))("has non-empty %s text for each", (_language, catalog) => {
+    for (const code of IMPORT_CODES) {
+      expect((catalog.importErrors as Record<string, string>)[code], code).toBeTruthy();
+    }
+  });
+
+  it("maps a code to its key and an unknown one to the generic key", () => {
+    expect(importErrorMessageKey("sku_in_use")).toBe("importErrors.sku_in_use");
+    expect(importErrorMessageKey("brand_new")).toBe(UNKNOWN_ERROR_KEY);
   });
 });
 

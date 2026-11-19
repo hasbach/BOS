@@ -1,0 +1,128 @@
+/* The photos field of the product form (screens 164, 169 and 171). */
+
+.small {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.tiles {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tile {
+  inline-size: 68px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tileBox {
+  inline-size: 68px;
+  block-size: 68px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg-2);
+  padding: 0;
+  font: inherit;
+}
+
+.tileBad {
+  border: 2px dashed var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger-fg);
+}
+
+.tileBusy {
+  opacity: 0.55;
+}
+
+.tileAdd {
+  border-style: dashed;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tileButton {
+  min-block-size: 36px;
+  inline-size: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.progress {
+  block-size: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.progress > i {
+  display: block;
+  block-size: 100%;
+  background: var(--accent);
+}
+
+.error {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--danger-fg);
+}
+
+.hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

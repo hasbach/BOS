@@ -53,7 +53,7 @@ from app.core.request_context import (
     request_db,
 )
 from app.core.storage import (
-    MAX_UPLOAD_BYTES,
+    LOGO_MAX_BYTES,
     StorageError,
     UploadRejected,
     prepare_logo,
@@ -152,7 +152,7 @@ def _uploaded_bytes() -> bytes:
         raise UploadRejected("file_too_large") from None
     if upload is None:
         raise validation_failed({"file": "required"})
-    return upload.stream.read(MAX_UPLOAD_BYTES + 1)
+    return upload.stream.read(LOGO_MAX_BYTES + 1)
 
 
 @bp.put("/stores/<uuid:store_id>/logo")

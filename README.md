@@ -69,12 +69,13 @@ read this one file.
 | `BOS_MAIL_UI_PORT` | Host port of Mailpit, which captures outgoing email in Compose (default 8025). |
 | `BOS_DB_PORT` | Host port of the Compose database, for tools and tests outside the containers (default 55432). |
 | `BOS_LOCAL_DB_PORT` | Port of the private PostgreSQL from `scripts/local_db.py` (default 55433). When set, host-side scripts and tests use it instead of `BOS_DB_PORT`. |
-| `BOS_SECRET_KEY` | Long random string required by Flask. The API refuses to start without it. |
+| `BOS_SECRET_KEY` | Long random string required by Flask, at least 32 characters. The API refuses to start without it, or (outside the tests) with a shorter or `CHANGE_ME...` value. |
 | `BOS_PUBLIC_BASE_URL` | Public address of the web app. The API puts it in activation and password-reset links, so it must be the address users actually open. |
 | `BOS_COOKIE_SECURE` | `true` by default in code; set `false` only for local `http` development, otherwise sign-in cookies are not sent over plain http. |
 | `BOS_OPERATOR_EMAILS` | Comma-separated allow-list of Beta staff emails that may be operators. |
 | `BOS_SMTP_HOST`, `BOS_SMTP_PORT`, `BOS_SMTP_USER`, `BOS_SMTP_PASSWORD`, `BOS_SMTP_FROM` | Outgoing mail for password-reset links and invitation codes. Compose points at the Mailpit container (`mail:1025`). |
-| `BOS_MAIL_OUTBOX_DIR` | Development only: write email as JSON files to this folder instead of SMTP. `scripts/local_api.py` sets it (default `%LOCALAPPDATA%\bos-dev\outbox`). **Never set in production.** |
+| `BOS_ENVIRONMENT` | `development`, `staging` or `production`; unset means `production`, so forgetting it keeps the strict start-up checks on. `scripts/local_api.py` and the Compose `api` service set `development`. Outside the test suite the API refuses to start with a `BOS_SECRET_KEY` shorter than 32 characters or still starting with `CHANGE_ME`, and with `BOS_MAIL_OUTBOX_DIR` set anywhere but `development`. |
+| `BOS_MAIL_OUTBOX_DIR` | Development only (`BOS_ENVIRONMENT=development`, otherwise the API refuses to start): write email as JSON files to this folder instead of SMTP. `scripts/local_api.py` sets it (default `%LOCALAPPDATA%\bos-dev\outbox`). **Never set in production.** |
 | `BOS_DEMO_PASSWORD` | Password given to every demo user by `seed-demo`. |
 | `BOS_OPERATOR_PASSWORD` | Password set by `create-operator`. |
 | `BOS_ALLOW_DEMO_SEED` | Must be `true` for `seed-demo` to run. **Never set in production.** |

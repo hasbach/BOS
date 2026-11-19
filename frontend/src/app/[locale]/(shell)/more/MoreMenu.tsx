@@ -5,7 +5,7 @@ import type { ComponentType, ReactNode, SVGProps } from "react";
 
 import { AppBar } from "@/components/AppBar";
 import { Card } from "@/components/Card";
-import { ChevronIcon, ClockIcon, GearIcon, GlobeIcon, PhoneIcon, StoreIcon, UserIcon, UsersIcon } from "@/components/icons";
+import { BoxIcon, ChevronIcon, ClockIcon, GearIcon, GlobeIcon, PhoneIcon, StoreIcon, UserIcon, UsersIcon } from "@/components/icons";
 import { Screen, ScreenBody, screenStyles } from "@/components/Screen";
 import { SignOutButton } from "@/components/SignOutButton";
 import { Link } from "@/i18n/navigation";
@@ -62,6 +62,7 @@ export function MoreMenu() {
     .join(", ");
 
   const business: Item[] = [];
+  if (can("catalog.view")) business.push({ key: "catalog", href: "/more/catalog", label: t("more.catalog"), Icon: BoxIcon });
   if (can("store.view")) business.push({ key: "stores", href: "/more/stores", label: t("more.stores"), hint: t("more.storeCount", { count: me.stores.length }), Icon: StoreIcon });
   if (can("staff.view")) business.push({ key: "employees", href: "/more/employees", label: t("more.employees"), Icon: UsersIcon });
   if (can("settings.manage")) business.push({ key: "settings", href: "/more/settings", label: t("more.settings"), Icon: GearIcon });

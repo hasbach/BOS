@@ -32,6 +32,8 @@ services:
       BOS_TEST_MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${BOS_TEST_DB}
       BOS_UPLOAD_DIR: /data/uploads
       BOS_SPECS_DIR: /srv/specs
+      # Development stack (R57): allows development-only settings; the secret key is still checked.
+      BOS_ENVIRONMENT: development
       FLASK_APP: app:create_app
     command: flask run --host 0.0.0.0 --port 8000 --debug
     volumes:

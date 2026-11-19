@@ -29,7 +29,9 @@ def create_app(config: Config | None = None) -> Flask:
     # Unexpected errors always go through our handler, in tests too, so that the
     # "no internal details leak" behaviour is what gets tested.
     app.config["PROPAGATE_EXCEPTIONS"] = False
-    app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024  # hard cap; logos are limited to 2 MB
+    # Hard cap for a whole request: a product photo (5 MB, the largest upload) plus the
+    # multipart overhead. Each upload route also limits its own file (logos 2 MB).
+    app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
     app.extensions["bos_config"] = cfg
     if cfg.trusted_proxy_hops:
         # Behind the web app's rewrite (or the production proxy) every request comes from the

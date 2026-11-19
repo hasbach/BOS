@@ -229,13 +229,15 @@ def test_secrets_are_never_written_to_history(
             )
 
 
-def test_event_list_matches_the_data_model_document() -> None:
-    import re
+def test_event_list_matches_the_data_model_documents() -> None:
+    """The union of every feature's "Events:" list (up to the next ``##`` heading)."""
+    from tests.paths import DATA_MODELS, documented_events
 
-    from tests.paths import FEATURE_DIR
+    documented: set[str] = set()
+    for data_model in DATA_MODELS:
+        events = documented_events(data_model)
+        assert events, data_model
+        documented |= events
 
-    text_ = (FEATURE_DIR / "data-model.md").read_text(encoding="utf-8")
-    section = text_.split("Events:", 1)[1].split("## State transitions", 1)[0]
-    documented = set(re.findall(r"`([a-z_]+\.[a-z_]+)`", section))
-
+    assert "maintenance.run" in documented and "catalog.imported" in documented
     assert documented == set(audit.EVENTS)

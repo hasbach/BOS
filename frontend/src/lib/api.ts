@@ -25,14 +25,17 @@ export class ApiError extends Error {
   readonly code: string;
   readonly fields: FieldErrors;
   readonly affected: AffectedPerson[];
+  /** The other members of the error object that an operation names (M1: `current`, `conflicts`, `balance`), unchecked. */
+  readonly extra: Record<string, unknown>;
 
-  constructor(init: { status: number; code: string; message?: string; fields?: FieldErrors; affected?: AffectedPerson[] }) {
+  constructor(init: { status: number; code: string; message?: string; fields?: FieldErrors; affected?: AffectedPerson[]; extra?: Record<string, unknown> }) {
     super(init.message ?? init.code);
     this.name = "ApiError";
     this.status = init.status;
     this.code = init.code;
     this.fields = init.fields ?? {};
     this.affected = init.affected ?? [];
+    this.extra = init.extra ?? {};
   }
 }
 
@@ -148,12 +151,17 @@ function readEnvelope(text: string, status: number): ApiError {
       });
     }
   }
+  const extra: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(error)) {
+    if (!["code", "message", "fields", "affected"].includes(name)) extra[name] = value;
+  }
   return new ApiError({
     status,
     code: error.code,
     message: typeof error.message === "string" ? error.message : undefined,
     fields,
     affected,
+    extra,
   });
 }
 

@@ -1,0 +1,567 @@
+openapi: 3.1.0
+info:
+  title: BOS API — Native Catalog and Inventory (M1)
+  version: 0.1.0
+  description: |
+    Contract for milestone M1: the endpoints it adds, plus the two M0 endpoints it changes.
+    All paths are under /api/v1 on the same origin as the web app.
+
+    Conventions: exactly M0's (specs/001-platform-foundation/contracts/openapi.yaml), which
+    are not repeated in full here:
+    - Session cookie `bos_session`; every POST, PUT, PATCH and DELETE needs `X-BOS-CSRF: 1`.
+    - Errors use M0's envelope `{ "error": { "code", "message", "fields" } }`, plus named
+      extra members where an operation says so (as M0's `affected`). `code` values are
+      stable; the web app translates them. `Error` below is the same envelope.
+    - Every operation here needs a session and also answers 401 `unauthenticated` without
+      one; refused permissions answer 403 `forbidden` and are recorded; records outside the
+      caller's business or stores answer 404 `not_found`, identical to a missing record.
+    - "Idempotent" operations accept `Idempotency-Key` (1–200 characters, else 400
+      `invalid_idempotency_key`); a repeat with the same body returns the same result, the
+      same key with a different body returns 409 `idempotency_conflict`. Keys last 24 hours.
+    - Money is M0's decimal string (`Money`) with a separate `Currency`. Quantities are JSON
+      integers. Timestamps are ISO 8601 in UTC.
+    - Field codes inside `fields` of a 400 `validation_failed`: M0's `required`, `invalid`
+      and `too_long`, plus `too_large` (number above its maximum), `too_many` (list longer
+      than allowed), `duplicate` (repeated inside the request), `not_whole` (an LBP price
+      with decimals), `in_use` (already used in the business; on the 409s
+      `product_code_in_use` and `sku_in_use`). Nested fields use dotted paths:
+      `variants.2.sku`, `options.0.values.3`.
+    - Response descriptions follow M0's pattern so the web app's contract test reads the codes:
+      before the first " — " only error codes and `field: code` pairs (a nested field is
+      named by its last segment, e.g. `sku: duplicate` for `variants.N.sku`); explanations,
+      dotted paths and extra members come after the " — ".
+    - A stock change that cannot get its row lock in time, or meets a deadlock, answers 503
+      `try_again` with `Retry-After: 1` and changes nothing; retry with the same
+      Idempotency-Key.
+
+    Changes to M0 endpoints (applied in M0's file too, which tests validate those paths
+    against):
+    - `GET /business` and `PATCH /business` gain `low_stock_default` (integer 0–1000000,
+      default 2; `settings.manage` to change; recorded as `tenant.settings_changed`).
+    - `GET /audit`: `target_type` may also be `product`, `variant`, `allocation`,
+      `import_batch`; `target_name` is the product's name (its English name, else Arabic),
+      the variant's SKU, the allocation's request key or the import file name. New events
+      are listed in data-model.md.
+servers:
+  - url: /api/v1
+
+tags:
+  - name: catalog
+  - name: photos
+  - name: stock
+  - name: import
+  - name: business
+
+paths:
+  /catalog/products:
+    get:
+      tags: [catalog]
+      summary: Search and list products (permission catalog.view, store-filtered)
+      description: |
+        Newest first, 20 per page, keyset `cursor`. Sales, packing and dispatch staff see only
+        active products listed in at least one active store they may work in; owners and
+        managers see every product. `q` matches English and Arabic names, the product code
+        and any variant's SKU, partially, ignoring ASCII letter case. The first page (no
+        `cursor`) also returns `counts` for the same `q` and `store_id`.
+      parameters:
+        - { name: q, in: query, schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: store_id, in: query, schema: { type: string, format: uuid }, description: "One of the caller's stores; another store answers 404 and is recorded as access.denied_store" }
+        - { name: stock, in: query, schema: { enum: [in_stock, low, out] } }
+        - { name: status, in: query, schema: { enum: [active, archived], default: active }, description: "`archived` needs catalog.manage" }
+        - { name: no_photo, in: query, schema: { type: boolean }, description: "Products without any photo; needs catalog.manage" }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ProductPage' } } } }
+        '400': { description: "`validation_failed` (`q: too_long`, `stock: invalid`, `status: invalid`, `no_photo: invalid`, `cursor: invalid`, `store_id: invalid`) — malformed query parameters" }
+        '403': { description: "`forbidden` — `status=archived` or `no_photo` without catalog.manage" }
+        '404': { description: "`not_found` — `store_id` is not one of the caller's stores" }
+    post:
+      tags: [catalog]
+      summary: Create a product with its options, variants, photos, stores and opening stock (permission catalog.manage; Idempotent)
+      description: |
+        Creates the product, one variant per combination of option values (exactly one when
+        there are no options), an inventory item and a stock balance for each variant, and an
+        `opening` movement for each opening quantity above 0, in one transaction. Empty SKUs
+        are suggested from the product code and option values (research R46). Recorded as
+        `product.created`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductInput' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '400': { description: "`validation_failed` (`code: required`, `code: too_long`, `code: invalid`, `name_en: required`, `name_ar: too_long`, `description_en: too_long`, `description_ar: too_long`, `store_ids: invalid`, `photo_ids: too_many`, `photo_ids: invalid`, `options: invalid`, `options: too_many`, `id: invalid`, `name: required`, `name: too_long`, `name: invalid`, `values: required`, `values: invalid`, `values: too_many`, `values: duplicate`, `variants: required`, `variants: invalid`, `variants: too_many`, `option_values: invalid`, `status: invalid`, `sku: too_long`, `sku: invalid`, `sku: duplicate`, `price: required`, `price: invalid`, `price: too_large`, `price: not_whole`, `currency: required`, `currency: invalid`, `low_stock_level: invalid`, `low_stock_level: too_large`, `opening_quantity: invalid`, `opening_quantity: too_large`, `photo_id: invalid`) — nested fields are dotted in `fields` (`options.N`, `options.N.id`, `options.N.name`, `options.N.values`, `options.N.values.M`, `options.N.values.M.id`, `variants.N`, `variants.N.id`, `variants.N.option_values`, `variants.N.status`, `variants.N.sku`, `variants.N.price`, `variants.N.currency`, `variants.N.low_stock_level`, `variants.N.opening_quantity`, `variants.N.photo_id`); `options.N.values.M` is the value's label (`required`, `too_long`, or `invalid` when it is not text); `options.N` and `variants.N` are `invalid` when not an object; `name_en` is `required` when both names are missing; `options` is `invalid` when not a list; `options.N.values` is `required` when missing or empty and `invalid` when not a list; `variants` is `required` when missing or empty, `invalid` when not a list or when the combinations do not match the option values exactly, and `too_many` over 100; `variants.N.option_values` is `invalid` when not a list of at most 2 labels; on create, `options.N.id`, `options.N.values.M.id` and `variants.N.id` are `invalid` (ids name existing records, update only) and `variants.N.status` is `invalid` unless `active`; `store_ids` is `invalid` for a store that is not an active store of this business" }
+        '403': { description: "`forbidden`" }
+        '409': { description: "`product_code_in_use` (`code: in_use`), `sku_in_use` (`sku: in_use`) or `idempotency_conflict` — `sku_in_use` marks each `variants.N.sku` and carries the extra member conflicts: [{sku, product_id, product_name}], archived products included" }
+
+  /catalog/products/{productId}:
+    get:
+      tags: [catalog]
+      summary: One product with its variants and stock numbers (permission catalog.view, store-filtered)
+      parameters: [{ $ref: '#/components/parameters/productId' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '404': { description: "`not_found` — also for a product outside the caller's stores, or archived when the caller lacks catalog.manage" }
+    put:
+      tags: [catalog]
+      summary: Replace a product's editable fields, options and variants (permission catalog.manage)
+      description: |
+        The whole product as the form shows it, with the `version` it was loaded at.
+        Existing options, values and variants are identified by `id`; anything without an id
+        is new. Values removed: their variants are archived if they have history (a movement
+        or an allocation), deleted otherwise. Added values create variants with zero stock
+        (`opening_quantity` is refused for existing products; use a stock adjustment). A
+        variant may be archived (`status: archived`) or restored; restoring a variant
+        reactivates its archived option values. Variants keep their identity whatever is
+        renamed. `store_ids` accepts active stores, plus stores already listed that were
+        deactivated later (those listings are kept). Recorded as one `product.updated`.
+      parameters: [{ $ref: '#/components/parameters/productId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductUpdate' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '400': { description: "`validation_failed` (`version: required`, `version: invalid`, `id: invalid`, `opening_quantity: invalid`, `status: invalid`) — as for create, plus `version` (`invalid`: not an integer of at least 1), `variants.N.id` / `options.N.id` / `options.N.values.M.id` (`invalid`: not of this product), `variants.N.opening_quantity` (`invalid`: create only), `variants.N.status` (`invalid`: neither `active` nor `archived`, or `archived` for a new variant) and `options` (`invalid` also when an existing option is moved to another position)" }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
+        '409': { description: "`product_changed`, `product_archived`, `product_code_in_use`, `sku_in_use`, `options_locked`, `variant_has_allocations`, `combination_in_use` or `value_in_use` — `product_changed` carries the extra member current (the Product as it is now); `product_archived`: restore it first; `sku_in_use` carries conflicts as for create; `options_locked`: the number of option types cannot change once a variant has history; `variant_has_allocations`: a variant to archive or remove has reserved stock; `combination_in_use`: a variant to restore has the same options as an active one; `value_in_use`: restoring a variant would reactivate an option value whose label (ASCII case ignored) an active value of the same option now uses; checked before anything is written" }
+    delete:
+      tags: [catalog]
+      summary: Delete a product that never had stock history or allocations (permission catalog.manage)
+      parameters:
+        - { $ref: '#/components/parameters/productId' }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '204': { description: "Deleted, with its variants, inventory items, balances and photos. Recorded as `product.deleted`" }
+        '400': { description: "`validation_failed` (`version: required`)" }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
+        '409': { description: "`has_history` or `product_changed` — `has_history`: archive it instead; `product_changed` carries the extra member current" }
+
+  /catalog/products/{productId}/archive:
+    post:
+      tags: [catalog]
+      summary: Archive a product; it keeps its stock, history and SKUs (permission catalog.manage)
+      parameters: [{ $ref: '#/components/parameters/productId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionInput' }
+      responses:
+        '200': { description: "Archived (or already archived: unchanged). Recorded as `product.archived`", content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '400': { description: "`validation_failed` — `version`" }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
+        '409': { description: "`product_changed` or `variant_has_allocations` — `product_changed` carries the extra member current" }
+  /catalog/products/{productId}/restore:
+    post:
+      tags: [catalog]
+      summary: Restore an archived product (permission catalog.manage)
+      parameters: [{ $ref: '#/components/parameters/productId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionInput' }
+      responses:
+        '200': { description: "Restored (or already active: unchanged). Recorded as `product.restored`", content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '400': { description: "`validation_failed` — `version`" }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
+        '409': { description: "`product_changed` — with the extra member current" }
+
+  /catalog/photos:
+    post:
+      tags: [photos]
+      summary: Upload a product photo before saving the product (permission catalog.manage)
+      description: |
+        PNG, JPEG or WebP, at most 5 MB and 40 megapixels; decoded and re-encoded to WebP at
+        320 px and 1080 px with all metadata removed. The photo is staged: it belongs to no
+        product until a create or update lists it in `photo_ids`, and is deleted after 24
+        hours if never saved.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        '201': { description: Staged, content: { application/json: { schema: { $ref: '#/components/schemas/Photo' } } } }
+        '400': { description: "`file_too_large` (over 5 MB or 40 megapixels), `file_not_image` (anything but a decodable PNG, JPEG or WebP), or `validation_failed` with `file: required`" }
+        '403': { description: "`forbidden`" }
+  /catalog/photos/{photoId}/{size}:
+    get:
+      tags: [photos]
+      summary: Download a photo (permission catalog.view, store-filtered)
+      description: |
+        Allowed when the caller may see the photo's product; a staged photo only for
+        catalog.manage holders. `Cache-Control: private, no-cache` with an `ETag`; a matching
+        `If-None-Match` answers 304.
+      parameters:
+        - { $ref: '#/components/parameters/photoId' }
+        - { name: size, in: path, required: true, schema: { enum: [thumb, large] } }
+      responses:
+        '200': { description: Image, content: { image/webp: {} } }
+        '304': { description: Not modified }
+        '404': { description: "`not_found`" }
+
+  /catalog/variants/{variantId}/adjustments:
+    post:
+      tags: [stock]
+      summary: Record a stock change for one variant (permission stock.adjust; Idempotent)
+      description: |
+        `balance_version` is the balance version the person saw. Under a row lock, a different
+        current version is refused with `stock_changed`; a result below zero or below the
+        reserved quantity with `not_enough_stock`. Reasons: `opening`, `received`, `found`
+        (increase by `quantity`); `damaged`, `lost` (decrease by `quantity`); `other`
+        (`direction` and `note` required); `count_correction` (`counted_quantity`; the
+        movement is the difference, which may be 0). Allowed on archived variants. Writes one
+        movement and updates the balance in the same transaction; recorded as
+        `stock.adjusted`. A repeat with the same Idempotency-Key returns the first movement
+        and the balance as it is now.
+      parameters: [{ $ref: '#/components/parameters/variantId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdjustmentInput' }
+      responses:
+        '201': { description: Recorded, content: { application/json: { schema: { $ref: '#/components/schemas/AdjustmentResult' } } } }
+        '400': { description: "`validation_failed` (`reason: required`, `reason: invalid`, `quantity: required`, `quantity: invalid`, `quantity: too_large`, `counted_quantity: required`, `counted_quantity: invalid`, `counted_quantity: too_large`, `direction: required`, `direction: invalid`, `note: required`, `note: too_long`, `note: invalid`, `balance_version: required`, `balance_version: invalid`) — `quantity` is also `too_large` when on hand would exceed 1000000; `direction` and `note` are required for `other`; `note` is `invalid` when not text; `balance_version` is `invalid` when not an integer of at least 1" }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
+        '409': { description: "`stock_changed`, `not_enough_stock` or `idempotency_conflict` — `stock_changed` and `not_enough_stock` carry the extra member balance (the current StockNumbers); nothing recorded" }
+        '503': { description: "`try_again` — busy; nothing recorded" }
+  /catalog/variants/{variantId}/movements:
+    get:
+      tags: [stock]
+      summary: A variant's stock history, newest first (permission stock.adjust)
+      parameters:
+        - { $ref: '#/components/parameters/variantId' }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK (at most 50 movements per page), content: { application/json: { schema: { $ref: '#/components/schemas/MovementPage' } } } }
+        '400': { description: "`validation_failed` — malformed `cursor`" }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
+  /catalog/low-stock:
+    get:
+      tags: [stock]
+      summary: Variants at or below their low-stock level, most urgent first (permission stock.adjust)
+      description: |
+        Active variants of active products whose effective level (own level, else the
+        business default) is above 0 and whose available is at or below it. Out of stock
+        first, then by available ascending, then SKU. 20 per page.
+      parameters:
+        - { name: store_id, in: query, schema: { type: string, format: uuid } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LowStockPage' } } } }
+        '400': { description: "`validation_failed` — malformed `cursor` or `store_id`" }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found` — unknown `store_id`" }
+
+  /catalog/imports/template:
+    get:
+      tags: [import]
+      summary: Download the CSV import template (permission catalog.manage)
+      description: UTF-8 with a byte-order mark; the header row and one example product with two variants.
+      responses:
+        '200': { description: CSV file, content: { text/csv: {} } }
+        '403': { description: "`forbidden`" }
+  /catalog/imports:
+    post:
+      tags: [import]
+      summary: Upload a CSV file and get its preview; nothing is saved to the catalog (permission catalog.manage)
+      description: |
+        One row per variant; rows of one product share `product_code` (research R53).
+        File-level problems are answered 400 before any row is checked. Otherwise every row is
+        checked and the batch is stored as `previewed` (no errors) or `failed`, for 24 hours.
+        Arabic-Indic digits are accepted; row numbers count the header as row 1.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        '201': { description: Preview, content: { application/json: { schema: { $ref: '#/components/schemas/ImportBatch' } } } }
+        '400': { description: "`file_too_large`, `file_not_csv`, `too_many_rows`, `missing_columns`, `unknown_columns` or `validation_failed` (`file: required`) — `file_too_large`: over 2 MB; `file_not_csv`: not UTF-8 text, empty, or not CSV; `too_many_rows`: over 2000 data rows; `missing_columns` and `unknown_columns` carry the extra member columns (the missing headers, or the headers not in the template such as photo or image columns)" }
+        '403': { description: "`forbidden`" }
+  /catalog/imports/{batchId}:
+    get:
+      tags: [import]
+      summary: Read a preview or result again (permission catalog.manage)
+      parameters: [{ $ref: '#/components/parameters/batchId' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ImportBatch' } } } }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
+  /catalog/imports/{batchId}/confirm:
+    post:
+      tags: [import]
+      summary: Save a previewed import, all rows or none (permission catalog.manage)
+      description: |
+        Re-checks the stored rows against the catalog and creates every product, variant,
+        balance and opening movement in one transaction, recorded as one `catalog.imported`.
+        Confirming a committed batch again returns it unchanged (nothing is imported twice).
+      parameters: [{ $ref: '#/components/parameters/batchId' }]
+      responses:
+        '200': { description: Committed, content: { application/json: { schema: { $ref: '#/components/schemas/ImportBatch' } } } }
+        '403': { description: "`forbidden`" }
+        '404': { description: "`not_found`" }
+        '409': { description: "`import_has_errors` or `import_conflict` — `import_has_errors`: the preview had errors; `import_conflict`: something changed since the preview (for example the same SKU was created), and the extra member errors lists the rows; nothing saved" }
+        '410': { description: "`import_expired` — older than 24 hours; upload the file again" }
+        '503': { description: "`try_again` — busy; nothing saved" }
+
+  /business:
+    get:
+      tags: [business]
+      summary: M0 endpoint; the response gains `low_stock_default`
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessLowStock' } } } }
+    patch:
+      tags: [business]
+      summary: M0 endpoint (permission settings.manage); also accepts `low_stock_default`
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { low_stock_default: { type: integer, minimum: 0, maximum: 1000000 } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessLowStock' } } } }
+        '400': { description: "`validation_failed` (`low_stock_default: invalid`, `low_stock_default: too_large`) — as in M0, plus these" }
+        '403': { description: "`forbidden`" }
+
+components:
+  parameters:
+    productId: { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+    variantId: { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+    photoId: { name: photoId, in: path, required: true, schema: { type: string, format: uuid } }
+    batchId: { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    Currency: { enum: [USD, LBP], description: Same as M0 }
+    Money: { type: string, pattern: '^\d+(\.\d{1,2})?$', description: 'Decimal string, same as M0. Prices are at most 99999999999.99; LBP prices are whole.' }
+    Error:
+      type: object
+      description: Same envelope as M0.
+      properties:
+        error:
+          type: object
+          required: [code, message, fields]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields: { type: object, additionalProperties: { type: string } }
+    StockState: { enum: [ok, low, out], description: "out: available 0; low: effective level > 0 and 0 < available ≤ level; ok otherwise" }
+    VersionInput:
+      type: object
+      required: [version]
+      properties: { version: { type: integer, minimum: 1 } }
+    OptionInput:
+      type: object
+      required: [name, values]
+      properties:
+        id: { type: string, format: uuid, description: Existing option (update only) }
+        name: { type: string, minLength: 1, maxLength: 40 }
+        values:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            required: [label]
+            properties:
+              id: { type: string, format: uuid, description: Existing value (update only) }
+              label: { type: string, minLength: 1, maxLength: 40 }
+    VariantInput:
+      type: object
+      required: [option_values, price, currency]
+      properties:
+        id: { type: string, format: uuid, description: Existing variant (update only) }
+        option_values: { type: array, maxItems: 2, items: { type: string }, description: "Labels in option order, matching `options[].values[].label`; empty for a product without options" }
+        sku: { type: [string, 'null'], maxLength: 64, description: Empty or null asks the server to suggest one }
+        price: { $ref: '#/components/schemas/Money' }
+        currency: { $ref: '#/components/schemas/Currency' }
+        low_stock_level: { type: [integer, 'null'], minimum: 0, maximum: 1000000, description: Null uses the business default; 0 disables }
+        photo_id: { type: [string, 'null'], format: uuid, description: One of this product's `photo_ids` }
+        opening_quantity: { type: integer, minimum: 0, maximum: 1000000, description: Create only; default 0 }
+        status: { enum: [active, archived], description: Update only; default active }
+    ProductInput:
+      type: object
+      required: [code, variants]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 32, description: 'ASCII letters, digits, - _ . /' }
+        name_en: { type: [string, 'null'], maxLength: 120 }
+        name_ar: { type: [string, 'null'], maxLength: 120 }
+        description_en: { type: [string, 'null'], maxLength: 2000 }
+        description_ar: { type: [string, 'null'], maxLength: 2000 }
+        store_ids: { type: array, items: { type: string, format: uuid }, description: "Active stores of this business; on update, a store already listed and deactivated later may stay (its listing is kept). Anything else: `store_ids: invalid`" }
+        photo_ids: { type: array, maxItems: 8, items: { type: string, format: uuid }, description: In display order; the first is the main photo }
+        options: { type: array, maxItems: 2, items: { $ref: '#/components/schemas/OptionInput' } }
+        variants: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/VariantInput' } }
+      description: At least one of name_en or name_ar.
+    ProductUpdate:
+      allOf:
+        - $ref: '#/components/schemas/ProductInput'
+        - $ref: '#/components/schemas/VersionInput'
+    StockNumbers:
+      type: object
+      properties:
+        on_hand: { type: integer }
+        allocated: { type: integer, description: Shown as "Reserved" }
+        available: { type: integer, description: on_hand − allocated, never negative }
+        version: { type: integer, description: Balance version, for adjustments }
+    Photo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        width: { type: integer }
+        height: { type: integer }
+    Variant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        inventory_item_id: { type: string, format: uuid, description: Stable inventory identity; never changes }
+        sku: { type: string }
+        option_values: { type: array, items: { type: string } }
+        price: { $ref: '#/components/schemas/Money' }
+        currency: { $ref: '#/components/schemas/Currency' }
+        low_stock_level: { type: [integer, 'null'] }
+        effective_low_stock_level: { type: integer }
+        photo_id: { type: [string, 'null'], format: uuid }
+        status: { enum: [active, archived] }
+        has_history: { type: boolean, description: True when it has a movement or allocation (cannot be deleted) }
+        stock: { $ref: '#/components/schemas/StockNumbers' }
+        stock_state: { $ref: '#/components/schemas/StockState' }
+    Option:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        values: { type: array, items: { type: object, properties: { id: { type: string, format: uuid }, label: { type: string } } } }
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name_en: { type: [string, 'null'] }
+        name_ar: { type: [string, 'null'] }
+        description_en: { type: [string, 'null'] }
+        description_ar: { type: [string, 'null'] }
+        status: { enum: [active, archived] }
+        version: { type: integer }
+        store_ids: { type: array, items: { type: string, format: uuid }, description: "For staff: only the caller's stores among them" }
+        photos: { type: array, items: { $ref: '#/components/schemas/Photo' } }
+        options: { type: array, items: { $ref: '#/components/schemas/Option' } }
+        variants: { type: array, items: { $ref: '#/components/schemas/Variant' }, description: "Active variants; archived ones too for catalog.manage holders" }
+        has_history: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ProductSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name_en: { type: [string, 'null'] }
+        name_ar: { type: [string, 'null'] }
+        status: { enum: [active, archived] }
+        main_photo_id: { type: [string, 'null'], format: uuid }
+        store_ids: { type: array, items: { type: string, format: uuid } }
+        variant_count: { type: integer }
+        available_total: { type: integer }
+        stock_state: { $ref: '#/components/schemas/StockState' }
+        prices:
+          type: array
+          description: Lowest and highest price per currency among active variants (one or two entries)
+          items: { type: object, properties: { currency: { $ref: '#/components/schemas/Currency' }, min: { $ref: '#/components/schemas/Money' }, max: { $ref: '#/components/schemas/Money' } } }
+    ProductPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProductSummary' } }
+        next_cursor: { type: [string, 'null'] }
+        counts:
+          type: [object, 'null']
+          description: First page only
+          properties: { all: { type: integer }, in_stock: { type: integer }, low: { type: integer }, out: { type: integer } }
+    AdjustmentInput:
+      type: object
+      required: [reason, balance_version]
+      properties:
+        reason: { enum: [opening, received, found, damaged, lost, count_correction, other] }
+        quantity: { type: integer, minimum: 1, maximum: 1000000, description: Every reason except count_correction }
+        counted_quantity: { type: integer, minimum: 0, maximum: 1000000, description: count_correction only }
+        direction: { enum: [in, out], description: "Required for other, where it sets the sign; ignored for every other reason" }
+        note: { type: [string, 'null'], maxLength: 500 }
+        balance_version: { type: integer, minimum: 1 }
+    Movement:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        at: { type: string, format: date-time }
+        reason: { enum: [opening, received, found, damaged, lost, count_correction, other, allocation_consumed] }
+        quantity: { type: integer, description: Signed }
+        counted_quantity: { type: [integer, 'null'] }
+        on_hand_after: { type: integer }
+        actor_type: { enum: [user, system] }
+        actor_name: { type: [string, 'null'], description: "The user's current name; null for system" }
+        note: { type: [string, 'null'] }
+        source: { enum: [manual, product_form, import, allocation], description: "Stored on the movement (data-model.md stock_movements.source): manual = a stock adjustment, product_form = opening stock from the product form, import = opening stock from a CSV import, allocation = an allocation consumed" }
+    AdjustmentResult:
+      type: object
+      properties:
+        movement: { $ref: '#/components/schemas/Movement' }
+        balance: { $ref: '#/components/schemas/StockNumbers' }
+    MovementPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Movement' } }
+        next_cursor: { type: [string, 'null'] }
+    LowStockItem:
+      type: object
+      properties:
+        product_id: { type: string, format: uuid }
+        product_name_en: { type: [string, 'null'] }
+        product_name_ar: { type: [string, 'null'] }
+        variant_id: { type: string, format: uuid }
+        sku: { type: string }
+        option_values: { type: array, items: { type: string } }
+        main_photo_id: { type: [string, 'null'], format: uuid }
+        on_hand: { type: integer }
+        allocated: { type: integer }
+        available: { type: integer }
+        level: { type: integer, description: Effective level }
+        stock_state: { $ref: '#/components/schemas/StockState' }
+    LowStockPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/LowStockItem' } }
+        next_cursor: { type: [string, 'null'] }
+        total: { type: integer, description: Number of low or out variants (first page only; for the dashboard row) }
+    ImportError:
+      type: object
+      properties:
+        row: { type: integer, description: Spreadsheet row; the header is row 1 }
+        column: { type: [string, 'null'], description: Template column name; null for a whole-row problem }
+        code:
+          enum: [required, invalid, too_long, too_large, negative, not_whole, invalid_currency, sku_in_use, product_code_in_use, duplicate_in_file, unknown_store, inconsistent_product, duplicate_combination, missing_option_value, too_many_options, too_many_values, too_many_variants]
+    ImportBatch:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { enum: [previewed, failed, committed] }
+        file_name: { type: string }
+        row_count: { type: integer }
+        products: { type: integer, description: Products that confirming creates (or created) }
+        variants: { type: integer }
+        opening_units: { type: integer }
+        errors: { type: array, items: { $ref: '#/components/schemas/ImportError' } }
+        expires_at: { type: string, format: date-time }
+        committed_at: { type: [string, 'null'], format: date-time }
+    BusinessLowStock:
+      type: object
+      description: M0's Business plus `low_stock_default`.
+      properties:
+        id: { type: string, format: uuid }
+        low_stock_default: { type: integer, minimum: 0, maximum: 1000000 }

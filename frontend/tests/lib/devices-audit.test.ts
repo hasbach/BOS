@@ -1,12 +1,26 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { createTranslator } from "next-intl";
 import { describe, expect, it } from "vitest";
 
-import { actorLabel, describeEntry, eventName } from "@/lib/audit";
+import { EVENT_GROUPS, EVENT_ICONS, actorLabel, describeEntry, eventName } from "@/lib/audit";
 import type { AuditEntry } from "@/lib/audit";
 import { deviceLabel } from "@/lib/devices";
 
 import ar from "../../messages/ar.json";
 import en from "../../messages/en.json";
+
+const M0_MODEL = resolve(process.cwd(), "../specs/001-platform-foundation/data-model.md");
+const M1_MODEL = resolve(process.cwd(), "../specs/002-native-catalog-inventory/data-model.md");
+
+// Event names are the first cell of the events tables: | `product.created` | product | ... |
+function eventsIn(path: string): string[] {
+  return readFileSync(path, "utf8")
+    .split(/\r?\n/)
+    .map((line) => /^\|\s*`([a-z_]+\.[a-z_]+)`\s*\|/.exec(line)?.[1])
+    .filter((event): event is string => Boolean(event));
+}
 
 const translator = (locale: "en" | "ar") => createTranslator({ locale, messages: locale === "en" ? en : ar }) as never;
 
@@ -41,21 +55,28 @@ describe("history entries", () => {
   const t = translator("en");
   const tAr = translator("ar");
 
-  it("translates every event in data-model.md and shows an unknown one as its code", () => {
-    const events = [
-      "auth.sign_in", "auth.sign_in_failed", "auth.sign_out", "auth.session_revoked", "auth.password_changed",
-      "auth.password_reset_issued", "auth.identifier_changed", "tenant.created", "tenant.suspended",
-      "tenant.reactivated", "tenant.settings_changed", "invitation.created", "invitation.accepted",
-      "invitation.revoked", "invitation.resent", "invitation.code_sent", "invitation.code_failed", "user.roles_changed", "user.stores_changed",
-      "user.deactivated", "user.reactivated", "store.created", "store.updated", "store.deactivated",
-      "store.reactivated", "access.denied_permission", "access.denied_tenant", "access.denied_store",
-      "email.sent", "email.failed", "operator.sign_in", "maintenance.run",
-    ];
+  it("translates every event in both data models and shows an unknown one as its code", () => {
+    const events = [...eventsIn(M0_MODEL), ...eventsIn(M1_MODEL)];
+    expect(events).toContain("auth.sign_in");
+    expect(events).toContain("product.created");
+    expect(events).toContain("catalog.imported");
+    expect(events).toContain("stock.allocated");
     for (const event of events) {
       expect(eventName(event, t), event).not.toBe(event);
       expect(eventName(event, tAr), event).not.toBe(event);
     }
     expect(eventName("billing.something_new", t)).toBe("billing.something_new");
+  });
+
+  it("groups the ten catalog and stock events, each with an icon", () => {
+    const group = EVENT_GROUPS.find((g) => g.key === "catalog");
+    expect(group?.events).toEqual([
+      "product.created", "product.updated", "product.archived", "product.restored", "product.deleted",
+      "stock.adjusted", "stock.allocated", "stock.released", "stock.consumed", "catalog.imported",
+    ]);
+    for (const event of group?.events ?? []) expect(EVENT_ICONS[event], event).toBeDefined();
+    expect(en.history.group.catalog).toBe("Catalog and stock");
+    expect(ar.history.group.catalog).toBeTruthy();
   });
 
   it("describes a rate change in LBP (screen 109)", () => {

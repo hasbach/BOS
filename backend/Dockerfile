@@ -14,6 +14,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project
 
 COPY . .
+# Data files the code reads at run time ship with it; fail the build if one is missing.
+RUN test -s app/data/common_passwords.txt
 
 RUN useradd --create-home bos && mkdir -p /data/uploads && chown -R bos /data/uploads
 USER bos

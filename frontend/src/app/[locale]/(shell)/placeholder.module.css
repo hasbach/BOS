@@ -77,3 +77,37 @@
 [dir="rtl"] .chevron {
   transform: scaleX(-1);
 }
+
+/* Screen 157: the low-stock row above the start tab's content. */
+.attention {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  inline-size: 100%;
+}
+
+.grow {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-block: 10px;
+}
+
+.rowTitle {
+  font-weight: 600;
+}
+
+.sub {
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.middle {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}

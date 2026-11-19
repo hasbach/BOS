@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import secrets
 from collections.abc import Mapping
+from pathlib import Path
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -20,29 +22,27 @@ _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 _hasher = PasswordHasher()  # Argon2id with the library's recommended parameters
 
-# Passwords of ten or more characters that attackers try first. Compared lower-cased.
-_COMMON_PASSWORDS = frozenset(
-    {
-        "1234567890",
-        "0123456789",
-        "12345678910",
-        "123456789a",
-        "1q2w3e4r5t",
-        "1qaz2wsx3edc",
-        "abcdefghij",
-        "administrator",
-        "iloveyou123",
-        "letmein123",
-        "password12",
-        "password123",
-        "password1234",
-        "passwordpassword",
-        "qwerty12345",
-        "qwertyuiop",
-        "welcome123",
-        "bospassword",
-    }
-)
+# Passwords of ten or more characters that attackers try first, compared lower-cased (F-15,
+# M1 research R57): a published list in ``app/data/common_passwords.txt`` (source and licence
+# in its ``#`` header), plus BOS's own name, which no published list has.
+COMMON_PASSWORDS_FILE = Path(__file__).resolve().parents[1] / "data" / "common_passwords.txt"
+_BOS_SPECIFIC = frozenset({"bospassword"})
+
+
+def load_common_passwords() -> frozenset[str]:
+    """Read the list file: one lower-case entry per line; ``#`` lines are its header."""
+    entries = set(_BOS_SPECIFIC)
+    for line in COMMON_PASSWORDS_FILE.read_text(encoding="utf-8").splitlines():
+        entry = line.strip()
+        if entry and not entry.startswith("#"):
+            entries.add(entry.lower())
+    return frozenset(entries)
+
+
+@functools.cache
+def common_passwords() -> frozenset[str]:
+    """The list, read once per process (a missing file fails loudly, never silently empty)."""
+    return load_common_passwords()
 
 
 class WeakPassword(ValueError):
@@ -74,7 +74,7 @@ def validate_password(password: str) -> None:
         raise WeakPassword
     if len(set(password)) < 4:  # e.g. "aaaaaaaaaaaa", "1111111111", "abababababab"
         raise WeakPassword
-    if password.lower() in _COMMON_PASSWORDS:
+    if password.lower() in common_passwords():
         raise WeakPassword
 
 
