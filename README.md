@@ -263,8 +263,35 @@ docker compose exec -e BOS_OPERATOR_PASSWORD api flask bos create-operator --ema
 On the development PC, `local_api.py bootstrap` does this for the first address in
 `BOS_OPERATOR_EMAILS`, using `BOS_OPERATOR_PASSWORD` from `.env`.
 
-Another operations command: `flask bos maintenance` expires old invitations and deletes ended
-sessions, old sign-in attempts and old keys.
+`flask bos maintenance` expires old invitations and removes ended sessions, old sign-in
+attempts, old idempotency keys and password resets. It also clears expired staged product
+photos and uncommitted CSV batches per business. Committed import batches are retained.
+
+## Catalog and inventory (M1)
+
+- The demo catalog has eight sample products across the two Denim House stores, including
+  low-stock and out-of-stock examples. Opening stock is recorded in the stock ledger.
+- `flask bos stock-check [--tenant ID]` is read-only and exits nonzero on a discrepancy.
+  On the local development PC, run `uv run python scripts/local_api.py stock-check` from
+  `backend/`, optionally with `--tenant ID`.
+- `flask bos seed-catalog --variants 5000 --tenant ID` appends synthetic data to a demo
+  business only. It requires `BOS_ENVIRONMENT=development` and `BOS_ALLOW_DEMO_SEED=true`.
+  Run it against a disposable demo dataset; rerunning it adds another dataset.
+- `uv run python scripts/local_api.py purge-test-businesses` previews which temporary E2E
+  businesses would be removed. `--yes` performs the removal; the command is restricted to
+  the loopback development database. Do not use it as a backup or restore tool.
+- Product photo files live under `BOS_UPLOAD_DIR/tenant/<id>/`. They are served through
+  the authorized API rather than public links.
+
+### CSV import
+
+In Catalog → Import CSV, download the template, fill it in, review the preview, then confirm.
+Files must be UTF-8 (a BOM is accepted), at most 2 MB and at most 2,000 data rows. Required
+columns are `product_code`, at least one of `name_en` and `name_ar`, `price`, and `currency`.
+Optional columns are `description_en`, `description_ar`, `stores` (store names separated by
+`|`), `option1_name`, `option1_value`, `option2_name`, `option2_value`, `sku`,
+`opening_quantity`, and `low_stock_level`. A preview does not write products; confirmation
+imports the batch in one transaction. Add photos afterward in the catalog.
 
 ## Tests
 
