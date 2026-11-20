@@ -273,6 +273,7 @@ def test_maintenance_removes_only_what_has_expired_and_records_the_run(
     recorded = dict(expected)
     recorded["resets_deleted"] = recorded.pop("password_resets_deleted")
     recorded["staged_photos_deleted"] = 0  # M1: the per-business step (T051)
+    recorded["expired_import_batches_deleted"] = 0  # M1: no import batches in this scenario
     assert run.data == recorded
     assert len(after["audit_entries"]) == len(before["audit_entries"]) + 1
 

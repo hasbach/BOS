@@ -11,6 +11,7 @@ def register_blueprints(app: Flask) -> None:
         auth,
         business,
         catalog,
+        catalog_import,
         catalog_photos,
         me,
         ops,
@@ -19,5 +20,17 @@ def register_blueprints(app: Flask) -> None:
         stores,
     )
 
-    for module in (auth, me, business, stores, staff, audit, ops, catalog, catalog_photos, stock):
+    for module in (
+        auth,
+        me,
+        business,
+        stores,
+        staff,
+        audit,
+        ops,
+        catalog,
+        catalog_import,
+        catalog_photos,
+        stock,
+    ):
         app.register_blueprint(module.bp)

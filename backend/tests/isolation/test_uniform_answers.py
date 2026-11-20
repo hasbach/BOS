@@ -39,6 +39,7 @@ STORES = "/api/v1/stores"
 PRODUCTS = "/api/v1/catalog/products"
 PHOTOS = "/api/v1/catalog/photos"
 VARIANTS = "/api/v1/catalog/variants"
+IMPORTS = "/api/v1/catalog/imports"
 _PRODUCT = {
     "version": 1,
     "code": "TAKEN",
@@ -117,6 +118,8 @@ _WRITES: list[Call] = [
         {"reason": "received", "quantity": 1, "balance_version": 1},
     ),
     ("movements-read", "GET", VARIANTS + "/{id}/movements", "json", None),
+    ("import-read", "GET", IMPORTS + "/{id}", "json", None),
+    ("import-confirm", "POST", IMPORTS + "/{id}/confirm", "json", None),
 ]
 
 
@@ -188,10 +191,22 @@ def test_foreign_and_made_up_ids_get_one_answer_whatever_the_body(
 ) -> None:
     a, b = worlds.a, worlds.b
     attacker = user_client(b.user(role), b.tenant_id)
-    if "/catalog/" in template:
-        with owner_engine.begin() as conn:
-            a._catalog = insert_catalog_rows(conn, a)
-    foreign_ids = _foreign_ids(a, template)
+    if template.startswith(IMPORTS):
+        owner = user_client(a.user_id, a.tenant_id)
+        preview = owner.post(
+            IMPORTS,
+            data={
+                "file": (
+                    io.BytesIO(b"product_code,name_en,price,currency\nHAT,Hat,2,USD\n"),
+                    "catalog.csv",
+                )
+            },
+            headers=CSRF,
+        )
+        assert preview.status_code == 201
+        foreign_ids = [uuid.UUID(preview.get_json()["id"])]
+    else:
+        foreign_ids = _foreign_ids_for_test(owner_engine, a, template)
     if not foreign_ids:
         # Sessions: ids of another business's sessions are found through the database only.
         user_client(a.user_id, a.tenant_id)  # signing in creates one of A's sessions
@@ -213,6 +228,13 @@ def test_foreign_and_made_up_ids_get_one_answer_whatever_the_body(
         seen += 2
 
     assert history(owner_engine, a.tenant_id, "access.denied_tenant") == []
+
+
+def _foreign_ids_for_test(owner: Engine, world: World, template: str) -> list[uuid.UUID]:
+    if "/catalog/" in template:
+        with owner.begin() as conn:
+            world._catalog = insert_catalog_rows(conn, world)
+    return _foreign_ids(world, template)
 
 
 def _a_session_id(owner: Engine, world: World) -> uuid.UUID:

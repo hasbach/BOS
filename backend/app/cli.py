@@ -166,7 +166,7 @@ def maintenance_history(counts: dict[str, int]) -> dict[str, int]:
 @bos_cli.command("maintenance")
 def maintenance() -> None:
     """Expire old invitations; delete ended sessions, old sign-in attempts and old keys;
-    delete staged product photos older than 24 hours (each business on its own)."""
+    delete expired staged product photos and uncommitted imports (per business)."""
     from app.core import audit
     from app.core.db import get_engine, transaction
     from app.core.storage import storage_for

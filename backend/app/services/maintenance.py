@@ -5,8 +5,8 @@ Businesses are listed in one short transaction in operator context
 each business is handled in its own ``tenant_transaction``, never through
 ``enter_tenant_from_operator`` (which stays reserved to onboarding and the demo seed).
 
-Step: delete staged product photos past their 24-hour expiry, then their files. Files are
-deleted only after that business's transaction has committed, so a rolled-back step never
+Steps: delete expired uncommitted catalog batches and staged product photos, then photo files.
+Files are deleted only after that business's transaction has committed, so a rolled-back step never
 loses a file still referenced. A business whose step fails is rolled back and reported; the
 other businesses are still processed.
 """
@@ -29,10 +29,14 @@ log = logging.getLogger("bos.maintenance")
 @dataclass
 class TenantMaintenance:
     staged_photos_deleted: int = 0
+    expired_import_batches_deleted: int = 0
     failed: list[uuid.UUID] = field(default_factory=list)
 
     def counts(self) -> dict[str, int]:
-        return {"staged_photos_deleted": self.staged_photos_deleted}
+        return {
+            "staged_photos_deleted": self.staged_photos_deleted,
+            "expired_import_batches_deleted": self.expired_import_batches_deleted,
+        }
 
 
 def tenant_ids(engine: Engine) -> list[uuid.UUID]:
@@ -46,6 +50,13 @@ def run_tenant_steps(engine: Engine, storage: Storage) -> TenantMaintenance:
         try:
             with tenant_transaction(engine, tenant_id) as db:
                 purged = photos.purge_staged(db)
+                batches = db.execute(
+                    text(
+                        "WITH deleted AS (DELETE FROM import_batches "
+                        "WHERE status IN ('previewed', 'failed') AND expires_at <= now() "
+                        "RETURNING 1) SELECT count(*) FROM deleted"
+                    )
+                ).scalar_one()
         except Exception:
             log.exception("maintenance failed for one business; it was rolled back")
             result.failed.append(tenant_id)
@@ -57,4 +68,5 @@ def run_tenant_steps(engine: Engine, storage: Storage) -> TenantMaintenance:
             except Exception:
                 log.exception("could not delete a purged photo file")
         result.staged_photos_deleted += purged.photos
+        result.expired_import_batches_deleted += batches
     return result

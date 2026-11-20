@@ -120,6 +120,47 @@ def test_expired_staged_photos_and_their_files_are_purged_in_every_business(
     assert old_a not in _photo_ids(owner_engine) and old_b not in _photo_ids(owner_engine)
 
 
+def test_expired_uncommitted_batches_are_purged_but_results_are_kept(
+    app: Flask, owner_engine: Engine, fresh_catalog_tenants: TwoTenants
+) -> None:
+    a, b = fresh_catalog_tenants.a, fresh_catalog_tenants.b
+    with owner_engine.begin() as conn:
+        remaining = {a.catalog.import_batch_id, b.catalog.import_batch_id}
+        for world in (a, b):
+            for status, expired in (("previewed", True), ("failed", True), ("previewed", False)):
+                batch_id = uuid.uuid4()
+                if not expired:
+                    remaining.add(batch_id)
+                conn.execute(
+                    text(
+                        "INSERT INTO import_batches (id, tenant_id, created_by_user_id, status, "
+                        "file_name, file_sha256, row_count, expires_at) VALUES "
+                        "(:id, :t, :u, :status, 'test.csv', :digest, 1, now() + CAST(:age AS interval))"
+                    ),
+                    {
+                        "id": batch_id,
+                        "t": world.tenant_id,
+                        "u": world.user_id,
+                        "status": status,
+                        "digest": b"test",
+                        "age": "-1 hour" if expired else "1 hour",
+                    },
+                )
+        conn.execute(
+            text(
+                "UPDATE import_batches SET expires_at = now() - interval '1 hour' "
+                "WHERE status = 'committed'"
+            )
+        )
+    result = _run(app)
+    assert result.exit_code == 0, result.output
+    assert "expired_import_batches_deleted: 4" in result.output
+    assert _run_entry(owner_engine)["expired_import_batches_deleted"] == 4
+    assert {
+        row.id for row in owner_rows(owner_engine, "SELECT id FROM import_batches")
+    } == remaining
+
+
 def test_nothing_to_purge_is_recorded_as_zero(
     app: Flask, owner_engine: Engine, fresh_catalog_tenants: TwoTenants
 ) -> None:

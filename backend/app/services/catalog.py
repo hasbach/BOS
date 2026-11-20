@@ -680,7 +680,12 @@ class Saved:
 
 
 def create_product(
-    db: Session, actor: Actor, data: ProductIn, *, request_key: str | None = None
+    db: Session,
+    actor: Actor,
+    data: ProductIn,
+    *,
+    request_key: str | None = None,
+    import_batch_id: uuid.UUID | None = None,
 ) -> Saved:
     """Create a product with its options, variants, items, balances and opening stock."""
     lock_business(db, actor.tenant_id)
@@ -693,17 +698,31 @@ def create_product(
     db.execute(
         text(
             "INSERT INTO products (id, tenant_id, code, name_en, name_ar, description_en, "
-            "description_ar, created_by_user_id) VALUES (:id, :tenant_id, :code, :name_en, "
-            ":name_ar, :description_en, :description_ar, :user_id)"
+            "description_ar, created_by_user_id, import_batch_id) VALUES "
+            "(:id, :tenant_id, :code, :name_en, :name_ar, :description_en, :description_ar, "
+            ":user_id, :batch)"
         ),
         {
             "id": product_id,
             "tenant_id": actor.tenant_id,
             "user_id": actor.user_id,
+            "batch": import_batch_id,
             **_fields(data),
         },
     )
-    _write(db, actor, product_id, data, existing, plan, request_key=request_key)
+    _write(
+        db,
+        actor,
+        product_id,
+        data,
+        existing,
+        plan,
+        request_key=request_key,
+        import_batch_id=import_batch_id,
+    )
+    if import_batch_id is not None:
+        # The whole import emits a single audit entry, not one per product.
+        return Saved(product_id, [])
     _record(
         db,
         actor,
@@ -813,6 +832,7 @@ def _write(
     plan: _Plan,
     *,
     request_key: str | None,
+    import_batch_id: uuid.UUID | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     """Write a checked plan; returns removed photo paths and the variant changes for history."""
     # Store listings.
@@ -946,8 +966,9 @@ def _write(
                 tenant_id=actor.tenant_id,
                 warehouse_id=warehouse_id,
                 opening_quantity=item.opening_quantity,
-                source="product_form",
+                source="import" if import_batch_id is not None else "product_form",
                 actor_id=actor.user_id,
+                import_batch_id=import_batch_id,
                 request_key=request_key,
             )
             db.execute(
