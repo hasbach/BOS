@@ -314,6 +314,9 @@ def seed_catalog(engine: Engine, tenant_id: uuid.UUID, variants: int) -> int:
         if not store_ids or owner is None:
             raise CatalogSeedError("The demo business needs an active store and an active owner.")
         catalog.lock_business(db, tenant_id)
+        # The development-only bulk insert can exceed the interactive API budget under load.
+        # Keep both the override and all writes inside this tenant transaction.
+        db.execute(text("SET LOCAL statement_timeout = '120s'"))
         db.execute(
             _PERF_INSERT,
             {
