@@ -29,6 +29,7 @@ bp = Blueprint("business", __name__, url_prefix="/api/v1")
 CURRENCIES = ("USD", "LBP")
 MAX_RATE = Decimal("10000000")
 MAX_FEE = Decimal("100000000")
+MAX_LOW_STOCK_DEFAULT = 1_000_000
 _MONEY = re.compile(r"[0-9]{1,16}(\.[0-9]{1,2})?", re.ASCII)
 
 
@@ -57,6 +58,14 @@ def update_business() -> ResponseReturnValue:
         changes["default_delivery_fee"] = _money(
             body, "default_delivery_fee", errors, positive=False, maximum=MAX_FEE
         )
+    if "low_stock_default" in body:
+        level = body["low_stock_default"]
+        if type(level) is not int or level < 0:
+            errors["low_stock_default"] = "invalid"
+        elif level > MAX_LOW_STOCK_DEFAULT:
+            errors["low_stock_default"] = "too_large"
+        else:
+            changes["low_stock_default"] = level
     if errors:
         raise validation_failed(errors)
     user = current_user()

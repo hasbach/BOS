@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppBar } from "@/components/AppBar";
 import { Banner } from "@/components/Banner";
@@ -63,13 +63,19 @@ function List() {
   const [more, setMore] = useState<More>("idle");
   const [attempt, setAttempt] = useState(0);
   const [sheet, setSheet] = useState(false);
+  const request = useRef<AbortController | null>(null);
 
   const store = stores.some((candidate) => candidate.id === storeId) ? storeId : "";
 
   useEffect(() => {
     const controller = new AbortController();
+    request.current = controller;
     listLowStock({ store_id: store || undefined }, controller.signal).then(
-      (result) => setPage({ k: "ready", items: result.items, next: result.next_cursor, total: typeof result.total === "number" ? result.total : null }),
+      (result) => {
+        if (controller.signal.aborted) return;
+        setPage({ k: "ready", items: result.items, next: result.next_cursor, total: typeof result.total === "number" ? result.total : null });
+        setMore("idle");
+      },
       (error: unknown) => {
         if (!controller.signal.aborted) setPage({ k: "error", error });
       },
@@ -79,13 +85,16 @@ function List() {
 
   async function loadMore() {
     if (page.k !== "ready" || !page.next || more === "loading") return;
+    const signal = request.current?.signal;
+    if (!signal || signal.aborted) return;
     setMore("loading");
     try {
-      const result = await listLowStock({ store_id: store || undefined, cursor: page.next });
+      const result = await listLowStock({ store_id: store || undefined, cursor: page.next }, signal);
+      if (signal.aborted) return;
       setPage((current) => (current.k === "ready" ? { ...current, items: [...current.items, ...result.items], next: result.next_cursor } : current));
       setMore("idle");
     } catch {
-      setMore("error");
+      if (!signal.aborted) setMore("error");
     }
   }
 
@@ -161,6 +170,8 @@ function List() {
           onClose={() => setSheet(false)}
           onPick={(id) => {
             setSheet(false);
+            if (id === store) return;
+            request.current?.abort();
             setPage({ k: "loading" });
             setMore("idle");
             setStoreId(id);

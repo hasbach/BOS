@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LowStockList } from "@/app/[locale]/(shell)/more/catalog/low-stock/LowStockList";
@@ -109,6 +109,34 @@ describe("low stock list (screens 158 to 161)", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "Store" })).getByRole("radio", { name: "Store B" }));
     await waitFor(() => expect(lowCalls(calls)).toHaveLength(2));
     expect(queryOf(lowCalls(calls)[1]!)).toEqual({ store_id: "st-b" });
+  });
+
+  it("keeps the current rows when the current store is selected again", async () => {
+    const calls = catalogApi(() => reply(200, lowPage([SLIM_32])));
+    renderMe(<LowStockList />, catalogOwner());
+    await screen.findByText("Slim blue jeans");
+    fireEvent.click(screen.getByRole("button", { name: /All stores/ }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Store" })).getByRole("radio", { name: "All stores" }));
+    expect(screen.getByText("Slim blue jeans")).toBeInTheDocument();
+    expect(lowCalls(calls)).toHaveLength(1);
+  });
+
+  it("ignores a pending pagination response after the store changes", async () => {
+    let complete: (response: Response) => void = () => {};
+    catalogApi((call) => {
+      if (call.url.includes("cursor=")) return new Promise<Response>((resolve) => { complete = resolve; });
+      if (call.url.includes("store_id=st-b")) return reply(200, lowPage([SLIM_32]));
+      return reply(200, lowPage([WIDE_30], { next_cursor: "c-2" }));
+    });
+    renderMe(<LowStockList />, catalogOwner());
+    await screen.findByText("Wide-leg black jeans");
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    fireEvent.click(screen.getByRole("button", { name: /All stores/ }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Store" })).getByRole("radio", { name: "Store B" }));
+    await screen.findByText("Slim blue jeans");
+    await act(async () => { complete(reply(200, lowPage([SHIRT_L], { next_cursor: "c-3" }))); });
+    expect(screen.queryByText("Linen shirt")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
   });
 
   it("shows the loading state while the first page loads", () => {

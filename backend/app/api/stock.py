@@ -1,6 +1,6 @@
-"""Stock changes and stock history, ``/api/v1/catalog/variants/{variantId}/...`` (User Story 2).
+"""Stock changes, stock history and low-stock warnings (User Stories 2 and 4).
 
-Both routes need ``stock.adjust`` (owners and managers; held only by roles that always have
+These routes need ``stock.adjust`` (owners and managers; held only by roles that always have
 every store, so no store scope applies). A variant of another business is answered 404 like
 a made-up one (``access.denied_tenant``). Archived variants can still be adjusted.
 
@@ -21,12 +21,13 @@ from typing import Any, cast
 
 from flask import Blueprint, jsonify, request
 from flask.typing import ResponseReturnValue
+from sqlalchemy import text
 
 from app.api.common import client_ip, json_body, validation_failed
 from app.core.idempotency import HEADER, idempotent
 from app.core.permissions import require
 from app.core.request_context import current_user, not_found_in_tenant, request_db
-from app.services import inventory
+from app.services import inventory, skus
 from app.services.common import NotFound
 
 bp = Blueprint("stock", __name__, url_prefix="/api/v1")
@@ -86,6 +87,65 @@ def list_movements(variant_id: uuid.UUID) -> ResponseReturnValue:
             "next_cursor": encode_seq(page.next_seq) if page.next_seq is not None else None,
         }
     )
+
+
+@bp.get("/catalog/low-stock")
+@require("stock.adjust")
+def list_low_stock() -> ResponseReturnValue:
+    errors: dict[str, str] = {}
+    cursor = None
+    if "cursor" in request.args:
+        cursor = _decode_low_stock_cursor(request.args["cursor"])
+        if cursor is None:
+            errors["cursor"] = "invalid"
+    store_id = None
+    if "store_id" in request.args:
+        try:
+            store_id = uuid.UUID(request.args["store_id"])
+        except ValueError:
+            errors["store_id"] = "invalid"
+    if errors:
+        raise validation_failed(errors)
+
+    db = request_db()
+    if store_id is not None:
+        # Owners and managers can use any store in the tenant, like catalog search.
+        store = db.execute(text("SELECT id FROM stores WHERE id = :id"), {"id": store_id})
+        if store.scalar_one_or_none() is None:
+            not_found_in_tenant("store", store_id)
+
+    page = inventory.low_stock_page(db, store_id, cursor)
+    next_cursor = None
+    if page.next_cursor is not None:
+        payload = json.dumps(page.next_cursor, separators=(",", ":")).encode()
+        next_cursor = base64.urlsafe_b64encode(payload).decode().rstrip("=")
+    result: dict[str, object] = {"items": page.items, "next_cursor": next_cursor}
+    if page.total is not None:
+        result["total"] = page.total
+    return jsonify(result)
+
+
+def _decode_low_stock_cursor(raw: str) -> inventory.LowStockCursor | None:
+    # Bound decoding work. The valid payload is an integer and a <=64-character SKU.
+    if not raw or len(raw) > 128:
+        return None
+    try:
+        decoded = json.loads(base64.b64decode(raw + "=" * (-len(raw) % 4), b"-_", validate=True))
+    except (ValueError, binascii.Error):
+        return None
+    if not isinstance(decoded, list) or len(decoded) != 2:
+        return None
+    available, sku = decoded
+    if not _is_int(available) or not 0 <= available <= MAX_QUANTITY:
+        return None
+    if not isinstance(sku, str):
+        return None
+    try:
+        if skus.check_sku(sku) != sku:
+            return None
+    except skus.InvalidCode:
+        return None
+    return available, sku
 
 
 # ---- cursor -------------------------------------------------------------------------------------

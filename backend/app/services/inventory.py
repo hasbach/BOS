@@ -491,6 +491,81 @@ def movements_page(db: Session, variant: StockVariant, before_seq: int | None) -
     return MovementPage([movement_json(row) for row in rows], rows[-1].seq if more else None)
 
 
+# ---- low stock (FR-023, FR-024) ----------------------------------------------------------------
+
+
+LOW_STOCK_PER_PAGE = 20
+LowStockCursor = tuple[int, str]
+
+
+@dataclass(frozen=True)
+class LowStockPage:
+    items: list[dict[str, Any]]
+    next_cursor: LowStockCursor | None
+    total: int | None
+
+
+def low_stock_page(
+    db: Session, store_id: uuid.UUID | None, cursor: LowStockCursor | None
+) -> LowStockPage:
+    """Read live availability and thresholds in the caller's tenant transaction."""
+    params: dict[str, Any] = {"limit": LOW_STOCK_PER_PAGE + 1}
+    clauses = ["v.status = 'active'", "p.status = 'active'", "level > 0", "available <= level"]
+    if store_id is not None:
+        clauses.append(
+            "EXISTS (SELECT 1 FROM product_stores ps WHERE ps.product_id = p.id "
+            "AND ps.store_id = :store_id)"
+        )
+        params["store_id"] = store_id
+    if cursor is not None:
+        clauses.append("(available, v.sku) > (:after_available, :after_sku)")
+        params.update(after_available=cursor[0], after_sku=cursor[1])
+    count_column = ", count(*) OVER () AS total" if cursor is None else ""
+    rows = db.execute(
+        text(
+            "SELECT p.id AS product_id, p.name_en, p.name_ar, v.id AS variant_id, v.sku, "  # noqa: S608
+            "  array_remove(ARRAY[o1.label, o2.label], NULL) AS option_values, "
+            "  (SELECT ph.id FROM product_photos ph WHERE ph.product_id = p.id "
+            "   ORDER BY ph.position LIMIT 1) AS main_photo_id, "
+            f"  b.on_hand, b.allocated, available, level{count_column} "
+            "FROM variants v JOIN products p ON p.id = v.product_id "
+            "JOIN stock_balances b ON b.inventory_item_id = v.inventory_item_id "
+            "JOIN tenants t ON t.id = v.tenant_id "
+            "LEFT JOIN option_values o1 ON o1.id = v.option1_value_id "
+            "LEFT JOIN option_values o2 ON o2.id = v.option2_value_id "
+            "CROSS JOIN LATERAL (SELECT b.on_hand - b.allocated AS available, "
+            "  COALESCE(v.low_stock_level, t.low_stock_default) AS level) stock "
+            f"WHERE {' AND '.join(clauses)} ORDER BY available, v.sku LIMIT :limit"
+        ),
+        params,
+    ).all()
+    page = rows[:LOW_STOCK_PER_PAGE]
+    # A SKU is unique within the tenant; no extra tiebreaker is needed.
+    next_cursor = (page[-1].available, page[-1].sku) if len(rows) > len(page) else None
+    total = (rows[0].total if rows else 0) if cursor is None else None
+    return LowStockPage(
+        items=[
+            {
+                "product_id": str(row.product_id),
+                "product_name_en": row.name_en,
+                "product_name_ar": row.name_ar,
+                "variant_id": str(row.variant_id),
+                "sku": row.sku,
+                "option_values": row.option_values,
+                "main_photo_id": str(row.main_photo_id) if row.main_photo_id else None,
+                "on_hand": row.on_hand,
+                "allocated": row.allocated,
+                "available": row.available,
+                "level": row.level,
+                "stock_state": "out" if row.available == 0 else "low",
+            }
+            for row in page
+        ],
+        next_cursor=next_cursor,
+        total=total,
+    )
+
+
 # ---- integrity (FR-013, FR-018, FR-022) --------------------------------------------------------
 
 

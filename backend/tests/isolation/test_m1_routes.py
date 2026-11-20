@@ -369,6 +369,48 @@ def test_the_list_hides_other_stores_and_refuses_their_filter(
 # ---- stock: adjustments and a variant's stock history (US2, FR-014, SC-007) -------------------
 
 
+LOW_STOCK_RULE = "/api/v1/catalog/low-stock"
+
+
+@covers("GET", LOW_STOCK_RULE, "missing_permission")
+@pytest.mark.parametrize("role", ["sales", "packing", "dispatch", "sales_limited"])
+def test_low_stock_list_requires_stock_adjust(
+    user_client: UserClient, owner_engine: Engine, worlds: TwoTenants, role: str
+) -> None:
+    a = worlds.a
+    result = user_client(a.user(role), a.tenant_id).get(LOW_STOCK_RULE)
+    assert result.status_code == 403
+    assert result.get_json()["error"]["code"] == "forbidden"
+    [denied] = history(owner_engine, a.tenant_id, "access.denied_permission")
+    assert (denied.actor_id, denied.data["permission"]) == (a.user(role), "stock.adjust")
+
+
+@covers("GET", LOW_STOCK_RULE, "cross_tenant")
+@pytest.mark.parametrize("role", ["owner", "manager"])
+def test_low_stock_hides_another_business_and_refuses_its_store_filter(
+    user_client: UserClient, owner_engine: Engine, worlds: TwoTenants, role: str
+) -> None:
+    a, b = worlds.a, worlds.b
+    arrange_product(owner_engine, b.tenant_id, b.user_id, on_hand=1, store_ids=(b.store_id,))
+    client = user_client(a.user(role), a.tenant_id)
+    listing = client.get(LOW_STOCK_RULE)
+    assert listing.status_code == 200
+    assert listing.get_json() == {"items": [], "total": 0, "next_cursor": None}
+
+    made_up = uuid.uuid4()
+    foreign = client.get(LOW_STOCK_RULE, query_string={"store_id": b.store_id})
+    unknown = client.get(LOW_STOCK_RULE, query_string={"store_id": made_up})
+    assert foreign.status_code == unknown.status_code == 404
+    assert foreign.get_data() == unknown.get_data()
+    denied = history(owner_engine, a.tenant_id, "access.denied_tenant")
+    assert len(denied) == 2
+    assert {(e.actor_id, e.target_type, e.target_id) for e in denied} == {
+        (a.user(role), "store", b.store_id),
+        (a.user(role), "store", made_up),
+    }
+    assert history(owner_engine, b.tenant_id, "access.denied_tenant") == []
+
+
 STOCK_CALLS: list[tuple[str, str, str]] = [
     ("POST", ADJUST_RULE, "adjust"),
     ("GET", MOVEMENTS_RULE, "movements"),
