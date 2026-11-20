@@ -263,6 +263,33 @@ def seed_demo() -> None:
         click.echo(f"Every demo user's password is the one in {DEMO_PASSWORD_ENV}.")
 
 
+@bos_cli.command("seed-catalog")
+@click.option("--variants", required=True, type=click.IntRange(min=1), help="Variants to add.")
+@click.option("--tenant", required=True, help="Demo business id.")
+def seed_catalog(variants: int, tenant: str) -> None:
+    """Append synthetic catalog data to a demo business (development only)."""
+    from app import get_config
+    from app.core.db import get_engine
+    from app.services.seed import CatalogSeedError
+    from app.services.seed import seed_catalog as run_seed
+
+    if get_config(current_app).environment != "development":
+        raise click.ClickException("seed-catalog requires BOS_ENVIRONMENT=development.")
+    if os.environ.get(ALLOW_DEMO_SEED_ENV, "").strip().lower() != "true":
+        raise click.ClickException(f"seed-catalog requires {ALLOW_DEMO_SEED_ENV}=true.")
+    try:
+        tenant_id = uuid.UUID(tenant)
+    except ValueError:
+        raise click.ClickException(f"{tenant!r} is not a business id.") from None
+    try:
+        products = run_seed(get_engine(), tenant_id, variants)
+    except CatalogSeedError as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(
+        f"Added {variants} variants across {products} products to demo business {tenant_id}."
+    )
+
+
 def register_cli(app: Flask) -> None:
     app.cli.add_command(db_cli)
     app.cli.add_command(bos_cli)

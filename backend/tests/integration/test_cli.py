@@ -75,6 +75,14 @@ def _snapshot(owner: Engine) -> dict[str, list[Any]]:
         "idempotency_keys",
         "audit_entries",
         "warehouses",
+        "products",
+        "product_stores",
+        "product_options",
+        "option_values",
+        "variants",
+        "inventory_items",
+        "stock_balances",
+        "stock_movements",
     ]
     with owner.connect() as conn:
         return {
@@ -404,10 +412,16 @@ def test_seed_demo_creates_exactly_the_documented_rows(
             "WHERE tenant_id = :t ORDER BY event, target_id",
             t=demo.id,
         )
-        assert sorted((h.event, h.target_id) for h in history) == sorted(
+        setup_history = [h for h in history if h.event != "product.created"]
+        assert sorted((h.event, h.target_id) for h in setup_history) == sorted(
             [("tenant.created", demo.id)] + [("store.created", s.id) for s in stores]
         )
-        assert {(h.actor_type, h.actor_id) for h in history} == {("system", None)}
+        assert {(h.actor_type, h.actor_id) for h in setup_history} == {("system", None)}
+        products = _rows(owner_engine, "SELECT id FROM products WHERE tenant_id = :t", t=demo.id)
+        owner = next(u for u in demo.users if u.role == "owner")
+        assert [
+            (h.target_id, h.actor_type, h.actor_id) for h in history if h.event == "product.created"
+        ] == [(product.id, "user", owner.id) for product in sorted(products)]
 
     denim = seed.DEMO_TENANTS[0]
     limited = _rows(
@@ -448,6 +462,37 @@ def test_seed_demo_twice_changes_nothing_the_second_time(
     assert _snapshot(owner_engine) == before
 
 
+@pytest.mark.usefixtures("integrity_check")
+def test_seed_demo_catalog_shows_low_and_out_of_stock_across_both_stores(
+    app: Flask, owner_engine: Engine, clean_db: None
+) -> None:
+    result = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": STRONG})
+    assert result.exit_code == 0, result.output
+    denim = seed.DEMO_TENANTS[0]
+    [count] = _rows(owner_engine, "SELECT count(*) FROM products WHERE tenant_id = :t", t=denim.id)
+    assert count[0] == 8
+    assert set(_rows(owner_engine, "SELECT DISTINCT store_id FROM product_stores")) == {
+        (store.id,) for store in denim.stores
+    }
+    stock = _rows(
+        owner_engine,
+        "SELECT b.on_hand, COALESCE(v.low_stock_level, t.low_stock_default) AS level, "
+        "m.reason, m.quantity, m.on_hand_after FROM variants v "
+        "JOIN tenants t ON t.id = v.tenant_id "
+        "JOIN stock_balances b ON b.inventory_item_id = v.inventory_item_id "
+        "LEFT JOIN stock_movements m ON m.inventory_item_id = b.inventory_item_id "
+        "WHERE v.tenant_id = :t",
+        t=denim.id,
+    )
+    assert sum(s.on_hand == 0 for s in stock) == 1
+    assert sum(0 < s.on_hand <= s.level for s in stock) == 1
+    assert any(s.on_hand > s.level for s in stock)
+    for s in stock:
+        assert (s.reason, s.quantity, s.on_hand_after) == (
+            ("opening", s.on_hand, s.on_hand) if s.on_hand else (None, None, None)
+        )
+
+
 def test_seed_demo_leaves_other_businesses_alone(
     app: Flask, owner_engine: Engine, fresh_tenants: TwoTenants
 ) -> None:
@@ -461,6 +506,115 @@ def test_seed_demo_leaves_other_businesses_alone(
         assert set(rows) <= set(after[table]), table
     demo_ids = {str(t.id) for t in seed.DEMO_TENANTS}
     assert {row[0] for row in after["tenants"]} - {row[0] for row in before["tenants"]} == demo_ids
+
+
+# ---- seed-catalog (M1 T104) --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("environment", "allow", "error"),
+    [
+        ("development", "", "BOS_ALLOW_DEMO_SEED=true"),
+        ("development", "1", "BOS_ALLOW_DEMO_SEED=true"),
+        ("staging", "true", "BOS_ENVIRONMENT=development"),
+        ("production", "true", "BOS_ENVIRONMENT=development"),
+    ],
+)
+def test_seed_catalog_refuses_without_both_development_guards(
+    app: Flask, owner_engine: Engine, clean_db: None, environment: str, allow: str, error: str
+) -> None:
+    app.extensions["bos_config"] = dataclasses.replace(
+        app.extensions["bos_config"], environment=environment
+    )
+    result = _run(
+        app,
+        "seed-catalog",
+        "--variants",
+        "5",
+        "--tenant",
+        str(seed.DEMO_TENANTS[0].id),
+        env={"BOS_ALLOW_DEMO_SEED": allow},
+    )
+    assert result.exit_code != 0
+    assert error in result.output
+    assert _rows(owner_engine, "SELECT id FROM products") == []
+
+
+@pytest.mark.usefixtures("integrity_check")
+@pytest.mark.parametrize(("variants", "full_products", "remainder"), [(7, 1, 2), (5000, 1000, 0)])
+def test_seed_catalog_creates_exact_variant_count_with_opening_stock(
+    app: Flask,
+    owner_engine: Engine,
+    clean_db: None,
+    variants: int,
+    full_products: int,
+    remainder: int,
+) -> None:
+    app.extensions["bos_config"] = dataclasses.replace(
+        app.extensions["bos_config"], environment="development"
+    )
+    # The second demo business starts empty; the first already has its demo catalog.
+    setup = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": STRONG})
+    assert setup.exit_code == 0, setup.output
+    other, target = seed.DEMO_TENANTS
+    before = _rows(
+        owner_engine, "SELECT id FROM products WHERE tenant_id = :t ORDER BY id", t=other.id
+    )
+    result = _run(
+        app, "seed-catalog", "--variants", str(variants), "--tenant", str(target.id), env=ALLOW_SEED
+    )
+    assert result.exit_code == 0, result.output or repr(result.exception)
+    assert str(variants) in result.output
+    assert (
+        _rows(owner_engine, "SELECT id FROM products WHERE tenant_id = :t ORDER BY id", t=other.id)
+        == before
+    )
+
+    counts = _rows(
+        owner_engine,
+        "SELECT count(v.id) FROM products p LEFT JOIN variants v ON v.product_id = p.id "
+        "WHERE p.tenant_id = :t GROUP BY p.id ORDER BY count(v.id)",
+        t=target.id,
+    )
+    assert [n for (n,) in counts] == ([remainder] if remainder else []) + [5] * full_products
+    assert _rows(
+        owner_engine,
+        "SELECT count(*) FROM variants v "
+        "JOIN stock_balances b ON b.inventory_item_id = v.inventory_item_id "
+        "JOIN stock_movements m ON m.inventory_item_id = v.inventory_item_id "
+        "WHERE v.tenant_id = :t AND m.reason = 'opening' AND m.quantity = b.on_hand "
+        "AND m.on_hand_after = b.on_hand AND b.on_hand > 0 AND b.allocated = 0",
+        t=target.id,
+    ) == [(variants,)]
+
+
+@pytest.mark.parametrize(
+    ("variants", "tenant", "error"),
+    [
+        ("0", "existing", "Invalid value for '--variants'"),
+        ("5", "not-a-uuid", "not a business id"),
+        ("5", str(uuid.UUID(int=7)), "No demo business"),
+        ("5", "existing", "No demo business"),
+    ],
+)
+def test_seed_catalog_refuses_invalid_arguments_or_non_demo_target(
+    app: Flask,
+    owner_engine: Engine,
+    fresh_tenants: TwoTenants,
+    variants: str,
+    tenant: str,
+    error: str,
+) -> None:
+    app.extensions["bos_config"] = dataclasses.replace(
+        app.extensions["bos_config"], environment="development"
+    )
+    if tenant == "existing":
+        tenant = str(fresh_tenants.a.tenant_id)
+    before = _snapshot(owner_engine)
+    result = _run(app, "seed-catalog", "--variants", variants, "--tenant", tenant, env=ALLOW_SEED)
+    assert result.exit_code != 0
+    assert error in result.output
+    assert _snapshot(owner_engine) == before
 
 
 # ---- stock-check (M1 T073, FR-022, R45) -----------------------------------------------------------
