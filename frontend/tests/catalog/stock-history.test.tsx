@@ -101,6 +101,8 @@ describe("variant stock history (designs 153 to 156)", () => {
     expect(await screen.findByText(/By BOS, automatically/)).toBeInTheDocument();
     expect(screen.getByText("Recorded with Adjust stock")).toBeInTheDocument();
     expect(screen.getByText("From a CSV import")).toBeInTheDocument();
+    const consumed = screen.getByText("Sent with an order").closest("li");
+    expect(consumed).toHaveTextContent("Reserved stock used");
   });
 
   it("loads 50 more with the cursor, keeps the lines shown and shows placeholders meanwhile (design 154)", async () => {

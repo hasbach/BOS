@@ -15,6 +15,7 @@ import { OfflineNotice } from "@/components/OfflineNotice";
 import { Screen, ScreenBody, ScreenFooter } from "@/components/Screen";
 import { SessionEnded } from "@/components/SessionEnded";
 import { isApiError, isSessionEnded } from "@/lib/api";
+import { eventName } from "@/lib/audit";
 import { CATALOG, getProduct, productName } from "@/lib/catalog";
 import type { Product, StockNumbers, Variant } from "@/lib/catalog";
 import { listMovements, stockStateOf } from "@/lib/stock";
@@ -305,7 +306,10 @@ function Row({ movement, locale }: { movement: Movement; locale: string }) {
   const h = useTranslations("catalog.history");
   const Icon = REASON_ICONS[movement.reason] ?? EditIcon;
   const who = movement.actor_type === "system" || !movement.actor_name ? t("history.actor.system") : movement.actor_name;
-  const source = movement.reason === "opening" && movement.source !== "allocation" ? h(`source.${movement.source}`) : null;
+  // Reserve/release only change availability and appear in audit history. Consumption changes on hand.
+  const source = movement.source === "allocation"
+    ? eventName("stock.consumed", t)
+    : movement.reason === "opening" ? h(`source.${movement.source}`) : null;
 
   return (
     <li className={own.move}>
