@@ -407,7 +407,7 @@ def adjust(
     details: dict[str, Any] = {"sku": variant.sku, "reason": data.reason, "quantity": quantity}
     if data.reason == "count_correction":
         details["counted_quantity"] = data.counted_quantity
-    details.update({"on_hand_before": balance.on_hand, "on_hand_after": after, "note": data.note})
+    details.update({"on_hand_before": balance.on_hand, "on_hand_after": after})
     audit.record(
         db,
         tenant_id=actor.tenant_id,

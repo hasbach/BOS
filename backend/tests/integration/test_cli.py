@@ -586,6 +586,32 @@ def test_seed_catalog_creates_exact_variant_count_with_opening_stock(
         "AND m.on_hand_after = b.on_hand AND b.on_hand > 0 AND b.allocated = 0",
         t=target.id,
     ) == [(variants,)]
+    [store] = _rows(owner_engine, "SELECT id FROM stores WHERE tenant_id = :t", t=target.id)
+    seeded = _rows(
+        owner_engine,
+        "SELECT p.id, p.code, count(v.id) AS variants, sum(b.on_hand) AS opening_units "
+        "FROM products p JOIN variants v ON v.product_id = p.id "
+        "JOIN stock_balances b ON b.inventory_item_id = v.inventory_item_id "
+        "WHERE p.tenant_id = :t GROUP BY p.id ORDER BY p.id",
+        t=target.id,
+    )
+    entries = _rows(
+        owner_engine,
+        "SELECT actor_type, actor_id, target_type, target_id, data FROM audit_entries "
+        "WHERE tenant_id = :t AND event = 'product.created' ORDER BY target_id",
+        t=target.id,
+    )
+    assert len(entries) == len(seeded)
+    for entry, product in zip(entries, seeded, strict=True):
+        assert (entry.actor_type, entry.actor_id) == ("system", None)
+        assert (entry.target_type, entry.target_id) == ("product", product.id)
+        assert entry.data == {
+            "code": product.code,
+            "source": "seed-catalog",
+            "variants": product.variants,
+            "store_ids": [str(store.id)],
+            "opening_units": product.opening_units,
+        }
 
 
 @pytest.mark.parametrize(

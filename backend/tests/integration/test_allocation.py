@@ -507,7 +507,7 @@ def test_an_unknown_allocation_is_not_found(
 # ---- history and versions (FR-020, R43) ---------------------------------------------------------
 
 
-def test_each_change_is_recorded_with_the_request_key_and_lines(
+def test_each_change_is_recorded_with_the_allocation_id_and_lines(
     app_engine: Engine,
     owner_engine: Engine,
     worlds: TwoTenants,
@@ -523,11 +523,9 @@ def test_each_change_is_recorded_with_the_request_key_and_lines(
         allocation.consume(db, person, kept.id)
         allocation.release(db, system, dropped.id)
 
-    entries = {
-        (e.event, e.data["request_key"]): e
-        for e in history(owner_engine, a.tenant_id)
-        if e.event.startswith("stock.")
-    }
+    rows = [e for e in history(owner_engine, a.tenant_id) if e.event.startswith("stock.")]
+    assert len(rows) == 4
+    entries = {(e.event, e.target_id): e for e in rows}
     expected_lines = sorted(
         [
             {"sku": stock.skus[0], "inventory_item_id": str(first), "quantity": 2},
@@ -536,15 +534,15 @@ def test_each_change_is_recorded_with_the_request_key_and_lines(
         key=lambda line: line["inventory_item_id"],
     )
     for event in ("stock.allocated", "stock.consumed"):
-        entry = entries[(event, "order-1")]
+        entry = entries[(event, kept.id)]
         assert (entry.target_type, entry.target_id) == ("allocation", kept.id)
         assert (entry.actor_type, entry.actor_id) == ("user", a.user_id)
-        assert entry.data == {"request_key": "order-1", "lines": expected_lines}
+        assert entry.data == {"lines": expected_lines}
     for event in ("stock.allocated", "stock.released"):
-        entry = entries[(event, "order-2")]
+        entry = entries[(event, dropped.id)]
+        assert (entry.target_type, entry.target_id) == ("allocation", dropped.id)
         assert (entry.actor_type, entry.actor_id) == ("system", None)
         assert entry.data == {
-            "request_key": "order-2",
             "lines": [{"sku": stock.skus[0], "inventory_item_id": str(first), "quantity": 1}],
         }
     assert len(entries) == 4

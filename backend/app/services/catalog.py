@@ -730,8 +730,6 @@ def create_product(
         product_id,
         {
             "code": data.code,
-            "name_en": data.name_en,
-            "name_ar": data.name_ar,
             "variants": len(data.variants),
             "store_ids": sorted(str(s) for s in set(data.store_ids)),
             "opening_units": sum(v.opening_quantity for v in data.variants),
@@ -788,24 +786,27 @@ def update_product(
 
     before: dict[str, Any] = {}
     after: dict[str, Any] = {}
-    for name, value in _fields(data).items():
-        if getattr(row, name) != value:
-            before[name], after[name] = getattr(row, name), value
+    changed_fields = [
+        name
+        for name in ("name_en", "name_ar", "description_en", "description_ar")
+        if getattr(row, name) != getattr(data, name)
+    ]
+    if row.code != data.code:
+        before["code"], after["code"] = row.code, data.code
     stores_before = sorted(str(s) for s in existing.store_ids)
     stores_after = sorted(str(s) for s in set(data.store_ids))
     if stores_before != stores_after:
         before["store_ids"], after["store_ids"] = stores_before, stores_after
     if existing.photo_count != len(data.photo_ids):
         before["photos"], after["photos"] = existing.photo_count, len(data.photo_ids)
-    options_after = _options_summary(db, product_id)
-    if before_options != options_after:
-        before["options"], after["options"] = before_options, options_after
+    if before_options != _options_summary(db, product_id):
+        changed_fields.append("options")
     _record(
         db,
         actor,
         "product.updated",
         product_id,
-        {"before": before, "after": after, **variant_changes},
+        {"before": before, "after": after, "changed_fields": changed_fields, **variant_changes},
     )
     return Saved(product_id, paths)
 
@@ -1095,6 +1096,6 @@ def delete_product(db: Session, actor: Actor, product_id: uuid.UUID, version: in
         actor,
         "product.deleted",
         product_id,
-        {"code": row.code, "name_en": row.name_en, "name_ar": row.name_ar},
+        {"code": row.code},
     )
     return paths

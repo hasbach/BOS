@@ -632,7 +632,6 @@ def confirm(db: Session, actor: catalog.Actor, batch_id: uuid.UUID) -> dict[str,
         target_id=batch_id,
         ip=actor.ip,
         data={
-            "file_name": batch.file_name,
             "products": batch.product_count,
             "variants": batch.variant_count,
             "opening_units": batch.opening_units,

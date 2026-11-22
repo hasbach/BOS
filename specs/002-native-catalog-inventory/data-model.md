@@ -369,21 +369,27 @@ maintenance.
 
 ## History (audit) events
 
-Events: added to M0's fixed list. Same rules as M0: change events use `{"before", "after"}`
-with same-shaped sides; never secrets. Money as decimal strings.
+Events: added to M0's fixed list. Change events use `{"before", "after"}` with
+same-shaped sides. Money is represented as decimal strings. The table describes newly
+written entries; historical payloads are not rewritten.
 
 | Event | Target | `data` |
 |---|---|---|
-| `product.created` | product | `code`, `name_en`, `name_ar`, `variants` (count), `store_ids`, `opening_units` |
-| `product.updated` | product | change of product fields (`code`, names, descriptions, `store_ids`, `photos` count, option names and values); plus, when variants changed, `variants_added`, `variants_archived`, `variants_restored`, `variants_deleted` (lists of SKUs) and `variants_changed` (`[{sku, before, after}]` over `sku`, `price`, `currency`, `low_stock_level`, `photo`) |
+| `product.created` | product | `code`, `variants` (count), `store_ids`, `opening_units`; bulk `seed-catalog` also includes fixed `source: "seed-catalog"` |
+| `product.updated` | product | `before` and `after` for changed `code`, `store_ids`, and `photos` count; `changed_fields` lists changed text fields using only `name_en`, `name_ar`, `description_en`, `description_ar`, `options` (option names or values), or `[]` if none changed. Variant diffs are `variants_added`, `variants_archived`, `variants_restored`, `variants_deleted` (lists of SKUs) and `variants_changed` (`[{sku, before, after}]` over `sku`, `price`, `currency`, `low_stock_level`, `photo`). |
 | `product.archived` | product | change; sides are status strings |
 | `product.restored` | product | change; sides are status strings |
-| `product.deleted` | product | `code`, `name_en`, `name_ar` |
-| `stock.adjusted` | variant | `sku`, `reason`, `quantity` (signed), `counted_quantity` (count corrections), `on_hand_before`, `on_hand_after`, `note` |
-| `stock.allocated` | allocation | `request_key`, `lines`: `[{sku, inventory_item_id, quantity}]` |
-| `stock.released` | allocation | `request_key`, `lines` as above |
-| `stock.consumed` | allocation | `request_key`, `lines` as above |
-| `catalog.imported` | import_batch | `file_name`, `products`, `variants`, `opening_units` |
+| `product.deleted` | product | `code` |
+| `stock.adjusted` | variant | `sku`, `reason`, `quantity` (signed), `counted_quantity` (count corrections), `on_hand_before`, `on_hand_after` |
+| `stock.allocated` | allocation (ID in `target_id`) | `lines`: `[{sku, inventory_item_id, quantity}]` |
+| `stock.released` | allocation (ID in `target_id`) | `lines` as above |
+| `stock.consumed` | allocation (ID in `target_id`) | `lines` as above |
+| `catalog.imported` | import_batch (ID in `target_id`) | `products`, `variants`, `opening_units` |
+
+Minimization applies to `data` only. Stock movement notes, allocation request keys and import
+filenames remain in their operational records. The History API still resolves `target_name`
+from current records (product English name or Arabic fallback, variant SKU, allocation
+request key, import filename); those labels and retained identifiers are not value-redacted.
 
 Opening quantities entered in the product form are covered by `product.created`
 (`opening_units`) and by their ledger movements; an import is one `catalog.imported` entry

@@ -115,10 +115,12 @@ def test_two_options_give_six_variants_each_with_item_balance_and_opening_moveme
     assert [m.on_hand_after for m in moves] == [1, 2, 3, 4, 5]
     [entry] = history(owner_engine, a.tenant_id, "product.created")
     assert entry.target_id == uuid.UUID(product["id"])
-    assert entry.data["opening_units"] == 15
-    assert entry.data["variants"] == 6
-    assert entry.data["code"] == "JN-SLIM"
-    assert entry.data["store_ids"] == [str(a.store_id)]
+    assert entry.data == {
+        "code": "JN-SLIM",
+        "variants": 6,
+        "store_ids": [str(a.store_id)],
+        "opening_units": 15,
+    }
 
 
 def test_a_product_without_options_has_exactly_one_variant(
@@ -857,7 +859,7 @@ def test_delete_is_refused_with_history_and_removes_everything_without(
     assert count(owner_engine, "stock_balances", a.tenant_id) == 2
     assert count(owner_engine, "product_stores", a.tenant_id) == 0
     [entry] = history(owner_engine, a.tenant_id, "product.deleted")
-    assert entry.data == {"code": "PLAIN", "name_en": "Slim jeans", "name_ar": "جينز ضيق"}
+    assert entry.data == {"code": "PLAIN"}
     assert owner.get(f"{PRODUCTS}/{plain['id']}").status_code == 404
 
 
@@ -868,6 +870,12 @@ def test_one_product_updated_entry_per_save_with_the_changes(
     product = created(owner, jeans(store_ids=[a.store_id]))
     body = as_update(product)
     body["name_en"] = "Skinny jeans"
+    body["name_ar"] = "جينز مستقيم"
+    body["description_en"] = "Mid-rise denim"
+    body["description_ar"] = "دنيم متوسط الخصر"
+    body["options"][0]["name"] = "Waist"
+    body["options"][1]["values"][0]["label"] = "Navy"
+    body["code"] = "JN-SKINNY"
     body["store_ids"] = [str(a.store_id), str(a.second_store_id)]
     body["variants"][0]["price"] = "19.99"
     body["variants"][0]["low_stock_level"] = 4
@@ -876,20 +884,25 @@ def test_one_product_updated_entry_per_save_with_the_changes(
 
     [entry] = history(owner_engine, a.tenant_id, "product.updated")
     assert entry.target_id == uuid.UUID(product["id"])
-    assert entry.data["before"]["name_en"] == "Slim jeans"
-    assert entry.data["after"]["name_en"] == "Skinny jeans"
-    assert sorted(entry.data["after"]["store_ids"]) == sorted(
-        [str(a.store_id), str(a.second_store_id)]
-    )
-    assert "code" not in entry.data["after"]
-    [changed] = entry.data["variants_changed"]
-    assert changed == {
-        "sku": "JN-SLIM-30-BLUE",
-        "before": {"price": "25.00", "low_stock_level": None},
-        "after": {"price": "19.99", "low_stock_level": 4},
+    assert entry.data == {
+        "before": {"code": "JN-SLIM", "store_ids": [str(a.store_id)]},
+        "after": {
+            "code": "JN-SKINNY",
+            "store_ids": sorted([str(a.store_id), str(a.second_store_id)]),
+        },
+        "changed_fields": ["name_en", "name_ar", "description_en", "description_ar", "options"],
+        "variants_added": [],
+        "variants_archived": [],
+        "variants_restored": [],
+        "variants_deleted": [],
+        "variants_changed": [
+            {
+                "sku": "JN-SLIM-30-BLUE",
+                "before": {"price": "25.00", "low_stock_level": None},
+                "after": {"price": "19.99", "low_stock_level": 4},
+            }
+        ],
     }
-    assert entry.data["variants_added"] == []
-    assert entry.data["variants_archived"] == entry.data["variants_deleted"] == []
 
 
 def test_a_product_can_be_read_with_its_stock_numbers(

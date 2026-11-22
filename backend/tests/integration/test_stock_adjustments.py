@@ -508,7 +508,6 @@ def test_each_change_is_recorded_in_history_with_the_numbers(
         "quantity": 5,
         "on_hand_before": 10,
         "on_hand_after": 15,
-        "note": "Delivery 12",
     }
     assert counted.data == {
         "sku": "ADJ-1",
@@ -517,8 +516,8 @@ def test_each_change_is_recorded_in_history_with_the_numbers(
         "counted_quantity": 12,
         "on_hand_before": 15,
         "on_hand_after": 12,
-        "note": None,
     }
+    assert item_movements(owner_engine, product.item_ids[0])[-2].note == "Delivery 12"
 
 
 def test_the_balance_version_grows_by_one_and_earlier_movements_never_change(

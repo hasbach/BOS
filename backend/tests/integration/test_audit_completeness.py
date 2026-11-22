@@ -33,7 +33,7 @@ from app.services import allocation
 from app.services.inventory import StockActor
 from tests.dbsupport import TwoTenants, insert
 from tests.integration import catalog_support as catalog
-from tests.integration.stock_support import adjust, arrange_product, change
+from tests.integration.stock_support import adjust, arrange_product, change, item_movements
 from tests.integration.us1_support import (
     CSRF,
     NEW_PASSWORD,
@@ -629,6 +629,7 @@ def test_every_m1_action_leaves_exactly_one_entry(
         201,
     )
     item = uuid.UUID(variant["inventory_item_id"])
+    assert item_movements(owner_engine, item)[-1].note == note
     with tenant_transaction(app_engine, tenant) as db:
         reserved = allocation.allocate(db, person, "order-packed", [(item, 2)])
     with tenant_transaction(app_engine, tenant) as db:
@@ -653,7 +654,6 @@ def test_every_m1_action_leaves_exactly_one_entry(
     ok(_patch(owner, "/api/v1/business", {"low_stock_default": 5}))
 
     packed = {
-        "request_key": "order-packed",
         "lines": [{"sku": sku, "inventory_item_id": str(item), "quantity": 2}],
     }
     # Each expected row gives actor id (None for system), target type/id and exact JSON data.
@@ -664,8 +664,6 @@ def test_every_m1_action_leaves_exactly_one_entry(
             product_id,
             {
                 "code": "AUDIT-TEE",
-                "name_en": "Product AUDIT-TEE",
-                "name_ar": "قميص",
                 "variants": 1,
                 "store_ids": [store_id],
                 "opening_units": 8,
@@ -676,8 +674,9 @@ def test_every_m1_action_leaves_exactly_one_entry(
             "product",
             product_id,
             {
-                "before": {"name_en": "Product AUDIT-TEE"},
-                "after": {"name_en": "Cotton tee"},
+                "before": {},
+                "after": {},
+                "changed_fields": ["name_en"],
                 "variants_added": [],
                 "variants_archived": [],
                 "variants_restored": [],
@@ -703,11 +702,7 @@ def test_every_m1_action_leaves_exactly_one_entry(
             owner_id,
             "product",
             deletable.product_id,
-            {
-                "code": "DELETE-ME",
-                "name_en": "Product",
-                "name_ar": None,
-            },
+            {"code": "DELETE-ME"},
         ),
         "stock.adjusted": (
             manager_id,
@@ -720,7 +715,6 @@ def test_every_m1_action_leaves_exactly_one_entry(
                 "counted_quantity": 6,
                 "on_hand_before": 8,
                 "on_hand_after": 6,
-                "note": note,
             },
         ),
         "stock.allocated": (owner_id, "allocation", reserved.id, packed),
@@ -729,7 +723,6 @@ def test_every_m1_action_leaves_exactly_one_entry(
             "allocation",
             held.id,
             {
-                "request_key": "order-cancelled",
                 "lines": [
                     {"sku": stocked.skus[0], "inventory_item_id": str(release_item), "quantity": 1}
                 ],
@@ -741,7 +734,6 @@ def test_every_m1_action_leaves_exactly_one_entry(
             "import_batch",
             uuid.UUID(preview["id"]),
             {
-                "file_name": "stocktake.csv",
                 "products": 2,
                 "variants": 2,
                 "opening_units": 7,

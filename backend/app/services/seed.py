@@ -280,11 +280,11 @@ _PERF_INSERT = text("""
     )
     INSERT INTO audit_entries (id, tenant_id, actor_type, event, target_type, target_id, data)
     SELECT gen_random_uuid(), :tenant, 'system', 'product.created', 'product', p.id,
-           jsonb_build_object('code', p.code, 'name_en', p.name, 'source', 'seed-catalog',
+           jsonb_build_object('code', p.code, 'source', 'seed-catalog',
                               'variants', count(*), 'store_ids', CAST(:stores AS uuid[]),
                               'opening_units', count(*) * CAST(:units AS integer))
     FROM seed_products p JOIN seed_variants v ON v.product_id = p.id
-    GROUP BY p.id, p.code, p.name
+    GROUP BY p.id, p.code
 """)
 
 

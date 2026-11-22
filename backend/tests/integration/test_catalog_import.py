@@ -126,8 +126,9 @@ def test_confirm_persists_catalog_ledger_and_single_audit(
         str(movement.import_batch_id),
     ) == ("opening", "import", 2, a.user_id, saved["id"])
     [audited] = history(owner_engine, a.tenant_id, "catalog.imported")
+    assert (audited.actor_type, audited.actor_id) == ("user", a.user_id)
+    assert (audited.target_type, str(audited.target_id)) == ("import_batch", saved["id"])
     assert audited.data == {
-        "file_name": "catalog.csv",
         "products": 2,
         "variants": 2,
         "opening_units": 2,

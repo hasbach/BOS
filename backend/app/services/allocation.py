@@ -245,7 +245,7 @@ def _reserve(
                 "quantity": line.quantity,
             },
         )
-    _record(db, actor, "stock.allocated", allocation_id, request_key, wanted, items)
+    _record(db, actor, "stock.allocated", allocation_id, wanted, items)
 
 
 def _change_balance(
@@ -273,7 +273,6 @@ def _record(
     actor: StockActor,
     event: str,
     allocation_id: uuid.UUID,
-    request_key: str,
     lines: Sequence[Line],
     items: dict[uuid.UUID, _Item],
 ) -> None:
@@ -286,7 +285,6 @@ def _record(
         target_type="allocation",
         target_id=allocation_id,
         data={
-            "request_key": request_key,
             "lines": [
                 {
                     "sku": items[line.inventory_item_id].sku,
@@ -374,9 +372,7 @@ def _close(
         {"to": to, "id": allocation_id},
     )
     event = "stock.released" if to == "released" else "stock.consumed"
-    _record(
-        db, actor, event, allocation_id, current.request_key, current.lines, _items(db, item_ids)
-    )
+    _record(db, actor, event, allocation_id, current.lines, _items(db, item_ids))
     return Allocation(current.id, current.request_key, to, current.lines)
 
 
