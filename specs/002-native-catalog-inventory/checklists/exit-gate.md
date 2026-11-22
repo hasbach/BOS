@@ -4,8 +4,8 @@
 
 | Gate | Evidence | State |
 | --- | --- | --- |
-| English/Arabic browser journeys at 360 px | [Earlier scoped M1 run](m1-browser.md): 8 passed. The Windows storage fix (`df72d33`) passed six focused catalog runs (three per locale), then all 32 tests in the full Playwright run (14.4 min). That build predates the final catalog state fixes under review. | Passed for that build; retest final catalog changes |
-| Frontend component suite, typecheck, lint, and production build | Latest component suite: 864 Vitest tests passed; TypeScript and ESLint passed. Playwright reached the app on the production build. | Passed for those runs |
+| English/Arabic browser journeys at 360 px | The full Playwright suite passed all 32 tests in 13.6 min on the build with the catalog view fixes in `bdc2a6a` and the Windows upload fix in `df72d33`. | Passed for that build |
+| Frontend component suite, typecheck, lint, and production build | Latest component suite: 872 Vitest tests passed; TypeScript and scoped ESLint passed. The full Playwright suite exercised the production build. | Passed for those runs |
 | Full backend suite, lint, formatting and types | Latest full run, including the Windows photo-storage regression: 1,912 pytest tests passed in 271.08 s; Ruff lint and formatting passed (125 files); mypy passed in 53 source files. | Passed |
 | Reservation concurrency and inventory integrity | [US3 checkpoint](us3.md) and full backend suite with the inventory integrity fixture | Passed |
 | Audit event completeness | `test_audit_completeness.py`; 269 related integration tests passed in an isolated database | Passed |
