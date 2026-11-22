@@ -97,10 +97,18 @@ class LocalDiskStorage:
         if not isinstance(path, str) or not _PATH.fullmatch(path):
             raise StorageError("not a storage path")
         root = self.root.resolve()
-        full = (root / path).resolve()
-        if not full.is_relative_to(root):
-            raise StorageError("storage path outside the root")
-        return full
+        candidate = root / path
+        full = candidate.resolve()
+        if full.is_relative_to(root):
+            return full
+        if os.name == "nt":
+            # If another upload creates the parent during realpath(), Windows can
+            # retain an extended-path prefix after the error changes from missing
+            # directory to missing file. Retry once against the same resolved root.
+            full = candidate.resolve()
+            if full.is_relative_to(root):
+                return full
+        raise StorageError("storage path outside the root")
 
     def save(self, tenant_id: uuid.UUID, data: bytes) -> str:
         path = f"tenant/{uuid.UUID(str(tenant_id))}/{secrets.token_urlsafe(32)}.webp"
