@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AppBar } from "@/components/AppBar";
 import { Banner } from "@/components/Banner";
@@ -20,8 +20,10 @@ import { useRovingRadio } from "@/components/useRovingRadio";
 import { Link } from "@/i18n/navigation";
 import { isSessionEnded } from "@/lib/api";
 import { CATALOG, listProducts, productName } from "@/lib/catalog";
-import type { ProductCounts, ProductFilters, ProductSummary } from "@/lib/catalog";
+import type { ProductCounts, ProductFilters, ProductPage, ProductSummary } from "@/lib/catalog";
 import { normaliseDigits } from "@/lib/digits";
+import type { Seed } from "@/lib/seed";
+import type { CatalogSeedPage } from "@/lib/serverSession";
 import { useMe } from "@/lib/session";
 
 import styles from "./catalog.module.css";
@@ -40,6 +42,24 @@ const NO_EXTRA: Extra = { archived: false, noPhoto: false };
 
 type Page = { k: "loading" } | { k: "error"; error: unknown } | { k: "ready"; items: ProductSummary[]; next: string | null };
 type More = "idle" | "loading" | "error";
+type CatalogView = { seedId: string | undefined; routeNoPhoto: boolean; initialPage: ProductPage | undefined; filters: ProductFilters };
+type CatalogResponse = { view: CatalogView; page: Page; counts: ProductCounts | null; more: More };
+
+// As with useSeed, a cached server payload shouldn't be replayed on back navigation.
+const seenCatalogSeeds = new Set<string>();
+function initialResponse(view: CatalogView): CatalogResponse {
+  const seed = view.initialPage;
+  return {
+    view,
+    page: seed ? { k: "ready", items: seed.items, next: seed.next_cursor } : { k: "loading" },
+    counts: seed?.counts ?? null,
+    more: "idle",
+  };
+}
+
+function sameFilters(a: ProductFilters, b: ProductFilters) {
+  return a.q === b.q && a.store_id === b.store_id && a.stock === b.stock && a.status === b.status && a.no_photo === b.no_photo;
+}
 
 /** Search typed with Arabic-Indic digits is searched with 0-9; the API takes at most 100 characters. */
 const searchOf = (typed: string) => normaliseDigits(typed).trim().slice(0, 100);
@@ -48,90 +68,138 @@ const searchOf = (typed: string) => normaliseDigits(typed).trim().slice(0, 100);
  * Screens 132 to 139: the catalog for everyone with catalog.view, 20 products at a time.
  * `initialNoPhoto` opens it with the no-photo filter on (the import result's Add photos; catalog.manage only).
  */
-export function CatalogList({ initialNoPhoto = false }: { initialNoPhoto?: boolean } = {}) {
+export function CatalogList({ initialNoPhoto = false, initial: seed }: { initialNoPhoto?: boolean; initial?: Seed<CatalogSeedPage | null> } = {}) {
   const t = useTranslations();
   const c = useTranslations("catalog");
   const access = useCatalogAccess();
   const stores = useMeStores();
   const me = useMe();
-
+  const routeNoPhoto = initialNoPhoto && access.manage;
+  const seedId = seed?.id;
+  const initial = seed && !seenCatalogSeeds.has(seed.id) ? seed.value ?? undefined : undefined;
+  const routeFilters = { no_photo: routeNoPhoto || undefined };
+  const initialPage = initial && sameFilters(initial.filters, routeFilters) ? initial.page : undefined;
+  const hasSeed = seed?.value != null;
   const [typed, setTyped] = useState("");
   const [query, setQuery] = useState("");
   const [storeId, setStoreId] = useState("");
   const [stock, setStock] = useState<Stock>("all");
-  const [extra, setExtra] = useState<Extra>(() => (initialNoPhoto && access.manage ? { archived: false, noPhoto: true } : NO_EXTRA));
-  const [page, setPage] = useState<Page>({ k: "loading" });
-  const [counts, setCounts] = useState<ProductCounts | null>(null);
-  const [more, setMore] = useState<More>("idle");
-  const [attempt, setAttempt] = useState(0);
+  const [extra, setExtra] = useState<Extra>(() => (routeNoPhoto ? { archived: false, noPhoto: true } : NO_EXTRA));
+  const firstRequest = useRef<AbortController | null>(null);
+  const moreRequest = useRef<AbortController | null>(null);
   const [sheet, setSheet] = useState<"store" | "filters" | null>(null);
 
   // A store the person no longer works in (access changed) is dropped from the filter.
   const store = stores.some((candidate) => candidate.id === storeId) ? storeId : "";
 
-  const filters = (cursor?: string): ProductFilters => ({
+  const [previousView, setView] = useState<CatalogView>(() => ({ seedId, routeNoPhoto, initialPage, filters: routeFilters }));
+  const [response, setResponse] = useState(() => initialResponse(previousView));
+  const [lastCounts, setLastCounts] = useState<{ value: ProductCounts; restricted: boolean } | null>(() =>
+    initialPage?.counts ? { value: initialPage.counts, restricted: routeNoPhoto } : null,
+  );
+  // URL navigation updates no-photo, but a refresh with the same URL keeps local overrides.
+  const urlChanged = previousView.routeNoPhoto !== routeNoPhoto;
+  const effectiveExtra = access.manage ? { archived: extra.archived, noPhoto: urlChanged ? routeNoPhoto : extra.noPhoto } : NO_EXTRA;
+  const filters: ProductFilters = {
     q: query || undefined,
     store_id: store || undefined,
     stock: stock === "all" ? undefined : stock,
-    status: extra.archived ? "archived" : undefined,
-    no_photo: extra.noPhoto || undefined,
-    cursor,
-  });
+    status: effectiveExtra.archived ? "archived" : undefined,
+    no_photo: effectiveExtra.noPhoto || undefined,
+  };
+  const routeChanged = urlChanged || previousView.seedId !== seedId;
+
+  // Object identity distinguishes successive views even when their filters match (A → B → A).
+  let view = previousView;
+  if (routeChanged || !sameFilters(previousView.filters, filters)) {
+    const matchingSeed = routeChanged && initial && sameFilters(filters, initial.filters) ? initial.page : undefined;
+    view = { seedId, routeNoPhoto, filters, initialPage: matchingSeed };
+    setView(view);
+  }
+  if (extra.archived !== effectiveExtra.archived || extra.noPhoto !== effectiveExtra.noPhoto) setExtra(effectiveExtra);
+  if ((urlChanged && sheet !== null) || (!access.manage && sheet === "filters")) setSheet(null);
+
+  // Abort ignores callbacks that run late; ownership also ignores updates queued before abort
+  // that React may replay after the new view commits. Keep only counts accepted by a view.
+  const current = response.view === view ? response : initialResponse(view);
+  const { page, more } = current;
+  const previousCounts = !access.manage && lastCounts?.restricted ? null : lastCounts;
+  const counts = current.counts ?? previousCounts?.value ?? null;
+  if (current.counts && current.counts !== previousCounts?.value) {
+    setLastCounts({ value: current.counts, restricted: effectiveExtra.archived || effectiveExtra.noPhoto });
+  } else if (previousCounts !== lastCounts) {
+    setLastCounts(previousCounts);
+  }
 
   useEffect(() => {
+    if (hasSeed && seedId !== undefined) seenCatalogSeeds.add(seedId);
+  }, [hasSeed, seedId]);
+
+  // Invalidate both requests when the view commits, before passive effects run.
+  useLayoutEffect(() => () => {
+    firstRequest.current?.abort();
+    firstRequest.current = null;
+    moreRequest.current?.abort();
+    moreRequest.current = null;
+  }, [view]);
+
+  useEffect(() => {
+    if (view.initialPage) return;
     const controller = new AbortController();
-    const asked: ProductFilters = {
-      q: query || undefined,
-      store_id: store || undefined,
-      stock: stock === "all" ? undefined : stock,
-      status: extra.archived ? "archived" : undefined,
-      no_photo: extra.noPhoto || undefined,
-    };
-    listProducts(asked, controller.signal).then(
+    firstRequest.current = controller;
+    listProducts(view.filters, controller.signal).then(
       (result) => {
-        setPage({ k: "ready", items: result.items, next: result.next_cursor });
-        if (result.counts) setCounts(result.counts);
+        if (controller.signal.aborted) return;
+        setResponse({
+          view, page: { k: "ready", items: result.items, next: result.next_cursor },
+          counts: result.counts, more: "idle",
+        });
       },
       (error: unknown) => {
-        if (!controller.signal.aborted) setPage({ k: "error", error });
+        if (!controller.signal.aborted) setResponse({ view, page: { k: "error", error }, counts: null, more: "idle" });
       },
     );
-    return () => controller.abort();
-  }, [query, store, stock, extra, attempt]);
+    return () => {
+      controller.abort();
+      if (firstRequest.current === controller) firstRequest.current = null;
+    };
+  }, [view]);
 
   // Searching waits until typing pauses, so each key press is not a request.
   useEffect(() => {
     const next = searchOf(typed);
     if (next === query) return;
-    const timer = setTimeout(() => {
-      setPage({ k: "loading" });
-      setMore("idle");
-      setQuery(next);
-    }, 300);
+    const timer = setTimeout(() => setQuery(next), 300);
     return () => clearTimeout(timer);
   }, [typed, query]);
 
-  function change(apply: () => void) {
-    setPage({ k: "loading" });
-    setMore("idle");
-    setSheet(null);
-    apply();
-  }
-
   function clearSearch() {
     setTyped("");
-    if (query !== "") change(() => setQuery(""));
+    setQuery("");
   }
 
   async function loadMore() {
-    if (page.k !== "ready" || !page.next || more === "loading") return;
-    setMore("loading");
+    if (page.k !== "ready" || !page.next || moreRequest.current) return;
+    const controller = new AbortController();
+    moreRequest.current = controller;
+    function updateMore(more: More, result?: ProductPage) {
+      setResponse((previous) => {
+        const owned = previous.view === view ? previous : initialResponse(view);
+        if (owned.page.k !== "ready") return previous;
+        return {
+          ...owned, more,
+          page: result ? { k: "ready", items: [...owned.page.items, ...result.items], next: result.next_cursor } : owned.page,
+        };
+      });
+    }
+    updateMore("loading");
     try {
-      const result = await listProducts(filters(page.next));
-      setPage((current) => (current.k === "ready" ? { k: "ready", items: [...current.items, ...result.items], next: result.next_cursor } : current));
-      setMore("idle");
+      const result = await listProducts({ ...view.filters, cursor: page.next }, controller.signal);
+      if (!controller.signal.aborted) updateMore("idle", result);
     } catch {
-      setMore("error");
+      if (!controller.signal.aborted) updateMore("error");
+    } finally {
+      if (moreRequest.current === controller) moreRequest.current = null;
     }
   }
 
@@ -139,12 +207,7 @@ export function CatalogList({ initialNoPhoto = false }: { initialNoPhoto?: boole
     if (isSessionEnded(page.error)) return <SessionEnded />;
     return (
       <CatalogStatus title={c("title")} heading={c("loadError.title")} text={c("loadError.text")} tone="warn" icon="wifioff" alert>
-        <Button
-          onClick={() => {
-            setPage({ k: "loading" });
-            setAttempt((n) => n + 1);
-          }}
-        >
+        <Button onClick={() => setView({ ...view, initialPage: undefined })}>
           <SyncIcon width={16} height={16} /> {t("ui.retry")}
         </Button>
         <LinkButton href="/more" variant="ghost">
@@ -154,9 +217,10 @@ export function CatalogList({ initialNoPhoto = false }: { initialNoPhoto?: boole
     );
   }
 
-  const filtered = query !== "" || store !== "" || stock !== "all" || extra.archived || extra.noPhoto;
+  const { archived, noPhoto } = effectiveExtra;
+  const filtered = query !== "" || store !== "" || stock !== "all" || archived || noPhoto;
   const emptyCatalog = page.k === "ready" && page.items.length === 0 && !filtered;
-  const extraLabel = extra.archived && extra.noPhoto ? c("activeFilter.both") : extra.archived ? c("activeFilter.archived") : extra.noPhoto ? c("activeFilter.noPhoto") : "";
+  const extraLabel = archived && noPhoto ? c("activeFilter.both") : archived ? c("activeFilter.archived") : noPhoto ? c("activeFilter.noPhoto") : "";
   const storeName = stores.find((candidate) => candidate.id === store)?.name;
   // Screen 132: the Low stock list (stock.adjust) and CSV import (catalog.manage) for owners and managers.
   const barLinks: AppBarAction[] = [];
@@ -190,7 +254,7 @@ export function CatalogList({ initialNoPhoto = false }: { initialNoPhoto?: boole
         {/* The switch and menus appear with the first page's counts (screen 135 has none) and stay while a filter loads. */}
         {counts === null || emptyCatalog ? null : (
           <>
-            <StockSwitch value={stock} counts={counts} onChange={(next) => change(() => setStock(next))} />
+            <StockSwitch value={stock} counts={counts} onChange={setStock} />
             {stores.length > 1 || access.manage ? (
               <div className={styles.pills}>
                 {stores.length > 1 ? (
@@ -207,7 +271,7 @@ export function CatalogList({ initialNoPhoto = false }: { initialNoPhoto?: boole
                       {extraLabel || c("moreFilters")}
                     </button>
                     {extraLabel ? (
-                      <button type="button" className={styles.pill} onClick={() => change(() => setExtra(NO_EXTRA))}>
+                      <button type="button" className={styles.pill} onClick={() => setExtra(NO_EXTRA)}>
                         <CloseIcon width={16} height={16} />
                         {c("clearFilters")}
                       </button>
@@ -226,15 +290,12 @@ export function CatalogList({ initialNoPhoto = false }: { initialNoPhoto?: boole
             emptyCatalog={emptyCatalog}
             query={query}
             onClearSearch={clearSearch}
-            onClearFilters={() =>
-              change(() => {
-                setTyped("");
-                setQuery("");
-                setStoreId("");
-                setStock("all");
-                setExtra(NO_EXTRA);
-              })
-            }
+            onClearFilters={() => {
+              clearSearch();
+              setStoreId("");
+              setStock("all");
+              setExtra(NO_EXTRA);
+            }}
           />
         ) : (
           <>
@@ -276,10 +337,22 @@ export function CatalogList({ initialNoPhoto = false }: { initialNoPhoto?: boole
         <StoreSheet
           current={store}
           onClose={() => setSheet(null)}
-          onPick={(id) => change(() => setStoreId(id))}
+          onPick={(id) => {
+            setStoreId(id);
+            setSheet(null);
+          }}
         />
       ) : null}
-      {sheet === "filters" ? <FilterSheet current={extra} onClose={() => setSheet(null)} onApply={(next) => change(() => setExtra(next))} /> : null}
+      {access.manage && sheet === "filters" ? (
+        <FilterSheet
+          current={effectiveExtra}
+          onClose={() => setSheet(null)}
+          onApply={(next) => {
+            setExtra(next);
+            setSheet(null);
+          }}
+        />
+      ) : null}
     </Screen>
   );
 }
