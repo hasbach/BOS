@@ -51,23 +51,30 @@ def escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-# Per product, over its active variants: how many, units available, any available, any low.
-_STOCK = (
-    "CROSS JOIN LATERAL ("
-    "  SELECT count(*) AS variant_count, "
-    "         COALESCE(sum(b.on_hand - b.allocated), 0) AS available_total, "
-    "         COALESCE(bool_or(b.on_hand - b.allocated > 0), false) AS any_available, "
-    "         COALESCE(bool_or(COALESCE(v.low_stock_level, :default_level) > 0 "
-    "           AND b.on_hand - b.allocated <= COALESCE(v.low_stock_level, :default_level)), "
-    "           false) AS any_low "
-    "  FROM variants v JOIN stock_balances b ON b.inventory_item_id = v.inventory_item_id "
-    "  WHERE v.product_id = p.id AND v.status = 'active') agg"
-)
+# Group the matching products together so PostgreSQL can join balances once rather than
+# rescan them per product. Only active variants with a balance contribute; products
+# without any such variants must still count as out of stock, but not as low.
+def _with_stock(conditions: list[str]) -> str:
+    return (
+        "WITH product_stock AS ("  # noqa: S608
+        "  SELECT p.id, p.code, p.name_en, p.name_ar, p.status, p.created_at, "
+        "         count(b.inventory_item_id) AS variant_count, "
+        "         COALESCE(sum(b.on_hand - b.allocated), 0) AS available_total, "
+        "         COALESCE(bool_or(b.on_hand - b.allocated > 0), false) AS any_available, "
+        "         COALESCE(bool_or(COALESCE(v.low_stock_level, :default_level) > 0 "
+        "           AND b.on_hand - b.allocated <= COALESCE(v.low_stock_level, :default_level)), "
+        "           false) AS any_low "
+        "  FROM products p LEFT JOIN (variants v JOIN stock_balances b "
+        "    ON b.inventory_item_id = v.inventory_item_id) "
+        "    ON v.product_id = p.id AND v.status = 'active' "
+        f"  WHERE {' AND '.join(conditions)} GROUP BY p.id) "
+    )
+
 
 _STOCK_FILTERS = {
-    "in_stock": "agg.any_available",
-    "out": "NOT agg.any_available",
-    "low": "agg.any_low",
+    "in_stock": "p.any_available",
+    "out": "NOT p.any_available",
+    "low": "p.any_low",
 }
 
 
@@ -101,22 +108,22 @@ def search(db: Session, access: Access, query: Query) -> dict[str, Any]:
     """The contract's ``ProductPage``."""
     conditions, params = _conditions(db, access, query)
     page_conditions = list(conditions)
-    if query.stock is not None:
-        page_conditions.append(_STOCK_FILTERS[query.stock])
     if query.after is not None:
         page_conditions.append("(p.created_at, p.id) < (:after_at, :after_id)")
         params = {**params, "after_at": query.after[0], "after_id": query.after[1]}
     store_condition, store_params = visible_stores_condition(access)
+    stock_filter = f"WHERE {_STOCK_FILTERS[query.stock]} " if query.stock is not None else ""
     rows = db.execute(
         text(
-            "SELECT p.id, p.code, p.name_en, p.name_ar, p.status, p.created_at, "  # noqa: S608
+            f"{_with_stock(page_conditions)}"  # noqa: S608
+            "SELECT p.id, p.code, p.name_en, p.name_ar, p.status, p.created_at, "
             "  (SELECT ph.id FROM product_photos ph WHERE ph.product_id = p.id "
             "   ORDER BY ph.position LIMIT 1) AS main_photo_id, "
             "  ARRAY(SELECT ps.store_id FROM product_stores ps JOIN stores s "
             f"   ON s.id = ps.store_id WHERE ps.product_id = p.id AND {store_condition} "
             "   ORDER BY ps.store_id) AS store_ids, "
-            "  agg.variant_count, agg.available_total, agg.any_available, agg.any_low "
-            f"FROM products p {_STOCK} WHERE {' AND '.join(page_conditions)} "
+            "  p.variant_count, p.available_total, p.any_available, p.any_low "
+            f"FROM product_stock p {stock_filter}"
             "ORDER BY p.created_at DESC, p.id DESC LIMIT :limit"
         ),
         {**params, **store_params, "limit": PAGE_SIZE + 1},
@@ -134,11 +141,12 @@ def search(db: Session, access: Access, query: Query) -> dict[str, Any]:
 def _counts(db: Session, conditions: list[str], params: dict[str, Any]) -> dict[str, int]:
     row = db.execute(
         text(
-            "SELECT count(*) AS total, "  # noqa: S608
+            f"{_with_stock(conditions)}"  # noqa: S608
+            "SELECT count(*) AS total, "
             f"count(*) FILTER (WHERE {_STOCK_FILTERS['in_stock']}) AS in_stock, "
             f"count(*) FILTER (WHERE {_STOCK_FILTERS['low']}) AS low, "
             f"count(*) FILTER (WHERE {_STOCK_FILTERS['out']}) AS out "
-            f"FROM products p {_STOCK} WHERE {' AND '.join(conditions)}"
+            "FROM product_stock p"
         ),
         params,
     ).one()

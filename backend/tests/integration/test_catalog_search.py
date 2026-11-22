@@ -17,7 +17,7 @@ from flask.testing import FlaskClient
 from sqlalchemy import Engine
 
 from app.config import Config
-from tests.dbsupport import CatalogProduct, TwoTenants, insert_product
+from tests.dbsupport import CatalogProduct, TwoTenants, insert_allocation, insert_product
 from tests.integration.catalog_support import PRODUCTS
 from tests.integration.us1_support import (
     app_for,
@@ -218,6 +218,58 @@ def test_stock_filters_work_on_products(
 def test_hd_is_low_and_in_stock(owner: FlaskClient, catalog: Catalog) -> None:
     [hoodie] = ok(_search(owner, q="HD-1"))["items"]
     assert (hoodie["stock_state"], hoodie["available_total"]) == ("low", 1)
+
+
+def test_stock_counts_use_matching_products_without_the_selected_stock_filter(
+    owner: FlaskClient, owner_engine: Engine, worlds: TwoTenants, catalog: Catalog
+) -> None:
+    a = worlds.a
+    with owner_engine.begin() as conn:
+        archived_only = insert_product(
+            conn,
+            a.tenant_id,
+            a.user_id,
+            name_en="Clearance",
+            on_hand=12,
+            store_ids=(a.store_id,),
+        )
+        disabled = insert_product(
+            conn,
+            a.tenant_id,
+            a.user_id,
+            name_en="Clearance",
+            on_hand=0,
+            low_stock_level=0,
+            store_ids=(a.store_id,),
+        )
+        insert_product(
+            conn,
+            worlds.b.tenant_id,
+            worlds.b.user_id,
+            name_en="Clearance",
+            on_hand=1,
+            store_ids=(worlds.b.store_id,),
+        )
+        insert_allocation(conn, a.tenant_id, [(catalog.jeans.item_ids[0], 5)])
+    owner_sql(
+        owner_engine,
+        "UPDATE products SET name_en = 'Clearance' WHERE id IN (:jeans, :tee)",
+        jeans=catalog.jeans.product_id,
+        tee=catalog.tee.product_id,
+    )
+    owner_sql(
+        owner_engine,
+        "UPDATE variants SET status = 'archived', archived_at = now() WHERE id = :v",
+        v=archived_only.variant_ids[0],
+    )
+
+    body = ok(_search(owner, q="clearance", store_id=str(a.store_id), stock="low"))
+    assert _codes(body) == [catalog.jeans.code]
+    assert body["counts"] == {"all": 3, "in_stock": 0, "low": 1, "out": 3}
+
+    out = ok(_search(owner, q="clearance", store_id=str(a.store_id), stock="out"))
+    assert set(_codes(out)) == {catalog.jeans.code, archived_only.code, disabled.code}
+    assert out["counts"] == body["counts"]
 
 
 def test_store_filter(owner: FlaskClient, catalog: Catalog, worlds: TwoTenants) -> None:
