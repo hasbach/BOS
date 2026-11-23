@@ -18,7 +18,7 @@ from sqlalchemy import Engine, event
 
 from app.config import Config
 from app.core.db import engine_of
-from tests.dbsupport import CatalogProduct, TwoTenants, insert_allocation, insert_product
+from tests.dbsupport import CatalogProduct, TwoTenants, World, insert_allocation, insert_product
 from tests.integration.catalog_support import PRODUCTS
 from tests.integration.us1_support import (
     app_for,
@@ -160,6 +160,50 @@ def test_q_matches_names_codes_and_skus_partially_ignoring_case(
     owner: FlaskClient, catalog: Catalog, q: str, codes: list[str]
 ) -> None:
     assert _codes(ok(_search(owner, q=q))) == codes
+
+
+def _denim(owner: Engine, tenant: World, count: int) -> list[str]:
+    """``count`` products named ``Performance Denim n`` / ``جينز الأداء n``, newest last."""
+    with owner.begin() as conn:
+        made = [
+            insert_product(
+                conn,
+                tenant.tenant_id,
+                tenant.user_id,
+                variants=2,
+                on_hand=[n, 0],
+                code=f"PD-{n}",
+                name_en=f"Performance Denim {n}",
+                name_ar=f"جينز الأداء {n}",
+            )
+            for n in range(count)
+        ]
+    for n, product in enumerate(made):
+        owner_sql(
+            owner,
+            "UPDATE products SET created_at = now() - make_interval(mins => :m) WHERE id = :p",
+            m=30 - n,
+            p=product.product_id,
+        )
+    return [f"PD-{n}" for n in reversed(range(count))]
+
+
+def test_english_and_arabic_names_find_the_same_products_in_the_same_order(
+    owner: FlaskClient, owner_engine: Engine, worlds: TwoTenants, catalog: Catalog
+) -> None:
+    newest_first = _denim(owner_engine, worlds.a, 3)
+
+    pages = {
+        q: ok(_search(owner, q=q))
+        for q in ("Performance Denim", "performance denim", "جينز الأداء", "الأداء")
+    }
+
+    for body in pages.values():
+        assert _codes(body) == newest_first
+        assert body["counts"] == pages["Performance Denim"]["counts"]
+        assert body["counts"]["all"] == 3
+    # "جينز" alone also matches the Slim Jeans' Arabic name; the newest product comes first.
+    assert _codes(ok(_search(owner, q="جينز"))) == [*newest_first, "JN-SLIM"]
 
 
 @pytest.mark.parametrize(("q", "codes"), [("%", ["SALE_1"]), ("_", ["SALE_1"]), ("\\", [])])
@@ -393,6 +437,59 @@ def test_twenty_per_page_with_a_stable_cursor_while_products_are_added(
     assert _codes(second) == ["P-02", "P-01", "P-00"]
     assert second["counts"] is None
     assert second["next_cursor"] is None
+
+
+# ---- plans (T107, SC-006) ------------------------------------------------------------------------
+
+
+def test_search_is_planned_for_the_current_business_every_time(
+    app: Flask,
+    user_client: UserClient,
+    owner_engine: Engine,
+    worlds: TwoTenants,
+    catalog: Catalog,
+) -> None:
+    """psycopg prepares a statement after five runs on one connection; PostgreSQL may then
+    reuse a generic plan. Row-level security reads the business when a plan is made, so a
+    generic plan made for a small business turned a large one's search into a nested loop
+    (about 2.5 s in the T107 browser runs). The application's connections plan every
+    statement for the current business (``app.core.db``), so results stay the same and no
+    generic plan is ever used. The app here is built by ``create_app``, so its engine has
+    the real connection options."""
+    b = worlds.b
+    large_first = _denim(owner_engine, b, 3)
+    small = user_client(worlds.a.user_id, worlds.a.tenant_id)
+    large = user_client(b.user_id, b.tenant_id)
+    plans: list[tuple[int, int]] = []
+    modes: list[str] = []
+
+    def inspect(_conn: Any, cursor: Any, statement: str, *_: Any) -> None:
+        if statement.startswith("WITH product_stock"):
+            plans.extend(
+                cursor.connection.execute(
+                    "SELECT generic_plans, custom_plans FROM pg_prepared_statements "
+                    "WHERE statement LIKE 'WITH product_stock%'"
+                ).fetchall()
+            )
+            modes.append(
+                cursor.connection.execute("SELECT current_setting('plan_cache_mode')").fetchone()[0]
+            )
+
+    engine = engine_of(app)
+    event.listen(engine, "after_cursor_execute", inspect)
+    try:
+        for _ in range(12):
+            assert _codes(ok(_search(small, q="jeans"))) == ["JN-SLIM"]
+            assert _codes(ok(_search(large, q="جينز الأداء"))) == large_first
+            assert _codes(ok(_search(large, q="Performance Denim"))) == large_first
+    finally:
+        event.remove(engine, "after_cursor_execute", inspect)
+
+    # Prepared and run more than five times (when PostgreSQL may switch to a generic plan),
+    # yet planned for the current business every time.
+    assert max(generic + custom for generic, custom in plans) > 5
+    assert all(generic == 0 for generic, _ in plans)
+    assert modes and set(modes) == {"force_custom_plan"}
 
 
 # ---- summaries -----------------------------------------------------------------------------------

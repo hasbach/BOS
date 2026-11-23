@@ -11,9 +11,10 @@ from typing import Any
 import pytest
 from flask import Flask
 from flask.testing import FlaskClient
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, event, text
 
 from app.config import Config
+from app.core.db import engine_of
 from tests.dbsupport import CatalogProduct, TwoTenants, insert_allocation, insert_product
 from tests.integration.catalog_support import PRODUCTS
 from tests.integration.stock_support import adjust, arrange_product, change
@@ -200,3 +201,58 @@ def test_list_refuses_an_invalid_keyset_position(owner: FlaskClient, position: l
     response = owner.get(LOW_STOCK, query_string={"cursor": cursor})
     refused(response, 400, "validation_failed")
     assert response.get_json()["error"]["fields"] == {"cursor": "invalid"}
+
+
+# ---- plans (T107, SC-006) ------------------------------------------------------------------------
+
+
+def test_list_is_planned_for_the_current_business_every_time(
+    app: Flask, user_client: UserClient, owner_engine: Engine, worlds: TwoTenants
+) -> None:
+    """Like the catalog search (``test_catalog_search``): the list is a prepared statement
+    on a pooled connection, and row-level security reads the business when a plan is made.
+    Run alternately for a small and a larger business more than five times on the same
+    connection, it must never use a generic plan and must show each business its own list."""
+    a, b = worlds.a, worlds.b
+    with owner_engine.begin() as conn:
+        small_low = insert_product(conn, a.tenant_id, a.user_id, code="SMALL-LOW", on_hand=1)
+        large_low = [
+            insert_product(conn, b.tenant_id, b.user_id, code=f"LARGE-{n}", variants=2, on_hand=n)
+            for n in range(12)
+        ]
+    small_skus = [small_low.skus[0]]
+    # Level 2 (the business default): variants with 0, 1 or 2 available are listed.
+    large_skus = sorted(sku for product in large_low[:3] for sku in product.skus)
+    small = user_client(a.user_id, a.tenant_id)
+    large = user_client(b.user_id, b.tenant_id)
+    plans: list[tuple[int, int]] = []
+    modes: list[str] = []
+    marker = "SELECT p.id AS product_id, p.name_en"
+
+    def inspect(_conn: Any, cursor: Any, statement: str, *_: Any) -> None:
+        if statement.startswith(marker):
+            plans.extend(
+                cursor.connection.execute(
+                    "SELECT generic_plans, custom_plans FROM pg_prepared_statements "
+                    "WHERE starts_with(statement, %s)",
+                    (marker,),
+                ).fetchall()
+            )
+            modes.append(
+                cursor.connection.execute("SELECT current_setting('plan_cache_mode')").fetchone()[0]
+            )
+
+    engine = engine_of(app)
+    event.listen(engine, "after_cursor_execute", inspect)
+    try:
+        for _ in range(12):
+            assert [item["sku"] for item in _list(small)["items"]] == small_skus
+            page = _list(large)
+            assert page["total"] == len(large_skus)
+            assert sorted(item["sku"] for item in page["items"]) == large_skus
+    finally:
+        event.remove(engine, "after_cursor_execute", inspect)
+
+    assert max(generic + custom for generic, custom in plans) > 5
+    assert all(generic == 0 for generic, _ in plans)
+    assert modes and set(modes) == {"force_custom_plan"}

@@ -1,6 +1,6 @@
 # M1 performance evidence (T107)
 
-**2026-11-24 — T107 remains open.** The [latest full sweep](#full-sweep-with-the-native-csv-chooser-2026-11-24-latest) measured all 72 attempts: **69 passes, 3 measured misses, 0 unmeasured**. Every screen and interaction check passed 6/6, including cold CSV Upload; English search passed 3/3, Arabic search missed 3/3 against <1,000 ms. Search and screen readiness have separate budgets.
+**2026-11-24 — T107 remains open (1 measured miss).** The [final full sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24) ran after every API database connection was set to plan each query for the current business (`plan_cache_mode=force_custom_plan`). It measured all 72 attempts: **71 passes, 1 measured miss, 0 unmeasured**. All 10 screen and interaction checks passed 6/6, and Arabic search passed 3/3. English search passed 2/3; the miss was 1,061.2 ms against <1,000 ms. Its Flask time was 90.8 ms, and the matching row appeared 516 ms after the response arrived. The six timed search GETs took 79.2–100.4 ms in Flask, compared with up to ~2.6 s in the [earlier sweep](#full-sweep-with-the-native-csv-chooser-2026-11-24), so the [generic-plan outliers](#catalog-search-server-outliers-cached-generic-plan-2026-11-24-no-longer-latest) did not recur. Search and screen readiness have separate budgets.
 
 ## Optimized catalog search, Low Stock list and Sales shortcut (2026-11-23)
 
@@ -230,7 +230,7 @@ The [repaired browser measurement harness](../../../docs/performance.md#focused-
 
 - **SC-005, separate:** The captured [T102 checkpoint](us5.md#captured-timing-and-atomicity-sc-005) reports **0.172 s** for the 500-row Flask test-client preview against <30 s. It was not rerun here and cannot substitute for the unmeasured one-row browser preview/result. SC-006 and SC-008 timing remain open; no T107 or M1 gate sign-off.
 
-## Full sweep with the native CSV chooser (2026-11-24; latest)
+## Full sweep with the native CSV chooser (2026-11-24)
 
 **T107 remains open.** The unchanged harness ran all 12 checks in English and Arabic, three times each: **69 passes, 3 measured budget misses, 0 unmeasured failures** across 72 attempts (72 timings and 72 profiles; no skips or retries). All three misses are Arabic catalog search. Every screen and interaction check passed 6/6, including cold CSV Upload (first enabled click opens the native chooser), CSV Preview, CSV Result and the Adjustment Sheet, which had no timings in the 2026-11-23 sweep.
 
@@ -259,3 +259,101 @@ Samples are in repeat order. Pass totals: English 36/36, Arabic 33/36. Interacti
 - **Teardown:** Stopped the three isolated servers, verified ports 3217, 5187 and 5197 no longer accept connections, dropped the disposable database and verified it is absent.
 - **Run note:** The first driver attempt stopped after the build, before any database or server was created, when the host's default code page could not decode the build log; the stack step was rerun on the same frozen build with Python UTF-8 mode. No sample was taken in the aborted attempt.
 - **Evidence:** local scratch `bos-t107-full-ibx_cvq7/` (session scratchpad): build, list, smoke, timing, Flask and relay logs, `results.json`, per-failure `error-context.md`, `run.json`, `snapshot.json`. Cross-checked all 72 locale/check/repeat outcomes against the timing and profile lines.
+
+## Catalog search server outliers: cached generic plan (2026-11-24; no longer latest)
+
+*Superseded:* the per-statement fix described here was replaced by a connection-wide setting, and the full sweep was rerun. See [Connection-wide custom plans and final full sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24).
+
+**Root cause.** The slow server times were not caused by Arabic text. psycopg prepares a statement on the server after five runs on one pooled connection. PostgreSQL then compares later runs against a generic plan and can keep reusing it. The search SQL is identical for every business, and row-level security reads `app.tenant_id` when a plan is made. If a connection's first runs come from the first demo business (`q=DEMO-SLIM`, 8 variants), the generic plan expects about 4 products and 8 variants and looks cheaper than those custom plans. PostgreSQL then reuses it for Demo Second Shop, which has 1,000 matching products and 5,000 variants. The plan joins variants and balances with a nested loop, discarding 24,995,000 row pairs. In the 2026-11-24 sweep, the q-search GET log had recorded 1, 5 and 9 first-business `DEMO-SLIM` searches before the three English searches and 13, 17 and 21 before the three Arabic searches. That is consistent with the Arabic searches being the ones that got the reused plan. English text in the same state is just as slow (below).
+
+- **Fixture facts:** the cluster's database locale is `C`/`C` (UTF-8 encoding), so `show_trgm('جينز الأداء')` returns no trigrams and `products_name_ar_trgm_idx` cannot serve Arabic `ILIKE` (as noted in the [migration README](../../../backend/migrations/README.md)). This did not cause the outlier: every plan, fast or slow, reads the second business's 1,000 products through `products_tenant_id_id_key` and filters the names, and that step took 2–6 ms. The browser sends one search GET per sample (`fill` plus debounce; no prefix GETs appear in the Flask log). The prefixes `ج`, `جينز`, `جينز ال` and `جينز الأداء` were still tested below. Flask does no locale-dependent work for this endpoint.
+- **Isolation:** fresh `bos_t107_dcbf4893db2f` set up as described in the [README](../../../frontend/performance/README.md). Owner `bos_owner` and app `bos_app` both connected to it (app role non-superuser, non-`BYPASSRLS`; RLS in effect). Migrated to `0003`; 1,000 products, 5,000 variants, 1,000 translated names; `ANALYZE`. EXPLAIN ran as `bos_app` with the second business's `app.tenant_id`, using the exact first-page SQL captured from the Flask app. Dropped afterwards and verified absent.
+
+| `EXPLAIN (ANALYZE, BUFFERS)`, first-page search, Demo Second Shop | Plan | Execution |
+|---|---|---:|
+| `جينز الأداء`, custom plan (`force_custom_plan`) | Hash Join variants × balances, HashAggregate; 1,264 shared hits | 65.0 ms |
+| `Performance Denim`, custom plan | same shape | 61.9 ms |
+| Generic plan made while Demo Second Shop was current (either query) | same shape | 61.8–65.7 ms |
+| psycopg auto-prepared statement after 12 `DEMO-SLIM` runs in the first business, then `جينز الأداء` (`generic_plans=3, custom_plans=5`) | Merge Left Join over a **Nested Loop** variants × Materialize(balances): estimated 8 rows, actual 5,000 × 5,000 loops, `Rows Removed by Join Filter: 24995000`; 11,050 shared hits, all from cache | **3,554.8 ms** |
+| Same reused plan, prefixes `ج` / `جينز` / `جينز ال` / `جينز الأداء` (timed, then EXPLAIN) | as above | 1,917 / 2,327 / 1,912 / 1,893 ms timed; 3,471–3,667 ms under EXPLAIN |
+| Same prefixes, custom plans | Hash Join | 61.0–66.7 ms |
+
+The same pattern appeared through the real Flask app on one pooled connection: 12 first-business `DEMO-SLIM` searches, then Demo Second Shop. Arabic took **1,841.6–1,983.8 ms** per request and `Performance Denim` took **1,842.7–1,968.3 ms**. Repeating only `جينز الأداء` 12 times, or alternating it with the no-match query, stayed at 67.6–102.5 ms, because the five custom plans for the large business looked more expensive than the generic plan.
+
+**Fix (no schema change).** `catalog_search.search` now runs its single page/counts statement through `_planned_for_this_tenant`, which sets `plan_cache_mode = force_custom_plan` with transaction-local `set_config` for that statement only. It then restores the previous value; on error, the transaction rollback discards the setting. The SQL text, parameters, RLS policies and result order are unchanged. The cost is a fresh plan per search (planning 2–10 ms here). In the same 12×`DEMO-SLIM` sequence after the fix, Demo Second Shop searches took **70.1–77.6 ms** (Arabic and English) through Flask. The prepared statement showed `generic_plans=0` and the plan used Hash Join (60.2 ms under EXPLAIN). Other queries that use RLS and are prepared on shared pool connections face the same planning risk; they were not changed or measured here.
+
+**Backend verification.**
+- `tests/integration/test_catalog_search.py` adds two tests:
+  - English and Arabic names (`Performance Denim`, case-folded `performance denim`, `جينز الأداء`, `الأداء`) return the same products, newest first, with identical counts; `جينز` adds the Slim Jeans product after them.
+  - Twelve rounds of small-business/large-business searches return correct results every time. The search statement is prepared (more than five runs) with `generic_plans = 0`, and `plan_cache_mode` is back to `auto` for the next statement.
+- With the fix temporarily removed, the plan test failed on `generic_plans` (the generic plan was used). With the fix in place, the module passed 48/48.
+- Full suite via `scripts/local_tests.py`, pointed at a throwaway `bos_t107test_*` database (owner and non-superuser/non-`BYPASSRLS` app connections verified; dropped and verified absent): **1,917 passed in 175.50 s**. Ruff lint passed; Ruff format check passed (125 files); mypy passed (53 source files). Dev and `bos_test` databases were not used.
+
+**Focused browser check (catalog search only).** Settings were unchanged: [README](../../../frontend/performance/README.md) setup, `--grep 'catalog search$' --repeat-each=3 --workers=1 --retries=0`, `BOS_T107_PROFILE=1`, both locales. Budgets, throttling and assertions were unchanged. The isolated Next.js 16.4.6 webpack production build (TypeScript check passed) was made from a hash-verified copy of the current `frontend/`. Software: Node 24.22.2, Playwright 1.65.0. Flask ran from the working tree with the fix. Snapshot: `75d7605` plus the uncommitted working tree, 352 files (`snapshot.json` SHA-256 `7b12b45a317890554f33904787c687a7c78c87639ee16177dbf1e9280e3b0859`). Run 1 follows the README. Run 2 used the same stack after 60 first-business `DEMO-SLIM` API searches (30 sequential, 30 in bursts of 5), which recreates the sweep's pool state that triggered the outlier. Each timed search GET was matched by profile request ID to Flask `bos.request`; all returned `200`.
+
+| Run | Locale | Samples (ms, repeat order) | Flask ms of the timed GET | Passes |
+|---|---|---|---|---:|
+| 1 (README) | en | 835.7 / 1,060.0 **miss** / 769.2 | 76.0 / 209.7 / 69.5 | 2/3 |
+| 1 (README) | ar | 822.2 / 917.6 / 850.2 | 95.1 / 69.5 / 81.5 | 3/3 |
+| 2 (primed pool) | en | — / 743.6 / 839.1 | — / 78.2 / 100.4 | 2/2 measured |
+| 2 (primed pool) | ar | 793.0 / 870.8 / 933.9 | 79.3 / 85.2 / 136.7 | 3/3 |
+
+- **English miss (run 1, repeat 2, `abc9cd52574f4b52b3e9cb6b213878ba`):** the GET started 398 ms after input and its response ended at 653 ms (Flask 209.7 ms). The matching row was ready at 1,060.0 ms, about 407 ms after the response, which points to client rendering, not the plan issue. It is a measured budget miss.
+- **Unmeasured (run 2, English repeat 1):** the untimed setup step never showed the "Nothing matches" heading. The search box held `t107-no-match-fixture`, but Flask logged no search GET for that attempt within the 15 s retry window (SSR rows were visible). No timing line was recorded, so it is neither a pass nor a measured miss.
+- Arabic: 6/6 measured passes in this focused check. The slowest was 933.9 ms, and the largest Flask time was 136.7 ms. Server times for both locales stayed within 69.5–209.7 ms, compared with 2,587.5 / 2,657.7 ms in the sweep. This is a search-only rerun; the full 72-attempt sweep, and with it the T107 sign-off, was not repeated.
+- **Teardown:** stopped Flask `5197`, relay `5187` and Next `3217` (bound to `127.0.0.1`). Afterwards none of the three ports was listening and connections to them were refused. Dropped `bos_t107_f15372f28115` and verified it was absent; the diagnosis database and throwaway test databases were also dropped and verified absent. `bos_t107_5605129e3a4d` and `bos_m1_quickstart_3227` were not touched. Uploads, mail outbox and `LOCALAPPDATA` pointed to run folders in the scratch directory.
+- **Evidence:** local scratch `t107-ar/` (session scratchpad): `explain-*.txt`, `explain2-slim-ar*.txt`, `diag-after-fix.txt`, `full-suite.log`. The browser run is in `run-4a54d1b8/` (`snapshot.json`, `run.json`, build, Flask, relay, timing and profile logs, `results*.json`, error context).
+
+## Connection-wide custom plans and final full sweep (2026-11-24)
+
+**T107 remains open: 71 passes, 1 measured miss, 0 unmeasured** across 72 attempts (12 checks × English/Arabic × 3).
+
+**Change and why.** The plan problem found [above](#catalog-search-server-outliers-cached-generic-plan-2026-11-24-no-longer-latest) is not specific to search. The API runs every query on pooled connections, as a role subject to row-level security, with the business in `app.tenant_id`. psycopg prepares any statement run five times on one connection. After that, with `plan_cache_mode=auto`, PostgreSQL may reuse a generic plan made while another business was current. Product detail, Low Stock, history and every other prepared RLS query could hit the same problem.
+- `backend/app/core/db.py`: the API engine's connection options now include `-c plan_cache_mode=force_custom_plan`, next to the existing statement and lock timeouts, with a comment explaining why. Every query is planned for the business it runs for. The cost is planning on every run (2–10 ms for search here); results and SQL are unchanged.
+- `backend/app/services/catalog_search.py`: the per-statement `_planned_for_this_tenant` helper is removed. This restores the plain `db.execute(...)` with no extra round-trips.
+- Other engines: `make_engine` is the only engine for API traffic. The Flask app, the `flask bos` CLI commands (`seed-demo`, `seed-catalog`, maintenance) and the test apps all build it through `create_app` → `init_engine`. Migrations (`migrations/env.py`, owner role, `NullPool`) and the test-data purge helper in `scripts/local_api.py` (owner role, `NullPool`) are not API traffic and were left as they were. The test suite's direct `app_engine`/`owner_engine` fixtures arrange and inspect data, so they were not changed. One test (`test_request_context.py`) temporarily replaces the app engine with a one-connection pool to check that the tenant context does not leak; it does not test plans.
+
+**Backend verification.**
+- `tests/integration/test_catalog_search.py::test_search_is_planned_for_the_current_business_every_time`: kept the 12 rounds of alternating small-business/large-business searches (Arabic and English). It still checks correct results, more than five runs of the prepared statement, and `generic_plans = 0`. The "restored to `auto`" assertion is replaced by checking that the app connection's `current_setting('plan_cache_mode')` is `force_custom_plan`. The app comes from `create_app`, so the real `db.py` connection options are used.
+- New `tests/integration/test_low_stock.py::test_list_is_planned_for_the_current_business_every_time`: does the same with the Low Stock list (`GET /api/v1/catalog/low-stock`). A business with 1 low variant alternates with one that has 12 two-variant products, 6 of them low, for 12 rounds. Each business sees only its own list. The checks are more than five runs, `generic_plans = 0`, and `force_custom_plan`.
+- With `plan_cache_mode=force_custom_plan` temporarily removed from `db.py`, **both guards failed** on `generic_plans == 0`; with it restored, both modules passed (57/57).
+- Full suite via `scripts/local_tests.py` pointed at a throwaway `bos_t107test_*` database. Owner and non-superuser/non-`BYPASSRLS` app connections were verified; the database was dropped and verified absent. Result: **1,918 passed in 181.46 s**. Ruff lint passed; Ruff format check passed (125 files); mypy passed (53 source files).
+
+**Final full sweep.** Settings were unchanged: [README](../../../frontend/performance/README.md) setup, `--repeat-each=3 --workers=1 --retries=0`, `BOS_T107_PROFILE=1`, both locales. Budgets, throttling and readiness assertions in `frontend/performance/*` were not changed. All 72 attempts have a timing line and a profile.
+
+| Check | Strict budget (ms) | English samples (ms) | English passes | Arabic samples (ms) | Arabic passes |
+|---|---:|---|---:|---|---:|
+| Catalog search | <1,000 | 987.6 / 900.7 / 1,061.2 **miss** | 2/3 | 992.1 / 937.5 / 889.5 | 3/3 |
+| Catalog list | <3,000 | 1,428.0 / 1,328.2 / 1,491.0 | 3/3 | 1,667.6 / 1,921.3 / 1,640.8 | 3/3 |
+| Product detail | <3,000 | 1,217.7 / 1,230.3 / 1,257.1 | 3/3 | 1,425.7 / 1,448.9 / 1,330.1 | 3/3 |
+| Create product | <3,000 | 1,529.3 / 1,505.7 / 1,535.8 | 3/3 | 2,067.2 / 1,900.4 / 1,891.7 | 3/3 |
+| Edit product | <3,000 | 1,438.5 / 1,277.5 / 1,398.1 | 3/3 | 1,497.6 / 1,580.1 / 1,496.6 | 3/3 |
+| Adjustment sheet | <3,000 | 305.8 / 354.2 / 319.9 | 3/3 | 389.0 / 389.7 / 331.0 | 3/3 |
+| Stock history | <3,000 | 1,254.9 / 1,271.0 / 1,303.9 | 3/3 | 1,318.6 / 1,291.7 / 1,231.1 | 3/3 |
+| Low Stock list | <3,000 | 1,195.0 / 1,178.0 / 1,297.1 | 3/3 | 1,363.8 / 1,322.2 / 1,312.1 | 3/3 |
+| Sales start-tab Low Stock shortcut | <3,000 | 1,254.4 / 1,176.1 / 1,260.2 | 3/3 | 1,447.2 / 1,494.7 / 1,354.0 | 3/3 |
+| CSV upload (cold, first click) | <3,000 | 2,756.8 / 1,636.6 / 1,643.7 | 3/3 | 1,681.1 / 1,807.3 / 1,828.2 | 3/3 |
+| CSV preview | <3,000 | 2,335.9 / 2,307.2 / 2,906.5 | 3/3 | 2,500.2 / 2,361.2 / 2,680.9 | 3/3 |
+| CSV result | <3,000 | 410.1 / 453.3 / 451.3 | 3/3 | 445.9 / 466.3 / 413.9 | 3/3 |
+
+Samples are in repeat order. Pass totals: English 35/36, Arabic 36/36. Interaction checks (Adjustment, CSV Preview, CSV Result) are timed from the captured browser event; navigation checks from navigation start.
+
+**Search: browser time and Flask time.** Each timed search GET was matched by profile request ID to Flask `bos.request`; all returned `200`. Each sample sent one search GET after the debounce. The earlier GET in each profile is the untimed setup.
+
+| Sample | Readiness (ms) | GET start after input (ms) | Response end after input (ms) | Flask (ms) | Row ready after response (ms) |
+|---|---:|---:|---:|---:|---:|
+| en 1 | 987.6 | 373.8 | 550.1 | 79.2 | 437.5 |
+| en 2 | 900.7 | 376.5 | 567.6 | 100.4 | 333.1 |
+| en 3 **miss** (`473f74d09cc74ec596921c6a78cf8c11`) | 1,061.2 | 371.7 | 545.1 | 90.8 | 516.1 |
+| ar 1 | 992.1 | 390.9 | 560.4 | 93.8 | 431.7 |
+| ar 2 | 937.5 | 377.7 | 560.4 | 89.5 | 377.1 |
+| ar 3 | 889.5 | 389.7 | 562.2 | 84.7 | 327.3 |
+
+- **The miss is client-side.** The server answered in 90.8 ms, and the response was complete 545 ms after input (debounce plus throttled network). The matching row then took 516 ms to appear, the longest of the six (327–516 ms). The generic-plan outliers did not recur: the largest Flask time for any search GET in the sampling window was 111.0 ms. The slowest Flask requests overall were sign-ins (163.3–298.8 ms, password hashing), outside the timed windows. Every search sample is within ~111 ms of the budget, and most of each one is debounce, network and client rendering. The search budget is still tight on the client side.
+- **Unmeasured is not a miss:** there were no unmeasured attempts in this sweep. A failure without a timing line would count as neither a pass nor a measured miss.
+- **CSV checks:** Flask logged 12 preview POSTs (`201`) and 6 confirm POSTs (`200`), one confirm per CSV Result attempt. No document request in the 24 detail/create/edit/upload navigation profiles had first byte above 159.0 ms.
+- **Snapshot and profile:** `75d7605` plus the uncommitted working tree (this change, the two plan guards, and earlier uncommitted work). 352 files from `frontend/`, `backend/app` and `backend/migrations` were hashed. The `frontend/` copy was hash-verified against the working tree (`snapshot.json` SHA-256 `6ce6438b37d887eb1c71895d422fc5c8af6674e09b3becd189bcded88f53a06a`). Flask ran from the working tree. The frontend was an isolated Next.js 16.4.6 webpack production build with TypeScript check and `BOS_NEXT_DIST_DIR=.next-t107`, on Node 24.22.2 (portable `bos-dev` Node). Playwright 1.65.0; before sampling, `--list` verified 72 attempts in 24 locale/check pairs. Process audits before the build and before sampling found no other build or test process. This is browser readiness under the M0 CDP profile, not Lighthouse LCP or real-device performance.
+- **Fixture and isolation:** Fresh `bos_t107_dc19da681630` on the private loopback PostgreSQL 17.4 cluster (`55433`, locale `C`/`C`). Verified `bos_owner` and non-superuser/non-`BYPASSRLS` `bos_app` connections to it. Migrated to `0003`, seeded demo data, and verified 1,000 products, 5,000 variants and 1,000 translated names in Demo Second Shop before `ANALYZE`. A connection from the working tree's `make_engine` reported `plan_cache_mode = force_custom_plan`. Search used Demo Second Shop; other checks used the first business's demo fixtures. Uploads, mail outbox and `LOCALAPPDATA` used run folders in the scratch directory. Flask `5197`, relay `5187` and Next `3217`, all bound to `127.0.0.1`, were verified before sampling. Dev, `bos_test`, `bos_test_import`, `bos_m1_quickstart_3227` and `bos_t107_5605129e3a4d` were not used.
+- **Teardown:** Stopped the three isolated servers and verified that ports 3217, 5187 and 5197 refuse connections and have no listeners. Dropped `bos_t107_dc19da681630` and the four throwaway `bos_t107test_*` databases (two guard runs without the setting, one module run, one full suite) and verified all are absent. Remaining `bos*` databases: `bos`, `bos_m1_quickstart_3227`, `bos_t107_5605129e3a4d`, `bos_test`, `bos_test_import`. Removed the candidate's `node_modules` junction without recursing into it; the repository's `frontend/node_modules` is intact.
+- **Run note:** the first driver attempt stopped with a Python syntax error in the driver before any build, database or server existed; no sample was taken.
+- **Evidence:** local scratch `t107-ccp/` (session scratchpad): `without-setting.log`, `full-suite.log`, `search-detail.txt`, `report.txt`. The browser run is in `run-5acf96cd/` (`snapshot.json`, `run.json`, `list.log`, build, Flask, relay, timing and profile logs, `results.json`, error context for the miss).

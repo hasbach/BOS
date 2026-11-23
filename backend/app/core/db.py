@@ -17,6 +17,16 @@ from sqlalchemy.orm import Session
 
 _EXTENSION_KEY = "bos_engine"
 
+# psycopg prepares a statement on the server after five runs on one pooled connection, and
+# with the default plan_cache_mode (auto) PostgreSQL may then reuse a generic plan for it.
+# Row-level security reads the business from app.tenant_id when a plan is made, so a generic
+# plan made while a small business was querying is wrong for a large one (a nested loop:
+# seconds instead of milliseconds). Every query of the API is planned for the business it
+# runs for.
+CONNECTION_OPTIONS = (
+    "-c statement_timeout=30000 -c lock_timeout=10000 -c plan_cache_mode=force_custom_plan"
+)
+
 
 def make_engine(database_url: str) -> Engine:
     return create_engine(
@@ -25,7 +35,7 @@ def make_engine(database_url: str) -> Engine:
         # Error messages (and so logged tracebacks) must not carry bound values: they include
         # password hashes, token hashes, phone numbers and emails.
         hide_parameters=True,
-        connect_args={"options": "-c statement_timeout=30000 -c lock_timeout=10000"},
+        connect_args={"options": CONNECTION_OPTIONS},
     )
 
 
