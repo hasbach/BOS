@@ -14,9 +14,10 @@ from typing import Any
 import pytest
 from flask import Flask
 from flask.testing import FlaskClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 
 from app.config import Config
+from app.core.db import engine_of
 from tests.dbsupport import CatalogProduct, TwoTenants, insert_allocation, insert_product
 from tests.integration.catalog_support import PRODUCTS
 from tests.integration.us1_support import (
@@ -270,6 +271,45 @@ def test_stock_counts_use_matching_products_without_the_selected_stock_filter(
     out = ok(_search(owner, q="clearance", store_id=str(a.store_id), stock="out"))
     assert set(_codes(out)) == {catalog.jeans.code, archived_only.code, disabled.code}
     assert out["counts"] == body["counts"]
+
+
+@pytest.mark.parametrize(
+    ("q", "stock", "codes", "counts"),
+    [
+        ("jeans", "low", ["JN-SLIM"], {"all": 1, "in_stock": 1, "low": 1, "out": 0}),
+        ("jeans", "out", [], {"all": 1, "in_stock": 1, "low": 1, "out": 0}),
+        ("not-a-match", "out", [], {"all": 0, "in_stock": 0, "low": 0, "out": 0}),
+    ],
+)
+def test_first_page_reads_stock_once_for_items_and_counts(
+    app: Flask,
+    user_client: UserClient,
+    worlds: TwoTenants,
+    catalog: Catalog,
+    q: str,
+    stock: str,
+    codes: list[str],
+    counts: dict[str, int],
+) -> None:
+    a = worlds.a
+    limited = user_client(a.user("sales_limited"), a.tenant_id)
+    stock_reads: list[str] = []
+
+    def capture(_conn: Any, _cursor: Any, statement: str, *_: Any) -> None:
+        if "stock_balances" in statement:
+            stock_reads.append(statement)
+
+    engine = engine_of(app)
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        body = ok(_search(limited, q=q, store_id=str(a.store_id), stock=stock))
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert _codes(body) == codes
+    assert body["counts"] == counts
+    assert body["next_cursor"] is None
+    assert len(stock_reads) == 1
 
 
 def test_store_filter(owner: FlaskClient, catalog: Catalog, worlds: TwoTenants) -> None:

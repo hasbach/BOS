@@ -54,9 +54,10 @@ def escape_like(value: str) -> str:
 # Group the matching products together so PostgreSQL can join balances once rather than
 # rescan them per product. Only active variants with a balance contribute; products
 # without any such variants must still count as out of stock, but not as low.
-def _with_stock(conditions: list[str]) -> str:
+def _with_stock(conditions: list[str], *, materialized: bool) -> str:
+    materialization = "MATERIALIZED " if materialized else ""
     return (
-        "WITH product_stock AS ("  # noqa: S608
+        f"WITH product_stock AS {materialization}("  # noqa: S608
         "  SELECT p.id, p.code, p.name_en, p.name_ar, p.status, p.created_at, "
         "         count(b.inventory_item_id) AS variant_count, "
         "         COALESCE(sum(b.on_hand - b.allocated), 0) AS available_total, "
@@ -76,6 +77,7 @@ _STOCK_FILTERS = {
     "out": "NOT p.any_available",
     "low": "p.any_low",
 }
+_PAGE_ORDER = "ORDER BY p.created_at DESC, p.id DESC"
 
 
 def _conditions(db: Session, access: Access, query: Query) -> tuple[list[str], dict[str, Any]]:
@@ -107,50 +109,56 @@ def _conditions(db: Session, access: Access, query: Query) -> tuple[list[str], d
 def search(db: Session, access: Access, query: Query) -> dict[str, Any]:
     """The contract's ``ProductPage``."""
     conditions, params = _conditions(db, access, query)
-    page_conditions = list(conditions)
+    first_page = query.after is None
     if query.after is not None:
-        page_conditions.append("(p.created_at, p.id) < (:after_at, :after_id)")
+        conditions.append("(p.created_at, p.id) < (:after_at, :after_id)")
         params = {**params, "after_at": query.after[0], "after_id": query.after[1]}
     store_condition, store_params = visible_stores_condition(access)
     stock_filter = f"WHERE {_STOCK_FILTERS[query.stock]} " if query.stock is not None else ""
+    page_sql = (
+        "SELECT p.id, p.code, p.name_en, p.name_ar, p.status, p.created_at, "  # noqa: S608
+        "  (SELECT ph.id FROM product_photos ph WHERE ph.product_id = p.id "
+        "   ORDER BY ph.position LIMIT 1) AS main_photo_id, "
+        "  ARRAY(SELECT ps.store_id FROM product_stores ps JOIN stores s "
+        f"   ON s.id = ps.store_id WHERE ps.product_id = p.id AND {store_condition} "
+        "   ORDER BY ps.store_id) AS store_ids, "
+        "  p.variant_count, p.available_total, p.any_available, p.any_low "
+        f"FROM product_stock p {stock_filter}{_PAGE_ORDER} LIMIT :limit"
+    )
+    stock_sql = _with_stock(conditions, materialized=first_page)
+    if first_page:
+        # Counts see the full grouped result; only the page sees the selected stock filter.
+        # Start from the one counts row so an empty page still returns counts.
+        statement = (
+            f"{stock_sql}, stock_counts AS ("  # noqa: S608
+            "SELECT count(*) AS total, "
+            f"count(*) FILTER (WHERE {_STOCK_FILTERS['in_stock']}) AS in_stock, "
+            f"count(*) FILTER (WHERE {_STOCK_FILTERS['low']}) AS low, "
+            f"count(*) FILTER (WHERE {_STOCK_FILTERS['out']}) AS out "
+            "FROM product_stock p) "
+            "SELECT p.*, c.total, c.in_stock, c.low, c.out FROM stock_counts c "
+            f"LEFT JOIN ({page_sql}) p ON true {_PAGE_ORDER}"
+        )
+    else:
+        statement = stock_sql + page_sql
     rows = db.execute(
-        text(
-            f"{_with_stock(page_conditions)}"  # noqa: S608
-            "SELECT p.id, p.code, p.name_en, p.name_ar, p.status, p.created_at, "
-            "  (SELECT ph.id FROM product_photos ph WHERE ph.product_id = p.id "
-            "   ORDER BY ph.position LIMIT 1) AS main_photo_id, "
-            "  ARRAY(SELECT ps.store_id FROM product_stores ps JOIN stores s "
-            f"   ON s.id = ps.store_id WHERE ps.product_id = p.id AND {store_condition} "
-            "   ORDER BY ps.store_id) AS store_ids, "
-            "  p.variant_count, p.available_total, p.any_available, p.any_low "
-            f"FROM product_stock p {stock_filter}"
-            "ORDER BY p.created_at DESC, p.id DESC LIMIT :limit"
-        ),
+        text(statement),
         {**params, **store_params, "limit": PAGE_SIZE + 1},
     ).all()
+    counts = None
+    if first_page:
+        row = rows[0]
+        counts = {"all": row.total, "in_stock": row.in_stock, "low": row.low, "out": row.out}
+        if row.id is None:
+            rows = []
     more = len(rows) > PAGE_SIZE
     rows = rows[:PAGE_SIZE]
     prices = _prices(db, [row.id for row in rows])
     return {
         "items": [_summary(row, prices.get(row.id, [])) for row in rows],
         "next_cursor": (rows[-1].created_at, rows[-1].id) if more else None,
-        "counts": _counts(db, conditions, params) if query.after is None else None,
+        "counts": counts,
     }
-
-
-def _counts(db: Session, conditions: list[str], params: dict[str, Any]) -> dict[str, int]:
-    row = db.execute(
-        text(
-            f"{_with_stock(conditions)}"  # noqa: S608
-            "SELECT count(*) AS total, "
-            f"count(*) FILTER (WHERE {_STOCK_FILTERS['in_stock']}) AS in_stock, "
-            f"count(*) FILTER (WHERE {_STOCK_FILTERS['low']}) AS low, "
-            f"count(*) FILTER (WHERE {_STOCK_FILTERS['out']}) AS out "
-            "FROM product_stock p"
-        ),
-        params,
-    ).one()
-    return {"all": row.total, "in_stock": row.in_stock, "low": row.low, "out": row.out}
 
 
 def _prices(db: Session, product_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[dict[str, str]]]:
