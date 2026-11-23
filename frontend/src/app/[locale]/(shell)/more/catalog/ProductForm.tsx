@@ -27,8 +27,11 @@ import { useRouter } from "@/i18n/navigation";
 import { isApiError, isSessionEnded } from "@/lib/api";
 import { CATALOG, changedProduct, createProduct, getProduct, photoUrl, productName, skuConflicts, updateProduct } from "@/lib/catalog";
 import type { Product } from "@/lib/catalog";
+import { catalogScreenScope } from "@/lib/catalogScreenSeed";
+import type { CatalogScreenSeed } from "@/lib/catalogScreenSeed";
 import { normaliseDigits } from "@/lib/digits";
 import { formatAmount, formatApproximate, formatMoney, parseMoney, PRICE_RULE } from "@/lib/money";
+import { useSeed } from "@/lib/seed";
 import { useMe } from "@/lib/session";
 import { newIdempotencyKey } from "@/lib/staff";
 import { formatClock } from "@/lib/time";
@@ -68,32 +71,56 @@ export function NewProduct() {
 }
 
 type Load = { k: "loading" } | { k: "error"; error: unknown } | { k: "gone" } | { k: "ready"; product: Product };
+type EditRead = { renderId: string; seed?: CatalogScreenSeed<Product> };
 
 /** Screens 174 and 175: Edit product, loaded fresh so the form saves against the version it shows. */
-export function EditProduct({ productId }: { productId: string }) {
-  const access = useCatalogAccess();
-  if (!access.manage) return <NotAllowedToEdit backHref={`${CATALOG}/${productId}`} />;
-  return <EditLoader productId={productId} />;
+export function EditProduct({ productId, renderId = "initial", seed }: { productId: string; renderId?: string; seed?: CatalogScreenSeed<Product> }) {
+  const me = useMe();
+  const scope = catalogScreenScope(me);
+  const locale = useLocale();
+  if (!me.permissions.includes("catalog.manage")) return <NotAllowedToEdit backHref={`${CATALOG}/${productId}`} />;
+  const current = me.user.locale === locale && seed?.value.scope === scope ? seed : undefined;
+  return <EditSession key={JSON.stringify([me.user.id, me.business.id, scope, locale, productId])} productId={productId} read={{ renderId, seed: current }} />;
 }
 
-function EditLoader({ productId }: { productId: string }) {
+function EditSession({ productId, read }: { productId: string; read: EditRead }) {
+  // Once editing starts, keep the shown fields, their version, and transient state (e.g. uploads)
+  // together. A refresh can replace a pristine load but must not remount this draft.
+  const [draftRead, setDraftRead] = useState<EditRead>();
+  // A sheet temporarily holds the same baseline without committing its local draft.
+  const [sheetRead, setSheetRead] = useState<EditRead>();
+  const active = draftRead ?? sheetRead ?? read;
+  return <EditLoader
+    key={active.renderId}
+    productId={productId}
+    seed={active.seed}
+    onEdit={() => setDraftRead((current) => current ?? active)}
+    onDetailsOpenChange={(open) => setSheetRead(open ? active : undefined)}
+  />;
+}
+
+type EditDraftHandlers = { onEdit: () => void; onDetailsOpenChange: (open: boolean) => void };
+
+function EditLoader({ productId, seed, ...draftHandlers }: { productId: string; seed?: CatalogScreenSeed<Product> } & EditDraftHandlers) {
   const t = useTranslations();
   const c = useTranslations("catalog");
-  const [load, setLoad] = useState<Load>({ k: "loading" });
+  const initial = useSeed(seed)?.data;
+  const [load, setLoad] = useState<Load>(() => initial ? { k: "ready", product: initial } : { k: "loading" });
   const [attempt, setAttempt] = useState(0);
   const back = `${CATALOG}/${productId}`;
 
   useEffect(() => {
+    if (initial) return;
     const controller = new AbortController();
     getProduct(productId, controller.signal).then(
-      (product) => setLoad({ k: "ready", product }),
+      (product) => { if (!controller.signal.aborted) setLoad({ k: "ready", product }); },
       (error: unknown) => {
         if (controller.signal.aborted) return;
         setLoad(isApiError(error) && error.code === "not_found" ? { k: "gone" } : { k: "error", error });
       },
     );
     return () => controller.abort();
-  }, [productId, attempt]);
+  }, [productId, attempt, initial]);
 
   if (load.k === "gone") return <ProductNotFound />;
   if (load.k === "error") {
@@ -131,7 +158,7 @@ function EditLoader({ productId }: { productId: string }) {
       </CatalogStatus>
     );
   }
-  return <Form key={load.product.id} product={load.product} initial={formFromProduct(load.product)} />;
+  return <Form key={load.product.id} product={load.product} initial={formFromProduct(load.product)} {...draftHandlers} />;
 }
 
 interface Notice {
@@ -139,7 +166,7 @@ interface Notice {
   text: string;
 }
 
-function Form({ product, initial }: { product?: Product; initial: FormState }) {
+function Form({ product, initial, onEdit, onDetailsOpenChange }: { product?: Product; initial: FormState } & Partial<EditDraftHandlers>) {
   const t = useTranslations();
   const c = useTranslations("catalog");
   const locale = useLocale();
@@ -174,12 +201,26 @@ function Form({ product, initial }: { product?: Product; initial: FormState }) {
   const refusedPhoto = photos.some((photo) => photo.status === "refused");
   const donePhotos = photos.filter((photo) => photo.status === "done" && photo.id).map((photo) => photo.id as string);
 
-  const set = (change: Partial<FormState>) => setForm((current) => ({ ...current, ...change }));
+  const changeForm = (update: (current: FormState) => FormState) => {
+    onEdit?.();
+    setForm(update);
+  };
+  const set = (change: Partial<FormState>) => changeForm((current) => ({ ...current, ...change }));
   const variantOf = (key: string): VariantDraft => form.variants[key] ?? emptyVariant();
   const setVariant = (key: string, change: Partial<VariantDraft>) =>
-    setForm((current) => ({ ...current, variants: { ...current.variants, [key]: { ...(current.variants[key] ?? emptyVariant()), ...change } } }));
+    changeForm((current) => ({ ...current, variants: { ...current.variants, [key]: { ...(current.variants[key] ?? emptyVariant()), ...change } } }));
   const setOption = (key: string, change: (option: OptionDraft) => OptionDraft) =>
-    setForm((current) => ({ ...current, options: current.options.map((option) => (option.key === key ? change(option) : option)) }));
+    changeForm((current) => ({ ...current, options: current.options.map((option) => (option.key === key ? change(option) : option)) }));
+
+  function openDetails(key: string) {
+    onDetailsOpenChange?.(true);
+    setDetails(key);
+  }
+
+  function closeDetails() {
+    setDetails(null);
+    onDetailsOpenChange?.(false);
+  }
 
   function addValue(option: OptionDraft) {
     const label = option.adding.trim();
@@ -231,6 +272,7 @@ function Form({ product, initial }: { product?: Product; initial: FormState }) {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (busy || waiting > 0) return;
+    onEdit?.();
     const built = buildRequest(t, form, donePhotos, create);
     const found = Object.keys(built.errors).length + (refusedPhoto ? 1 : 0);
     if (found > 0) {
@@ -306,7 +348,7 @@ function Form({ product, initial }: { product?: Product; initial: FormState }) {
             </Banner>
           ) : null}
 
-          <PhotoPicker photos={photos} onChange={setPhotos} error={errors.photos} disabled={busy} />
+          <PhotoPicker photos={photos} onChange={(next) => { onEdit?.(); setPhotos(next); }} error={errors.photos} disabled={busy} />
 
           <Field
             label={c("form.nameEn")}
@@ -431,7 +473,7 @@ function Form({ product, initial }: { product?: Product; initial: FormState }) {
               errors={errors}
               lowDefault={settings.lowDefault}
               onChange={(change) => setVariant("", change)}
-              onDetails={() => setDetails("")}
+              onDetails={() => openDetails("")}
             />
           ) : (
             <>
@@ -462,7 +504,7 @@ function Form({ product, initial }: { product?: Product; initial: FormState }) {
                       samePrice={form.samePrice}
                       errors={errors}
                       onOpening={(opening) => setVariant(combo.key, { opening })}
-                      onDetails={() => setDetails(combo.key)}
+                      onDetails={() => openDetails(combo.key)}
                     />
                   ))}
               </Card>
@@ -498,10 +540,10 @@ function Form({ product, initial }: { product?: Product; initial: FormState }) {
           rate={settings.rate}
           lowDefault={settings.lowDefault}
           photos={donePhotos}
-          onClose={() => setDetails(null)}
+          onClose={closeDetails}
           onDone={(draft) => {
             setVariant(details, draft);
-            setDetails(null);
+            closeDetails();
           }}
         />
       ) : null}
@@ -861,6 +903,9 @@ function VariantSheet({
   const photoValues = ["", ...photos];
   const photoItem = useRovingRadio(photoValues, draft.photoId ?? "", (id) => setDraft((d) => ({ ...d, photoId: id || null })));
   const shared = formatPriceTyped(sharedPrice, sharedCurrency, locale);
+  const changed = draft.sku !== initial.sku || draft.ownPrice?.price !== initial.ownPrice?.price ||
+    draft.ownPrice?.currency !== initial.ownPrice?.currency || draft.lowMode !== initial.lowMode ||
+    (draft.lowMode === "own" && draft.lowLevel !== initial.lowLevel) || draft.photoId !== initial.photoId;
 
   return (
     <Sheet
@@ -868,7 +913,7 @@ function VariantSheet({
       onClose={onClose}
       title={title}
       footer={
-        <Button onClick={() => onDone(draft)}>
+        <Button onClick={() => changed ? onDone(draft) : onClose()}>
           <CheckIcon width={16} height={16} /> {c("form.sheet.done")}
         </Button>
       }

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
 import { titleFrom } from "@/lib/metadata";
+import { getServerProductEdit } from "@/lib/serverCatalogScreens";
 
 import { EditProduct } from "../../ProductForm";
 
@@ -14,5 +15,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ lo
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
-  return <EditProduct productId={productId} />;
+  const seed = await getServerProductEdit(locale, productId);
+  // Identify refreshes, including failed reads, without remounting an open draft.
+  return <EditProduct productId={productId} renderId={seed?.id ?? crypto.randomUUID()} seed={seed} />;
 }

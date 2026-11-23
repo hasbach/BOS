@@ -1,4 +1,4 @@
-// Server-only initial reads for product detail and stock history. The Flask endpoints still enforce
+// Server-only initial reads for product detail, edit and stock history. The Flask endpoints still enforce
 // tenant/store scope; only successful, usable data is seeded. All failures keep the client load path.
 import { cookies } from "next/headers";
 
@@ -31,6 +31,16 @@ function isProduct(value: unknown): value is Product {
     );
 }
 
+// The edit form reads nested option values and submits the variant's photo and low-stock settings.
+function isEditableProduct(value: unknown): value is Product {
+  return isProduct(value) && value.options.every((option) =>
+    record(option) && string(option.id) && string(option.name) && Array.isArray(option.values) &&
+    option.values.every((entry) => record(entry) && string(entry.id) && string(entry.label)),
+  ) && value.variants.every((variant) => nullableString(variant.photo_id) &&
+    (variant.low_stock_level === null || Number.isSafeInteger(variant.low_stock_level)),
+  );
+}
+
 function isMovementPage(value: unknown): value is MovementPage {
   return record(value) && nullableString(value.next_cursor) && Array.isArray(value.items) && value.items.every((item) =>
     record(item) && string(item.id) && string(item.at) && Number.isFinite(Date.parse(item.at)) &&
@@ -57,6 +67,14 @@ export async function getServerProductDetail(locale: string, productId: string):
   const session = await screenSession(locale);
   if (!session) return undefined;
   const product = await fetchServerData(await cookies(), productPath(productId), isProduct, { baseUrl: process.env.BOS_API_INTERNAL_URL });
+  return toSeed(product && product.id.toLowerCase() === productId.toLowerCase() ? { scope: session.scope, data: product } : null);
+}
+
+export async function getServerProductEdit(locale: string, productId: string): Promise<CatalogScreenSeed<Product> | undefined> {
+  if (!safeId(productId)) return undefined;
+  const session = await screenSession(locale);
+  if (!session?.permissions.includes("catalog.manage")) return undefined;
+  const product = await fetchServerData(await cookies(), productPath(productId), isEditableProduct, { baseUrl: process.env.BOS_API_INTERNAL_URL });
   return toSeed(product && product.id.toLowerCase() === productId.toLowerCase() ? { scope: session.scope, data: product } : null);
 }
 
