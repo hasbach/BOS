@@ -20,8 +20,12 @@ import { useRouter } from "@/i18n/navigation";
 import { isApiError, isSessionEnded } from "@/lib/api";
 import { CATALOG, archiveProduct, changedProduct, deleteProduct, getProduct, photoUrl, productName, restoreProduct } from "@/lib/catalog";
 import type { Product, StockNumbers, Variant } from "@/lib/catalog";
+import { catalogScreenScope } from "@/lib/catalogScreenSeed";
+import type { CatalogScreenSeed } from "@/lib/catalogScreenSeed";
 import { writeFailureMessage } from "@/lib/errors";
 import { formatApproximate, formatMoney } from "@/lib/money";
+import { useSeed } from "@/lib/seed";
+import { useMe } from "@/lib/session";
 import { stockStateOf } from "@/lib/stock";
 import type { AdjustmentResult } from "@/lib/stock";
 
@@ -41,24 +45,34 @@ interface Notice {
 /** What the product form just saved, shown once on arrival (screen 173). */
 export type Saved = "created" | "updated";
 
+type Props = { productId: string; saved?: Saved; seed?: CatalogScreenSeed<Product> };
+
 /** Screens 140 to 145: one product with its variants and stock numbers. */
-export function ProductDetail({ productId, saved }: { productId: string; saved?: Saved }) {
+export function ProductDetail({ productId, saved, seed }: Props) {
+  const scope = catalogScreenScope(useMe());
+  const current = seed?.value.scope === scope ? seed : undefined;
+  return <Detail key={JSON.stringify([scope, productId, saved])} productId={productId} saved={saved} seed={current} />;
+}
+
+function Detail({ productId, saved, seed }: Props) {
   const c = useTranslations("catalog");
   const t = useTranslations();
-  const [load, setLoad] = useState<Load>({ k: "loading" });
+  const initial = useSeed(seed);
+  const [load, setLoad] = useState<Load>(() => initial ? { k: "ready", product: initial.data } : { k: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (initial && attempt === 0) return;
     const controller = new AbortController();
     getProduct(productId, controller.signal).then(
-      (product) => setLoad({ k: "ready", product }),
+      (product) => { if (!controller.signal.aborted) setLoad({ k: "ready", product }); },
       (error: unknown) => {
         if (controller.signal.aborted) return;
         setLoad(isApiError(error) && error.code === "not_found" ? { k: "gone" } : { k: "error", error });
       },
     );
     return () => controller.abort();
-  }, [productId, attempt]);
+  }, [productId, attempt, initial]);
 
   if (load.k === "gone") return <ProductNotFound />;
   if (load.k === "error") {

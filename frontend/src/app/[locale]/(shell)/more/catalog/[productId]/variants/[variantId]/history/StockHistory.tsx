@@ -18,8 +18,12 @@ import { isApiError, isSessionEnded } from "@/lib/api";
 import { eventName } from "@/lib/audit";
 import { CATALOG, getProduct, productName } from "@/lib/catalog";
 import type { Product, StockNumbers, Variant } from "@/lib/catalog";
+import { catalogScreenScope } from "@/lib/catalogScreenSeed";
+import type { CatalogScreenSeed } from "@/lib/catalogScreenSeed";
+import { useSeed } from "@/lib/seed";
+import { useMe } from "@/lib/session";
 import { listMovements, stockStateOf } from "@/lib/stock";
-import type { AdjustmentResult, Movement, MovementReason } from "@/lib/stock";
+import type { AdjustmentResult, Movement, MovementPage, MovementReason } from "@/lib/stock";
 import { beirutDayKey, daysAgo, formatBeirutDate, formatClock, formatWeekdayDate } from "@/lib/time";
 
 import styles from "../../../../catalog.module.css";
@@ -46,8 +50,9 @@ type Load =
   | { k: "gone" }
   | { k: "ended" }
   | { k: "error" }
-  | { k: "ready"; product: Product; movements: Movement[]; next: string | null };
+  | { k: "ready"; product: Product; movements: Movement[]; next: string | null; asOf: number };
 type More = "idle" | "loading" | "error";
+type Props = { productId: string; variantId: string; seed?: CatalogScreenSeed<{ product: Product; page: MovementPage; asOf: number }> };
 
 /** Design 156: what a sales, packing or dispatch user gets from an old link. */
 function NotAllowed() {
@@ -61,29 +66,36 @@ function NotAllowed() {
 }
 
 /** Designs 153 to 156: one variant's stock movements, newest first, 50 at a time (stock.adjust holders). */
-export function StockHistory({ productId, variantId }: { productId: string; variantId: string }) {
+export function StockHistory({ productId, variantId, seed }: Props) {
   const access = useCatalogAccess();
+  const scope = catalogScreenScope(useMe());
   if (!access.adjust) return <NotAllowed />;
-  return <History productId={productId} variantId={variantId} />;
+  const current = seed?.value.scope === scope ? seed : undefined;
+  return <History key={JSON.stringify([scope, productId, variantId])} productId={productId} variantId={variantId} seed={current} />;
 }
 
-function History({ productId, variantId }: { productId: string; variantId: string }) {
+function History({ productId, variantId, seed }: Props) {
   const t = useTranslations();
   const h = useTranslations("catalog.history");
   const c = useTranslations("catalog");
   const locale = useLocale();
-  const [load, setLoad] = useState<Load>({ k: "loading" });
+  const initial = useSeed(seed);
+  const [load, setLoad] = useState<Load>(() => initial ? {
+    k: "ready", product: initial.data.product, movements: initial.data.page.items, next: initial.data.page.next_cursor, asOf: initial.data.asOf,
+  } : { k: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [more, setMore] = useState<More>("idle");
   const [adjusting, setAdjusting] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initial && attempt === 0) return;
     const controller = new AbortController();
     Promise.all([getProduct(productId, controller.signal), listMovements(variantId, undefined, controller.signal)]).then(
       ([product, page]) => {
+        if (controller.signal.aborted) return;
         const found = product.variants.some((variant) => variant.id === variantId);
-        setLoad(found ? { k: "ready", product, movements: page.items, next: page.next_cursor } : { k: "gone" });
+        setLoad(found ? { k: "ready", product, movements: page.items, next: page.next_cursor, asOf: Date.now() } : { k: "gone" });
       },
       (error: unknown) => {
         if (controller.signal.aborted) return;
@@ -94,7 +106,7 @@ function History({ productId, variantId }: { productId: string; variantId: strin
       },
     );
     return () => controller.abort();
-  }, [productId, variantId, attempt]);
+  }, [productId, variantId, attempt, initial]);
 
   if (load.k === "ended") return <SessionEnded />;
   if (load.k === "forbidden") return <NotAllowed />;
@@ -124,7 +136,7 @@ function History({ productId, variantId }: { productId: string; variantId: strin
     );
   }
 
-  const { product, movements, next } = load;
+  const { product, movements, next, asOf } = load;
   const variant = product.variants.find((v) => v.id === variantId) as Variant;
   const single = product.options.length === 0;
   const label = single ? c("detail.onlyVariant") : variantLabel(variant.option_values);
@@ -135,7 +147,8 @@ function History({ productId, variantId }: { productId: string; variantId: strin
     setMore("loading");
     try {
       const page = await listMovements(variantId, load.next);
-      setLoad((current) => (current.k === "ready" ? { ...current, movements: [...current.movements, ...page.items], next: page.next_cursor } : current));
+      const asOf = Date.now();
+      setLoad((current) => (current.k === "ready" ? { ...current, movements: [...current.movements, ...page.items], next: page.next_cursor, asOf } : current));
       setMore("idle");
     } catch {
       setMore("error");
@@ -143,10 +156,12 @@ function History({ productId, variantId }: { productId: string; variantId: strin
   }
 
   function setBalance(balance: StockNumbers, movement?: Movement) {
+    const asOf = Date.now();
     setLoad((current) =>
       current.k === "ready"
         ? {
             ...current,
+            asOf,
             product: {
               ...current.product,
               variants: current.product.variants.map((v) => (v.id === variantId ? { ...v, stock: balance, stock_state: stockStateOf(balance, v.effective_low_stock_level) } : v)),
@@ -194,7 +209,7 @@ function History({ productId, variantId }: { productId: string; variantId: strin
         ) : (
           <>
             <p className={styles.small}>{t("history.note")}</p>
-            <Days movements={movements} locale={locale} />
+            <Days movements={movements} locale={locale} asOf={asOf} />
             {more === "loading" ? (
               <Card style={{ padding: 0 }} aria-busy="true">
                 <ul className={own.list}>
@@ -254,9 +269,9 @@ function History({ productId, variantId }: { productId: string; variantId: strin
   );
 }
 
-function Days({ movements, locale }: { movements: Movement[]; locale: string }) {
+function Days({ movements, locale, asOf }: { movements: Movement[]; locale: string; asOf: number }) {
   const t = useTranslations();
-  const now = new Date();
+  const now = new Date(asOf);
 
   const days = useMemo(() => {
     const groups: Array<{ key: string; at: string; items: Movement[] }> = [];

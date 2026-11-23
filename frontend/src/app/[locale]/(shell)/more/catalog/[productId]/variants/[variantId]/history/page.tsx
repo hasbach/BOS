@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
 import { titleFrom } from "@/lib/metadata";
+import { getServerStockHistory } from "@/lib/serverCatalogScreens";
 
 import { StockHistory } from "./StockHistory";
 
@@ -13,5 +14,6 @@ export default async function StockHistoryPage({ params }: { params: Promise<{ l
   const { locale, productId, variantId } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
-  return <StockHistory productId={productId} variantId={variantId} />;
+  const seed = await getServerStockHistory(locale, productId, variantId);
+  return <StockHistory key={seed?.id ?? crypto.randomUUID()} productId={productId} variantId={variantId} seed={seed} />;
 }
