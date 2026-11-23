@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
 import { titleFrom } from "@/lib/metadata";
+import { getServerLowStock } from "@/lib/serverLowStock";
 
 import { LowStockList } from "./LowStockList";
 
@@ -14,5 +15,6 @@ export default async function LowStockPage({ params }: { params: Promise<{ local
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
-  return <LowStockList />;
+  const seed = await getServerLowStock(locale);
+  return <LowStockList seed={seed ?? { id: crypto.randomUUID(), value: null }} />;
 }

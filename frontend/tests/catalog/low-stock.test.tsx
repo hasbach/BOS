@@ -142,7 +142,7 @@ describe("low stock list (screens 158 to 161)", () => {
   it("shows the loading state while the first page loads", () => {
     mockApi(() => new Promise<Response>(() => undefined));
     renderMe(<LowStockList />, catalogOwner());
-    expect(screen.getByRole("status")).toHaveTextContent("Loading low stock…");
+    expect(screen.getByText("Loading low stock…")).toHaveAttribute("role", "status");
   });
 
   it("shows the could-not-load state with a retry that loads again", async () => {

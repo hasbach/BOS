@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AppBar } from "@/components/AppBar";
 import { Banner } from "@/components/Banner";
@@ -16,8 +16,11 @@ import { useMeStores } from "@/components/StoresProvider";
 import { Link } from "@/i18n/navigation";
 import { isApiError, isSessionEnded } from "@/lib/api";
 import { CATALOG, productName } from "@/lib/catalog";
+import { catalogScreenScope } from "@/lib/catalogScreenSeed";
+import type { CatalogScreenSeed } from "@/lib/catalogScreenSeed";
+import type { Seed } from "@/lib/seed";
 import { listLowStock } from "@/lib/stock";
-import type { LowStockItem } from "@/lib/stock";
+import type { LowStockItem, LowStockPage } from "@/lib/stock";
 import { useMe } from "@/lib/session";
 
 import own from "../[productId]/stock.module.css";
@@ -27,12 +30,38 @@ import { CatalogStatus, ProductThumb, StockChip, useBusinessSettings, useCatalog
 
 type Page = { k: "loading" } | { k: "error"; error: unknown } | { k: "ready"; items: LowStockItem[]; next: string | null; total: number | null };
 type More = "idle" | "loading" | "error";
+type Props = { seed?: CatalogScreenSeed<LowStockPage> | Seed<null> };
+type View = { seedId?: string; store: string; initialPage?: LowStockPage };
+type ViewResponse = { view: View; page: Page; more: More };
+
+// Cached server payloads should not be replayed on back navigation.
+const seenSeeds = new Set<string>();
+
+function ready(result: LowStockPage): Page {
+  return { k: "ready", items: result.items, next: result.next_cursor, total: typeof result.total === "number" ? result.total : null };
+}
+
+function initialResponse(view: View): ViewResponse {
+  return { view, page: view.initialPage ? ready(view.initialPage) : { k: "loading" }, more: "idle" };
+}
 
 /** Screens 158 to 161: variants at or below their low-stock level, out of stock first (owners and managers: stock.adjust). */
-export function LowStockList() {
+export function LowStockList({ seed }: Props) {
   const access = useCatalogAccess();
+  const { user, business } = useMe();
   if (!access.adjust) return <NotAllowed />;
-  return <List />;
+  return <StoreSelection key={JSON.stringify([user.id, business.id])} seed={seed} />;
+}
+
+function StoreSelection({ seed }: Props) {
+  const me = useMe();
+  const scope = catalogScreenScope(me);
+  const [storeId, setStoreId] = useState("");
+  const store = me.stores.some((candidate) => candidate.id === storeId && candidate.status === "active") ? storeId : "";
+  if (store !== storeId) setStoreId(store);
+
+  // Store access changes invalidate requests and rows, not a still-allowed selection.
+  return <List key={scope} seed={seed} scope={scope} store={store} onStoreChange={setStoreId} />;
 }
 
 function NotAllowed() {
@@ -51,51 +80,84 @@ function Bar() {
   return <AppBar title={l("title")} subtitle={l("subtitle")} backHref={CATALOG} backLabel={common("back")} />;
 }
 
-function List() {
+function List({ seed, scope, store, onStoreChange }: Props & { scope: string | null; store: string; onStoreChange: (store: string) => void }) {
   const t = useTranslations();
   const c = useTranslations("catalog");
   const l = useTranslations("catalog.lowStock");
   const stores = useMeStores();
   const { lowDefault } = useBusinessSettings();
 
-  const [storeId, setStoreId] = useState("");
-  const [page, setPage] = useState<Page>({ k: "loading" });
-  const [more, setMore] = useState<More>("idle");
-  const [attempt, setAttempt] = useState(0);
   const [sheet, setSheet] = useState(false);
-  const request = useRef<AbortController | null>(null);
+  const firstRequest = useRef<AbortController | null>(null);
+  const moreRequest = useRef<AbortController | null>(null);
+  const seedId = seed?.id;
+  const matchesScope = seed?.value?.scope === scope;
+  const initialPage = seed && !store && matchesScope && !seenSeeds.has(seed.id) ? seed.value?.data : undefined;
+  const [previousView, setView] = useState<View>(() => ({ seedId, store, initialPage }));
+  const [response, setResponse] = useState<ViewResponse | null>(null);
 
-  const store = stores.some((candidate) => candidate.id === storeId) ? storeId : "";
+  // A refresh keeps the store. Only all stores can use the server's first page;
+  // changing stores (including a return to all stores) always starts a fresh read.
+  const refreshed = seedId !== previousView.seedId;
+  let view = previousView;
+  if (refreshed || store !== previousView.store) {
+    view = { seedId, store, initialPage: refreshed ? initialPage : undefined };
+    setView(view);
+  }
+
+  // Aborting handles late callbacks. View identity also hides responses React
+  // queued before the abort, even if the store has since changed away and back.
+  const { page, more } = response?.view === view ? response : initialResponse(view);
 
   useEffect(() => {
+    if (matchesScope && seedId !== undefined) seenSeeds.add(seedId);
+  }, [matchesScope, seedId]);
+
+  useLayoutEffect(() => () => {
+    firstRequest.current?.abort();
+    firstRequest.current = null;
+    moreRequest.current?.abort();
+    moreRequest.current = null;
+  }, [view]);
+
+  useEffect(() => {
+    if (view.initialPage) return;
     const controller = new AbortController();
-    request.current = controller;
-    listLowStock({ store_id: store || undefined }, controller.signal).then(
+    firstRequest.current = controller;
+    listLowStock({ store_id: view.store || undefined }, controller.signal).then(
       (result) => {
-        if (controller.signal.aborted) return;
-        setPage({ k: "ready", items: result.items, next: result.next_cursor, total: typeof result.total === "number" ? result.total : null });
-        setMore("idle");
+        if (!controller.signal.aborted) setResponse({ view, page: ready(result), more: "idle" });
       },
       (error: unknown) => {
-        if (!controller.signal.aborted) setPage({ k: "error", error });
+        if (!controller.signal.aborted) setResponse({ view, page: { k: "error", error }, more: "idle" });
       },
     );
     return () => controller.abort();
-  }, [store, attempt]);
+  }, [view]);
 
-  async function loadMore() {
-    if (page.k !== "ready" || !page.next || more === "loading") return;
-    const signal = request.current?.signal;
-    if (!signal || signal.aborted) return;
-    setMore("loading");
-    try {
-      const result = await listLowStock({ store_id: store || undefined, cursor: page.next }, signal);
-      if (signal.aborted) return;
-      setPage((current) => (current.k === "ready" ? { ...current, items: [...current.items, ...result.items], next: result.next_cursor } : current));
-      setMore("idle");
-    } catch {
-      if (!signal.aborted) setMore("error");
+  function loadMore() {
+    if (page.k !== "ready" || !page.next || more === "loading" || moreRequest.current) return;
+    const controller = new AbortController();
+    moreRequest.current = controller;
+    function updateMore(more: More, result?: LowStockPage) {
+      setResponse((previous) => {
+        const owned = previous?.view === view ? previous : initialResponse(view);
+        if (owned.page.k !== "ready") return previous;
+        return {
+          view, more,
+          page: result ? { ...owned.page, items: [...owned.page.items, ...result.items], next: result.next_cursor } : owned.page,
+        };
+      });
     }
+    function finish(more: More, result?: LowStockPage) {
+      if (moreRequest.current === controller) moreRequest.current = null;
+      if (!controller.signal.aborted) updateMore(more, result);
+    }
+    updateMore("loading");
+    void listLowStock({ store_id: view.store || undefined, cursor: page.next }, controller.signal).then(
+      (result) => finish("idle", result),
+      () => finish("error"),
+    );
   }
 
   if (page.k === "error") {
@@ -103,12 +165,7 @@ function List() {
     if (isApiError(page.error) && page.error.code === "forbidden") return <NotAllowed />;
     return (
       <CatalogStatus title={l("title")} heading={l("loadError.title")} text={l("loadError.text")} tone="warn" icon="wifioff" alert backHref={CATALOG}>
-        <Button
-          onClick={() => {
-            setPage({ k: "loading" });
-            setAttempt((n) => n + 1);
-          }}
-        >
+        <Button onClick={() => setView({ ...view, initialPage: undefined })}>
           <SyncIcon width={16} height={16} /> {t("ui.retry")}
         </Button>
         <LinkButton href={CATALOG} variant="ghost">
@@ -125,7 +182,7 @@ function List() {
       <Bar />
       <ScreenBody>
         <OfflineNotice />
-        {stores.length > 1 ? (
+        {stores.length > 1 || store !== "" ? (
           <div className={styles.pills}>
             <button type="button" className={`${styles.pill} ${store ? styles.pillOn : ""}`} aria-haspopup="dialog" onClick={() => setSheet(true)}>
               <StoreIcon width={16} height={16} />
@@ -170,11 +227,7 @@ function List() {
           onClose={() => setSheet(false)}
           onPick={(id) => {
             setSheet(false);
-            if (id === store) return;
-            request.current?.abort();
-            setPage({ k: "loading" });
-            setMore("idle");
-            setStoreId(id);
+            if (id !== store) onStoreChange(id);
           }}
         />
       ) : null}

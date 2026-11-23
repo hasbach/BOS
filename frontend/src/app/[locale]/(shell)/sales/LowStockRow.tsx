@@ -7,45 +7,50 @@ import { Card } from "@/components/Card";
 import { AlertIcon, ChevronIcon } from "@/components/icons";
 import { screenStyles } from "@/components/Screen";
 import { Link } from "@/i18n/navigation";
-import { CATALOG, productName } from "@/lib/catalog";
-import { listLowStock } from "@/lib/stock";
-import type { LowStockItem } from "@/lib/stock";
+import { CATALOG } from "@/lib/catalog";
+import { catalogScreenScope } from "@/lib/catalogScreenSeed";
+import type { CatalogScreenSeed } from "@/lib/catalogScreenSeed";
+import { lowStockShortcut } from "@/lib/lowStockShortcut";
+import type { LowStockShortcut } from "@/lib/lowStockShortcut";
+import { useSeed } from "@/lib/seed";
 import { useMe } from "@/lib/session";
+import { listLowStock } from "@/lib/stock";
 
 import styles from "../placeholder.module.css";
 
-const SHOWN = 2;
+type Props = { seed?: CatalogScreenSeed<LowStockShortcut> };
 
 /**
  * Screen 157: the "Needs attention" row at the top of the owner's and manager's start tab, with the
  * total and the first two names of the Low stock list's first page. It is left out entirely when
  * nothing is low or the list can't load: a shortcut that fails must not get in the way.
  */
-export function LowStockRow() {
-  const { permissions } = useMe();
-  if (!permissions.includes("stock.adjust")) return null;
-  return <Row />;
+export function LowStockRow({ seed }: Props) {
+  const me = useMe();
+  if (!me.permissions.includes("stock.adjust")) return null;
+  const scope = catalogScreenScope(me);
+  const current = seed?.value.scope === scope ? seed : undefined;
+  return <Row key={JSON.stringify([scope, current?.id])} seed={current} />;
 }
 
-function Row() {
+function Row({ seed }: Props) {
   const t = useTranslations("catalog.lowStock.row");
   const locale = useLocale();
-  const [low, setLow] = useState<{ total: number; first: LowStockItem[] } | null>(null);
+  const initial = useSeed(seed);
+  const [low, setLow] = useState<LowStockShortcut | null>(initial?.data ?? null);
 
   useEffect(() => {
+    if (initial) return;
     const controller = new AbortController();
-    listLowStock({}, controller.signal).then(
-      (page) => setLow({ total: typeof page.total === "number" ? page.total : page.items.length, first: page.items.slice(0, SHOWN) }),
-      () => undefined,
-    );
+    void listLowStock({}, controller.signal).then((page) => {
+      if (!controller.signal.aborted) setLow(lowStockShortcut(page, locale));
+    }).catch(() => undefined); // Optional shortcut: leave it out if its data cannot be loaded.
     return () => controller.abort();
-  }, []);
+  }, [initial, locale]);
 
   if (!low || low.total === 0 || low.first.length === 0) return null;
 
-  const names = low.first
-    .map((item) => [productName({ name_en: item.product_name_en, name_ar: item.product_name_ar }, locale) || item.sku, item.option_values.join(" · ")].filter(Boolean).join(" "))
-    .join(locale === "ar" ? "، " : ", ");
+  const names = low.first.join(locale === "ar" ? "، " : ", ");
   const rest = low.total - low.first.length;
 
   return (
