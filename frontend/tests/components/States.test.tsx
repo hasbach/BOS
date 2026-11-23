@@ -64,39 +64,47 @@ describe("OfflineNotice", () => {
     onLine.mockReset();
   });
 
-  it("shows nothing while online", () => {
+  it("keeps the polite region empty while online", () => {
     onLine.mockReturnValue(true);
-    renderWithIntl(<OfflineNotice />);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    const { container } = renderWithIntl(<OfflineNotice />);
+    const notice = container.querySelector("[aria-live]");
+    expect(notice).toHaveAttribute("aria-live", "polite");
+    expect(notice).toBeVisible();
+    expect(notice).toBeEmptyDOMElement();
   });
 
   it("shows the notice while offline", () => {
     onLine.mockReturnValue(false);
     renderWithIntl(<OfflineNotice />);
-    expect(screen.getByRole("status")).toHaveTextContent(en.ui.offlineTitle);
+    expect(screen.getByText(en.ui.offlineTitle, { exact: true })).toBeVisible();
   });
 
-  it("reacts when the connection drops and comes back", () => {
+  it.each([["en", en], ["ar", ar]] as const)("updates the same standalone region on connection changes in %s", (locale, messages) => {
     onLine.mockReturnValue(true);
-    renderWithIntl(<OfflineNotice />);
+    const { container } = renderWithIntl(<OfflineNotice />, locale);
+    const notice = container.querySelector("[aria-live]");
+    const { offlineTitle, offlineText } = messages.ui;
+    expect(notice).toBeEmptyDOMElement();
 
     onLine.mockReturnValue(false);
     act(() => {
       window.dispatchEvent(new Event("offline"));
     });
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(container.querySelector("[aria-live]")).toBe(notice);
+    expect(notice).toHaveTextContent(`${offlineTitle} ${offlineText}`);
 
     onLine.mockReturnValue(true);
     act(() => {
       window.dispatchEvent(new Event("online"));
     });
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(container.querySelector("[aria-live]")).toBe(notice);
+    expect(notice).toBeEmptyDOMElement();
   });
 
   it("can be forced visible", () => {
     onLine.mockReturnValue(true);
     renderWithIntl(<OfflineNotice forceVisible />, "ar");
-    expect(screen.getByRole("status")).toHaveTextContent(ar.ui.offlineTitle);
+    expect(screen.getByText(ar.ui.offlineTitle, { exact: true })).toBeVisible();
   });
 });
 

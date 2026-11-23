@@ -109,15 +109,15 @@ describe("shell frame", () => {
     },
   );
 
-  it("shows the offline notice above every screen while there is no connection, and removes it when it is back", () => {
+  it("shows the offline notice above every screen while there is no connection, and clears it when it is back", () => {
     onLine.mockReturnValue(false);
     resetNavigation("/more/history");
-    renderMe(
+    const { container } = renderMe(
       <AppShell>
         <p>page</p>
       </AppShell>,
     );
-    const notice = screen.getByRole("status");
+    const notice = container.querySelector("[aria-live]");
     expect(notice).toHaveTextContent("You’re offline.");
     expect(notice).toHaveTextContent("nothing can be saved until you’re back online");
     expect(nav.pathname).toBe("/more/history");
@@ -126,6 +126,7 @@ describe("shell frame", () => {
     act(() => {
       window.dispatchEvent(new Event("online"));
     });
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(container.querySelector("[aria-live]")).toBe(notice);
+    expect(notice).toBeEmptyDOMElement();
   });
 });

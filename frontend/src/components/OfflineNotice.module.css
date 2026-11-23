@@ -1,0 +1,4 @@
+/* Take the empty region out of layout without hiding it. */
+.region:empty {
+  position: absolute;
+}
