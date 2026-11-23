@@ -4,7 +4,7 @@
 
 | Gate | Evidence | State |
 | --- | --- | --- |
-| English/Arabic browser journeys at 360 px | Latest full Playwright run: 32 passed in 12.0 min (2026-11-23), on the build with server-rendered product detail/history (`adddd49`) and the accessibility startup fix in the working tree. | Passed for that build |
+| English/Arabic browser journeys at 360 px | Latest full Playwright run: 32 passed in 15.8 min (2026-11-23), with the shared first-page search aggregate, server-rendered Low Stock and Sales shortcut, focus-ring repair, and offline-notice deduplication. This run was launched before the follow-up Low Stock refresh and offline live-region fixes; it does not verify those fixes. | Passed for that build |
 | Frontend component suite, typecheck, lint, and production build | Latest component suite: 872 Vitest tests passed; TypeScript and scoped ESLint passed. The full Playwright suite exercised the production build. | Passed for those runs |
 | Full backend suite, lint, formatting and types | Latest full run, including the Windows photo-storage regression: 1,912 pytest tests passed in 271.08 s; Ruff lint and formatting passed (125 files); mypy passed in 53 source files. | Passed |
 | Reservation concurrency and inventory integrity | [US3 checkpoint](us3.md) and full backend suite with the inventory integrity fixture | Passed |
