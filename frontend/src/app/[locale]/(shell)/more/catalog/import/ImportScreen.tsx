@@ -59,10 +59,11 @@ function Importer() {
   const t = useTranslations();
   const i = useTranslations("catalog.import");
   const [state, setState] = useState<State>({ k: "start" });
-  const input = useRef<HTMLInputElement>(null);
+  // Server HTML has no working picker. Enable the button when React commits the input ref.
+  const [picker, setPicker] = useState<HTMLInputElement | null>(null);
   const run = useRef(0);
 
-  const pick = () => input.current?.click();
+  const pick = () => picker?.click();
 
   async function upload(file: File) {
     const info: FileInfo = { name: file.name, size: file.size };
@@ -111,7 +112,7 @@ function Importer() {
     }
   }
 
-  const fileInput = <input ref={input} type="file" accept=".csv,text/csv" hidden data-testid="csv-input" onChange={chosen} />;
+  const fileInput = <input ref={setPicker} type="file" accept=".csv,text/csv" hidden data-testid="csv-input" onChange={chosen} />;
 
   if (state.k === "ended") return <SessionEnded />;
   if (state.k === "forbidden") return <NotAllowedToEdit />;
@@ -195,7 +196,7 @@ function Importer() {
       </>
     );
     footer = (
-      <Button onClick={pick}>
+      <Button disabled={!picker} onClick={pick}>
         <UploadIcon width={16} height={16} /> {i("choose")}
       </Button>
     );

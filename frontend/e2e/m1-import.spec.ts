@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { createTranslator } from "next-intl";
@@ -6,6 +7,9 @@ import ar from "../messages/ar.json";
 import en from "../messages/en.json";
 import { expect, test } from "./fixtures";
 import { catalogWorld, expectNoSidewaysScroll } from "./m1-fixtures";
+
+// These tests authenticate with local fixture credentials. Keep their request bodies out of traces.
+test.use({ trace: "off" });
 
 const header = "product_code,name_en,name_ar,sku,price,currency,opening_quantity";
 const hatRow = "IMP-A,Imported hat,قبعة مستوردة,IMP-A-SKU,12,USD,٥";
@@ -21,6 +25,54 @@ const invalid = [
   "IMP-C,Imported coat,معطف مستورد,IMP-C-SKU,,USD,3",
   "IMP-D,Imported shoes,حذاء مستورد,IMP-D-SKU,22,USD,-1",
 ];
+
+test("CSV chooser stays disabled until ready; the first activation uploads", async ({ page, env, locale }) => {
+  const headers = { "X-BOS-CSRF": "1" };
+  const signedIn = await page.request.post("/api/v1/auth/sign-in", {
+    headers,
+    data: { identifier: "owner@demo.bos.test", password: env.demoPassword },
+  });
+  expect(signedIn.status()).toBe(200);
+  expect((await page.request.patch("/api/v1/me", { headers, data: { locale } })).status()).toBe(200);
+
+  const label = createTranslator({ locale, messages: (locale === "en" ? en : ar).catalog.import });
+  const choose = page.getByRole("button", { name: label("choose"), exact: true });
+  let releaseScripts!: () => void;
+  const scripts = new Promise<void>((resolve) => { releaseScripts = resolve; });
+  const requestedScript = page.waitForRequest((request) =>
+    request.resourceType() === "script" && new URL(request.url()).pathname.includes("/_next/"),
+  );
+  await page.route("**/_next/**", async (route) => {
+    if (route.request().resourceType() === "script") await scripts;
+    await route.continue();
+  });
+  try {
+    const response = await page.goto(`/${locale}/more/catalog/import`, { waitUntil: "commit" });
+    expect(response?.status()).toBe(200);
+    await requestedScript;
+    await expect(page.getByRole("link", { name: label("template") })).toBeVisible();
+    await expect(choose).toBeVisible();
+    expect(await choose.isDisabled(), "server-rendered chooser with hydration explicitly deferred").toBe(true);
+  } finally {
+    releaseScripts();
+  }
+
+  await expect(choose).toBeEnabled();
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    locale === "en" ? choose.click() : choose.press("Enter"),
+  ]);
+  expect(await chooser.element().getAttribute("data-testid")).toBe("csv-input");
+  const code = `READY-${randomUUID().slice(0, 8)}`;
+  const [preview] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/v1/catalog/imports"),
+    chooser.setFiles({ name: "ready.csv", mimeType: "text/csv", buffer: Buffer.from(`${header}\r\n${code},Ready hat,قبعة,${code},12,USD,1\r\n`) }),
+  ]);
+  expect(preview.status()).toBe(201);
+  expect(await preview.json()).toMatchObject({ status: "previewed", row_count: 1, errors: [] });
+  await expect(page.getByRole("button", { name: label("confirm", { count: 1 }) })).toBeEnabled();
+});
 
 test("CSV preview rejects bad rows; confirmation creates opening stock once", async ({ browser, baseURL, env, locale }) => {
   const world = await catalogWorld(browser, baseURL ?? "", env, locale);
