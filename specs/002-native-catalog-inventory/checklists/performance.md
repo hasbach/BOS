@@ -1,6 +1,26 @@
 # M1 performance evidence (T107)
 
-**2026-11-21 — T107 remains open.** The backend bottleneck was fixed, but mobile screen readiness still misses the 3 s gate. See the browser timing breakdown below; search and screen readiness have separate budgets.
+**2026-11-24 — T107 remains open.** The [latest full sweep](#full-sweep-with-the-native-csv-chooser-2026-11-24-latest) measured all 72 attempts: **69 passes, 3 measured misses, 0 unmeasured**. Every screen and interaction check passed 6/6, including cold CSV Upload; English search passed 3/3, Arabic search missed 3/3 against <1,000 ms. Search and screen readiness have separate budgets.
+
+## Optimized catalog search, Low Stock list and Sales shortcut (2026-11-23)
+
+All three checks passed **3/3 in each locale**. The unchanged Playwright assertions produced 18 timings and 18 profiles, with no budget misses or unmeasured attempts. Samples are in repeat order.
+
+| Check | Locale | Strict budget (ms) | Individual samples (ms) | Passes |
+|---|---|---:|---:|---:|
+| Catalog search: input → matching row | en | <1,000 | 948.1 / 819.5 / 825.0 | 3/3 |
+| Catalog search: input → matching row | ar | <1,000 | 762.2 / 772.8 / 720.0 | 3/3 |
+| Low Stock list: navigation → visible Low and Out rows | en | <3,000 | 1,045.6 / 1,102.3 / 1,052.8 | 3/3 |
+| Low Stock list: navigation → visible Low and Out rows | ar | <3,000 | 1,110.3 / 1,073.7 / 1,100.9 | 3/3 |
+| Sales start tab: navigation → visible Low Stock link with correct destination | en | <3,000 | 1,078.0 / 1,218.5 / 1,123.6 | 3/3 |
+| Sales start tab: navigation → visible Low Stock link with correct destination | ar | <3,000 | 1,207.0 / 1,260.9 / 1,214.0 | 3/3 |
+
+- **Snapshot and profile:** `8ce90ca05fa24d2e44912895a4f8ead23e71df3d` includes backend shared aggregation `5d7871f`; the frozen working tree also includes the uncommitted server-first Low Stock/Sales changes, refresh fix, and offline live region. The isolated Next.js 16.4.6 webpack production build passed TypeScript on Node 24.22.3 before testing. Playwright 1.65.0 with headless Edge 158.0.4370.33, 360 × 740 mobile, live CDP at 150 ms RTT, 1.6 Mbps down / 0.75 Mbps up, 4× CPU, browser HTTP cache disabled and service workers blocked. One worker, no retries, `BOS_T107_PROFILE=1`; no concurrent build or suite. This is browser readiness, not Lighthouse Lantern LCP or real-device performance.
+- **Fixtures and isolation:** Fresh `bos_t107_181d20fb8241` on loopback PostgreSQL 17.4 (`55433`), verified as both `bos_owner` and `bos_app` before migration `0003`; the app role was neither superuser nor `BYPASSRLS`. Seeded the demo fixtures and verified 1,000 products, 5,000 variants and 1,000 translated names for the second tenant, then ran `ANALYZE`. Search used that tenant (`Performance Denim` / `جينز الأداء`); Low Stock and Sales used the first tenant's unchanged fixtures. Flask `5197`, relay `5187` and Next `3217` were verified before the run. Stopped the three isolated servers, confirmed their ports closed, and verified the disposable database was gone. Dev and `bos_test` were not used.
+- **Request evidence:** All six timed search GETs matched Flask `200` responses by request ID (70.2–93.9 ms in Flask). Search timings include the debounce and a rendering opportunity after the matching row appears; the slowest sample was 948.1 ms. No initial browser Low Stock API fetch appeared in any of the 12 navigation profiles; Flask logged 12 successful backing reads in the timing batch.
+- **Separate smoke (12/12):** Both locales displayed the Low Stock rows and Sales shortcut with JavaScript disabled in private/no-store documents; anonymous navigation redirected to localized sign-in. The second tenant's list omitted the first tenant's fixture SKUs, and its API request for the first tenant's store returned 404. With JavaScript enabled, the Sales shortcut navigated to Low Stock and the store dialog opened, with no duplicate browser Low Stock GETs or console/page errors observed. Neither the refresh flow nor offline announcements were rechecked in this smoke.
+
+Reproduction: [`frontend/performance/README.md`](../../../frontend/performance/README.md), `--grep '(catalog search|low stock list|start-tab low stock row)$' --repeat-each=3`. Raw timing/profile, smoke, build and Flask logs, DB verification and source manifest are in local scratch `bos-t107-low-search-c8k5gkpd/` (`snapshot.json` SHA-256 `fcb78de1708cf36911f131545048c2667dc78558271a2856e034a2f31a24125e`). This run meets the measured SC-006 search budget and the SC-008 timing budget for these two screens only; it does not close T107, T106 or the M1 exit gate. Other screens and the 500-row import case were not rerun here.
 
 ## Controlled backend follow-up (SC-006)
 
@@ -165,3 +185,77 @@ The server-first candidate met the strict 3 s budget in **11 of 12** completed s
 **Candidate smoke, outside timing (28 checks passed).** In both locales, separate owner contexts with JavaScript disabled rendered their own distinct product SKU and, on history, the opening movement (eight owner checks). Owner documents returned `200` and `Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate`. After visiting each URL as its owner, eight cross-tenant checks returned a private/no-store document shell (`200`) with neither the foreign SKU nor product code in the raw HTML; the corresponding product/movements API returned `404 not_found`. Eight anonymous checks returned `307` to the locale's sign-in page without the SKU. With JavaScript enabled, the adjustment sheet opened and its quantity field was editable on both routes in both locales; through these four interactions, no duplicate browser product/movements GETs, console errors or uncaught page errors were observed. These were read/open checks, not stock mutations or a comprehensive permission audit.
 
 Raw profiles, timing logs, assertion contexts, smoke log, Flask log, DB verification and source manifest are in local scratch `bos-t107-detail-4vvjoc1a/` (`snapshot.json` SHA-256 `274fb7fd35d68aa89369b838707ec00a7f253e9ce52dd0f0ac47ba198cf1ba49`). No other screen or search case was remeasured; SC-006, SC-008 and the M1 exit gate remain open.
+
+## Full integrated candidate sweep (2026-11-23)
+
+**T107 remains open.** The unchanged harness ran all 12 checks in English and Arabic, three times each: **52 passes, 1 measured budget miss, 19 unmeasured failures** across 72 attempts (53 timings and 53 profiles; no skips or retries). Edit, Create, Product Detail, CSV Upload, Low Stock, and the Sales shortcut passed all six attempts each. CSV Upload measures readiness of the template link and file chooser; it does not establish that file selection or confirm works at that point.
+
+| Check | Strict budget (ms) | English samples (ms) | English passes | Arabic samples (ms) | Arabic passes |
+|---|---:|---|---:|---|---:|
+| Catalog search | <1,000 | 723.6 / 769.9 / 846.3 | 3/3 | 779.7 / 2,964.4 **miss** / 848.4 | 2/3 |
+| Catalog list | <3,000 | 1,248.6 / 1,235.3 / 1,171.1 | 3/3 | 1,226.5 / 1,318.0 / 1,317.0 | 3/3 |
+| Product detail | <3,000 | 1,189.4 / 1,139.4 / 1,193.6 | 3/3 | 1,219.9 / 1,268.1 / 1,230.3 | 3/3 |
+| Create product | <3,000 | 1,517.5 / 1,277.6 / 1,219.3 | 3/3 | 1,349.2 / 1,389.0 / 1,364.8 | 3/3 |
+| Edit product | <3,000 | 1,238.4 / 1,102.1 / 1,191.3 | 3/3 | 1,225.6 / 1,268.3 / 1,226.7 | 3/3 |
+| Adjustment sheet | <3,000 | — / — / — | 0/3 | — / — / — | 0/3 |
+| Stock history | <3,000 | 1,566.2 / 1,481.1 / — | 2/3 | 1,257.4 / 2,265.1 / 1,385.4 | 3/3 |
+| Low Stock list | <3,000 | 1,131.9 / 1,155.9 / 1,292.7 | 3/3 | 1,219.4 / 1,219.7 / 1,273.5 | 3/3 |
+| Sales start-tab Low Stock shortcut | <3,000 | 1,169.1 / 1,177.8 / 1,212.6 | 3/3 | 1,325.5 / 1,345.4 / 1,337.4 | 3/3 |
+| CSV upload | <3,000 | 1,130.2 / 1,125.7 / 1,059.2 | 3/3 | 1,300.5 / 1,226.2 / 1,244.9 | 3/3 |
+| CSV preview | <3,000 | — / — / — | 0/3 | — / — / — | 0/3 |
+| CSV result | <3,000 | — / — / — | 0/3 | — / — / — | 0/3 |
+
+Samples are in repeat order; `—` means no timing, not a measured miss. All 20 failed attempts have individual Playwright error contexts.
+
+| Check | Locale / repeats | What happened |
+|---|---|---|
+| Catalog search | ar / 2 | Matching row appeared at 2,964.4 ms. The timed GET returned 200; Flask logged 2,367.5 ms for that request (`5abcc082ed424f75bfb6275012917972`), compared with 67.7–87.5 ms for the other five timed search GETs. The cause of the server-time outlier was not isolated. |
+| Adjustment sheet | en and ar / 1, 2, 3 each | Each click was followed by a 15 s dialog-heading visibility timeout. Product detail remained visible; none reached the editable-quantity readiness check. |
+| CSV preview | en and ar / 1, 2, 3 each | The harness selected a file, but the preview summary never appeared within 15 s. |
+| CSV result | en and ar / 1, 2, 3 each | The **untimed preview prerequisite** timed out in 15 s. Confirm was never clicked, so result readiness was not measured. |
+| Stock history | en / 3 | Opening stock was visible in the error snapshot; `page.evaluate` in the readiness timing helper hit the 90 s test timeout before emitting a sample. |
+
+Flask logged no catalog-import POST during the sweep. The sheet and CSV failures are consistent with controls being used before their handlers were ready, but this run did not prove the cause. None of the six Edit or six Product Detail profiles showed an initial browser catalog API request. The separate Arabic stock-history preflight authenticated and reached the opening movement, but took **4,313.7 ms** and missed its budget; this sample is outside the 72-attempt sweep.
+
+- **Snapshot and profile:** `028f2e8b78c0c2d5de4de8dd48320593416d5022` plus the frozen local frontend changes (including server-first Edit and Low Stock refresh) and the existing T107 harness. The isolated Node 24.22.3 / Next.js 16.4.6 webpack production build passed TypeScript before sampling. Playwright 1.65.0, headless Edge 158.0.4370.33, 360 × 740 mobile, live CDP at 150 ms RTT, 1.6 Mbps down / 0.75 Mbps up, 4× CPU, browser HTTP cache disabled and service workers blocked. One worker, no retries; process checks found no other build or suite before build and sampling. This is browser readiness, not Lighthouse LCP or real-device performance.
+- **Fixture and isolation:** Fresh `bos_t107_14ec273504ea` on the private loopback PostgreSQL 17.4 cluster (`55433`); verified `bos_owner` and non-superuser/non-`BYPASSRLS` `bos_app` connections before migration `0003`. Verified 1,000 products, 5,000 variants and 1,000 translated names in Demo Second Shop, then ran `ANALYZE`. Search used that tenant; other cases used the first tenant's demo stock fixtures. Verified Flask `5197`, relay `5187` and Next `3217`, then verified all three ports closed and the disposable DB was absent after teardown. No dev or `bos_test` database was used.
+- **Evidence:** [`frontend/performance/README.md`](../../../frontend/performance/README.md), `--repeat-each=3 --workers=1 --retries=0`, `BOS_T107_PROFILE=1`. Local scratch `bos-t107-full-3q26gso9/` contains discovery, build, smoke, browser and Flask logs, `results.json`, `results/*/error-context.md`, `run.json`, and `snapshot.json` (SHA-256 `4bae48e8f6ff53b53143814383921f26e0cfe4c3f2c16d08122f335b2774475a`). Cross-checked all 72 locale/check/repeat outcomes against the timing/profile logs.
+## Cold CSV Upload: shell-script preload experiment
+
+A streaming-proxy A/B kept the build, fixture, throttle and first-click readiness assertion unchanged. Each arm had three samples per language. All 12 first clicks opened the native chooser, but none met the strict 3-second budget. The preload advanced median shell-script discovery from 2.40–2.76 s to 0.26–0.33 s with no duplicate transfers. It did not reliably improve readiness: English median 3,390.4 → 3,373.3 ms; Arabic 3,860.7 → 3,993.7 ms. The preload was not adopted. Raw measurements and cleanup verification are in local scratch `bos-t107-csv-preload-ab/run-u3ke5c_w/evidence.md`.
+
+## Follow-up: adjustment and CSV interaction measurements
+
+The [repaired browser measurement harness](../../../docs/performance.md#focused-verification) retained the mobile profile and budgets and retried only untimed setup. Adjustment Sheet passed 6/6, CSV Result 6/6, and CSV Preview 5/6 (one chooser setup failure before timing). Cold CSV Upload passed 0/6: two opens exceeded three seconds and four first clicks did not open the chooser. These are scoped retests on the frozen sweep build, not a passing rerun of the entire gate.
+
+- **SC-005, separate:** The captured [T102 checkpoint](us5.md#captured-timing-and-atomicity-sc-005) reports **0.172 s** for the 500-row Flask test-client preview against <30 s. It was not rerun here and cannot substitute for the unmeasured one-row browser preview/result. SC-006 and SC-008 timing remain open; no T107 or M1 gate sign-off.
+
+## Full sweep with the native CSV chooser (2026-11-24; latest)
+
+**T107 remains open.** The unchanged harness ran all 12 checks in English and Arabic, three times each: **69 passes, 3 measured budget misses, 0 unmeasured failures** across 72 attempts (72 timings and 72 profiles; no skips or retries). All three misses are Arabic catalog search. Every screen and interaction check passed 6/6, including cold CSV Upload (first enabled click opens the native chooser), CSV Preview, CSV Result and the Adjustment Sheet, which had no timings in the 2026-11-23 sweep.
+
+| Check | Strict budget (ms) | English samples (ms) | English passes | Arabic samples (ms) | Arabic passes |
+|---|---:|---|---:|---|---:|
+| Catalog search | <1,000 | 910.6 / 850.6 / 780.9 | 3/3 | 1,031.9 **miss** / 3,331.8 **miss** / 3,314.5 **miss** | 0/3 |
+| Catalog list | <3,000 | 1,396.5 / 1,332.8 / 1,416.1 | 3/3 | 1,567.0 / 1,874.0 / 2,409.8 | 3/3 |
+| Product detail | <3,000 | 1,249.2 / 1,178.0 / 1,206.7 | 3/3 | 1,193.5 / 1,313.5 / 1,174.6 | 3/3 |
+| Create product | <3,000 | 1,422.1 / 1,371.3 / 1,503.7 | 3/3 | 1,902.1 / 1,839.7 / 1,788.5 | 3/3 |
+| Edit product | <3,000 | 1,279.9 / 1,243.3 / 1,378.8 | 3/3 | 1,481.5 / 1,545.0 / 1,586.2 | 3/3 |
+| Adjustment sheet | <3,000 | 296.6 / 272.3 / 288.3 | 3/3 | 281.3 / 293.0 / 307.7 | 3/3 |
+| Stock history | <3,000 | 1,106.8 / 1,207.0 / 1,166.0 | 3/3 | 1,249.1 / 1,304.2 / 1,246.2 | 3/3 |
+| Low Stock list | <3,000 | 1,143.9 / 1,233.7 / 1,235.2 | 3/3 | 1,330.2 / 1,417.2 / 1,345.2 | 3/3 |
+| Sales start-tab Low Stock shortcut | <3,000 | 1,317.6 / 1,272.2 / 1,318.2 | 3/3 | 1,312.6 / 1,348.0 / 1,291.8 | 3/3 |
+| CSV upload (cold, first click) | <3,000 | 1,601.5 / 1,390.2 / 1,481.5 | 3/3 | 1,623.4 / 1,575.4 / 1,720.8 | 3/3 |
+| CSV preview | <3,000 | 2,168.2 / 2,741.2 / 2,423.2 | 3/3 | 2,228.3 / 2,710.7 / 2,802.8 | 3/3 |
+| CSV result | <3,000 | 406.7 / 420.0 / 427.7 | 3/3 | 471.7 / 415.0 / 418.7 | 3/3 |
+
+Samples are in repeat order. Pass totals: English 36/36, Arabic 33/36. Interaction checks (Adjustment, CSV Preview, CSV Result) are timed from the captured browser event; navigation checks from navigation start.
+
+- **Arabic search misses:** All three reached the matching row; each failed only the `<1,000 ms` assertion. The timed search GETs matched Flask `200` responses by request ID: Arabic 188.9 / 2,587.5 / 2,657.7 ms in Flask (`e32eb7fd6aaa488380f159dd8b199ae9`, `3d5351bbd9ec4e71b6011852c6816f33` for the two slow ones), English 91.3 / 108.0 / 84.0 ms. Repeats 2 and 3 are dominated by server time; repeat 1 (1,031.9 ms) missed by 31.9 ms with a fast server response. The cause of the ~2.6 s server times was not isolated; the 2026-11-23 sweep had one similar Arabic outlier (2,367.5 ms in Flask).
+- **CSV checks:** Flask logged 12 preview POSTs (`201`) and 6 confirm POSTs (`200`), one confirm per CSV Result attempt. No document request in the 24 detail/create/edit/upload navigation profiles had first byte above 158.5 ms.
+- **Smoke (outside the 72):** the authenticated Arabic stock-history preflight passed at 1,740.1 ms.
+- **Snapshot and profile:** `92028d828897e6f315a5f9b311905fd28b516754` plus the uncommitted working tree: the CSV chooser as a native `<input type="file">` over a label (`ImportScreen.tsx`, `import.module.css`), the related e2e/Vitest test changes, the two new T106 browser cases, and the untracked `frontend/performance/` harness. 351 files from `frontend/`, `backend/app` and `backend/migrations` were copied and hash-verified against the working tree (`snapshot.json` SHA-256 `ae2db29dcadfdd8c7171cd603a3c54843e8cd9fb3158821d8f9de35850260225`). Isolated Next.js 16.4.6 webpack production build with TypeScript check on Node 24.22.2 (portable `bos-dev` Node). Playwright 1.65.0, headless Edge 158.0.4370.33, 360 × 740 mobile, live CDP at 150 ms RTT, 1.6 Mbps down / 0.75 Mbps up, 4× CPU, browser HTTP cache disabled and service workers blocked. `--repeat-each=3 --workers=1 --retries=0`, `BOS_T107_PROFILE=1`. Process audits before the build and before sampling found no other build or test process. Budgets, throttling and readiness assertions in `frontend/performance/*` were not changed. This is browser readiness, not Lighthouse LCP or real-device performance.
+- **Fixture and isolation:** Fresh `bos_t107_76b5f1e3aa40` on the private loopback PostgreSQL 17.4 cluster (`55433`); verified `bos_owner` and non-superuser/non-`BYPASSRLS` `bos_app` connections to it, migrated to `0003`, seeded demo data, and verified 1,000 products, 5,000 variants and 1,000 translated names in Demo Second Shop before `ANALYZE`. Search used that tenant; other checks used the first tenant's demo fixtures. Uploads and mail outbox were temporary run directories. Flask `5197`, relay `5187` and Next `3217`, all bound to `127.0.0.1`, were verified before sampling. Dev and `bos_test` databases were not used.
+- **Teardown:** Stopped the three isolated servers, verified ports 3217, 5187 and 5197 no longer accept connections, dropped the disposable database and verified it is absent.
+- **Run note:** The first driver attempt stopped after the build, before any database or server was created, when the host's default code page could not decode the build log; the stack step was rerun on the same frozen build with Python UTF-8 mode. No sample was taken in the aborted attempt.
+- **Evidence:** local scratch `bos-t107-full-ibx_cvq7/` (session scratchpad): build, list, smoke, timing, Flask and relay logs, `results.json`, per-failure `error-context.md`, `run.json`, `snapshot.json`. Cross-checked all 72 locale/check/repeat outcomes against the timing and profile lines.

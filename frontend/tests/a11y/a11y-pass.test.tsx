@@ -163,10 +163,65 @@ describe.each(["en", "ar"] as const)("M1 accessibility in %s", (locale) => {
     expect(list.getByRole("group", { name: t("catalog.lowStock.figures") })).toBeInTheDocument();
   });
 
+  // T106 state matrix: the loading, empty and error states of the two lists, localized, with one live
+  // announcement each and a named Retry.
+  it("Low stock: loading is a named status, empty is a heading, a failed load is an alert with a working Retry", async () => {
+    mockApi(() => new Promise<Response>(() => undefined));
+    const loading = renderMe(<LowStockList />, me);
+    expect(screen.getByRole("status")).toHaveTextContent(t("catalog.lowStock.loading"));
+    expect(screen.getByRole("heading", { level: 1, name: t("catalog.lowStock.title") })).toBeInTheDocument();
+    loading.unmount();
+
+    catalogApi(() => reply(200, { items: [], next_cursor: null, total: 0 }));
+    const empty = renderMe(<LowStockList />, me);
+    expect(await screen.findByRole("heading", { name: t("catalog.lowStock.empty.title") })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    empty.unmount();
+
+    let fail = true;
+    const items = [{ variant_id: "v-32", product_id: JEANS.id, product_name_en: JEANS.name_en, product_name_ar: JEANS.name_ar, sku: "JN-SLIM-32-BLUE", option_values: ["32", "Blue"], main_photo_id: null, on_hand: 1, allocated: 0, available: 1, level: 2, stock_state: "low" }];
+    catalogApi(() => (fail ? apiError(503, "unavailable") : reply(200, { items, next_cursor: null, total: 1 })));
+    renderMe(<LowStockList />, me);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(t("catalog.lowStock.loadError.title"));
+    expect(alert).toHaveTextContent(t("catalog.lowStock.loadError.text"));
+    const retry = screen.getByRole("button", { name: t("ui.retry") });
+    fail = false;
+    fireEvent.click(retry);
+    expect(await screen.findByRole("list", { name: t("catalog.lowStock.title") })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("Stock history: loading is a named status, empty is a heading, a failed load is an alert with a working Retry", async () => {
+    mockApi(() => new Promise<Response>(() => undefined));
+    const loading = renderMe(<StockHistory productId={JEANS.id} variantId="v-32" />, me);
+    expect(screen.getByRole("status")).toHaveTextContent(t("catalog.history.loading"));
+    expect(screen.getByRole("heading", { level: 1, name: t("catalog.history.title") })).toBeInTheDocument();
+    loading.unmount();
+
+    catalogApi(({ url }) => (url.includes("/movements") ? reply(200, { items: [], next_cursor: null }) : reply(200, JEANS)));
+    const empty = renderMe(<StockHistory productId={JEANS.id} variantId="v-32" />, me);
+    expect(await screen.findByRole("heading", { name: t("catalog.history.empty.title") })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    empty.unmount();
+
+    let fail = true;
+    catalogApi(({ url }) => (fail ? apiError(503, "unavailable") : url.includes("/movements") ? reply(200, { items: [], next_cursor: null }) : reply(200, JEANS)));
+    renderMe(<StockHistory productId={JEANS.id} variantId="v-32" />, me);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(t("catalog.history.loadError.title"));
+    expect(alert).toHaveTextContent(t("catalog.history.loadError.text"));
+    const retry = screen.getByRole("button", { name: t("ui.retry") });
+    fail = false;
+    fireEvent.click(retry);
+    expect(await screen.findByRole("heading", { name: t("catalog.history.empty.title") })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("names CSV upload progress and announces row errors before allowing import", async () => {
     installFakeXhr();
     renderMe(<ImportScreen />, me);
-    expect(screen.getByRole("button", { name: t("catalog.import.choose") })).toBeEnabled();
+    expect(screen.getByLabelText(t("catalog.import.choose"))).toBeEnabled();
     fireEvent.change(screen.getByTestId("csv-input"), { target: { files: [new File(["price"], "catalog.csv", { type: "text/csv" })] } });
     lastUpload().progress(1, 2);
     expect(await screen.findByRole("progressbar", { name: t("catalog.import.progress") })).toHaveAttribute("aria-valuenow", "50");

@@ -1,6 +1,6 @@
 # M1 accessibility and RTL pass (T106)
 
-**Status:** All four T106 Playwright scenarios passed on the build with the focus-ring repair, before the offline notice fix. The offline fix is verified in bilingual component tests; browser retest, assistive-technology and remaining state-matrix checks are still open.
+**Status (2026-11-24):** All six T106 Playwright scenarios passed in both locales in the [latest full production browser run](#browser-retest-of-the-offline-notice-and-low-stockhistory-states-2026-11-24), including the two new cases for Low stock / Stock history loading, empty and error states and for the single offline notice. Assistive-technology (screen reader) testing is still a human item tracked in [manual acceptance](manual-acceptance.md); other parts of the state matrix remain open as listed below.
 
 ## Coverage and method
 
@@ -54,3 +54,10 @@ After the primary run is done, from `frontend` with Node 24:
 ```sh
 npm run e2e -- e2e/a11y.spec.ts --grep T106
 ```
+
+## Browser retest of the offline notice and Low stock/history states (2026-11-24)
+
+- **Run:** Node 24.22.2, Playwright 1.65.0, Edge 158.0.4370.33, production build on web/API `3200/5101` (relay `5180`), all on `127.0.0.1`: `BOS_E2E_API_PORT=5101 BOS_E2E_PRODUCTION=1 node node_modules/@playwright/test/cli.js test --reporter=list,json` from `frontend/`. Tree: `92028d8` plus the uncommitted native CSV chooser, its tests and the two new T106 cases. The final full run passed **38/38 in 11.7 minutes**, including all six T106 cases in `en` and `ar`. No test file was edited; both new cases also passed on the first full run.
+- **`T106 M1 Low stock and stock history loading, empty and error states at 360 px`:** passed in `en` (26.2 s) and `ar` (21.4 s). Low stock empty, loading (held browser read after choosing Store B), and error (injected 503 after choosing All stores) with keyboard Retry recovery; Stock history loading (held movements read after Back then browser back), empty (size 32, no movements) and error (injected 503) with keyboard Retry. Each state went through the common M1 audit (axe, both themes, Tab order/focus, 44 × 44 targets, overflow). The injected 503 responses verify the UI paths, not a real API outage.
+- **`T106 M1 offline notice is one empty live region online and one visible notice offline at 360 px`:** passed in `en` (6.5 s) and `ar` (5.5 s) on Catalog, Product detail, Create product, Stock history, Low stock and CSV upload. Online, each screen had exactly one `aria-live="polite" aria-atomic="true"` region, empty, with a 0 × 0 box and identical document height and heading position with and without it. Over two disconnect/reconnect rounds per screen, exactly one localized offline notice appeared inside that same region each time (title and text, one occurrence of the title on the page, no sideways scroll) and cleared on reconnect, leaving the region empty. The duplicate-notice finding from the earlier build is not reproduced. This verifies DOM and layout, not what a screen reader announces.
+- **Still open:** screen-reader announcement of the offline notice (once per disconnect, in each locale) and the screen-reader core journey are human items **H3** and **H4** in [manual acceptance](manual-acceptance.md). Write failures while offline, other file refusals, photo flows and secondary sheets are not covered by these cases.

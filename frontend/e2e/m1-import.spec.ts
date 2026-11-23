@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
+import type { Request } from "@playwright/test";
 import { createTranslator } from "next-intl";
 
 import ar from "../messages/ar.json";
@@ -26,7 +27,7 @@ const invalid = [
   "IMP-D,Imported shoes,حذاء مستورد,IMP-D-SKU,22,USD,-1",
 ];
 
-test("CSV chooser stays disabled until ready; the first activation uploads", async ({ page, env, locale }) => {
+test("CSV chooser works from the server HTML; a file chosen before hydration uploads once", async ({ page, env, locale }) => {
   const headers = { "X-BOS-CSRF": "1" };
   const signedIn = await page.request.post("/api/v1/auth/sign-in", {
     headers,
@@ -37,6 +38,10 @@ test("CSV chooser stays disabled until ready; the first activation uploads", asy
 
   const label = createTranslator({ locale, messages: (locale === "en" ? en : ar).catalog.import });
   const choose = page.getByRole("button", { name: label("choose"), exact: true });
+  const isUpload = (request: Request) =>
+    request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/catalog/imports";
+  let uploads = 0;
+  page.on("request", (request) => { if (isUpload(request)) uploads += 1; });
   let releaseScripts!: () => void;
   const scripts = new Promise<void>((resolve) => { releaseScripts = resolve; });
   const requestedScript = page.waitForRequest((request) =>
@@ -46,32 +51,33 @@ test("CSV chooser stays disabled until ready; the first activation uploads", asy
     if (route.request().resourceType() === "script") await scripts;
     await route.continue();
   });
+  const code = `READY-${randomUUID().slice(0, 8)}`;
+  const preview = page.waitForResponse((response) => isUpload(response.request()));
+  preview.catch(() => undefined); // awaited below; this only keeps an early failure from going unhandled
   try {
     const response = await page.goto(`/${locale}/more/catalog/import`, { waitUntil: "commit" });
     expect(response?.status()).toBe(200);
     await requestedScript;
     await expect(page.getByRole("link", { name: label("template") })).toBeVisible();
     await expect(choose).toBeVisible();
-    expect(await choose.isDisabled(), "server-rendered chooser with hydration explicitly deferred").toBe(true);
+    // Hydration is held back: the native input must already be enabled and open the chooser.
+    await expect(choose).toBeEnabled();
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser"),
+      locale === "en" ? choose.click() : choose.press("Enter"),
+    ]);
+    expect(await chooser.element().getAttribute("data-testid")).toBe("csv-input");
+    await chooser.setFiles({ name: "ready.csv", mimeType: "text/csv", buffer: Buffer.from(`${header}\r\n${code},Ready hat,قبعة,${code},12,USD,1\r\n`) });
+    expect(uploads, "nothing is sent before the page's scripts run").toBe(0);
   } finally {
     releaseScripts();
   }
 
-  await expect(choose).toBeEnabled();
-  const [chooser] = await Promise.all([
-    page.waitForEvent("filechooser"),
-    locale === "en" ? choose.click() : choose.press("Enter"),
-  ]);
-  expect(await chooser.element().getAttribute("data-testid")).toBe("csv-input");
-  const code = `READY-${randomUUID().slice(0, 8)}`;
-  const [preview] = await Promise.all([
-    page.waitForResponse((response) => response.request().method() === "POST" &&
-      new URL(response.url()).pathname === "/api/v1/catalog/imports"),
-    chooser.setFiles({ name: "ready.csv", mimeType: "text/csv", buffer: Buffer.from(`${header}\r\n${code},Ready hat,قبعة,${code},12,USD,1\r\n`) }),
-  ]);
-  expect(preview.status()).toBe(201);
-  expect(await preview.json()).toMatchObject({ status: "previewed", row_count: 1, errors: [] });
+  const answer = await preview;
+  expect(answer.status()).toBe(201);
+  expect(await answer.json()).toMatchObject({ status: "previewed", row_count: 1, errors: [] });
   await expect(page.getByRole("button", { name: label("confirm", { count: 1 }) })).toBeEnabled();
+  expect(uploads, "the file chosen before hydration is uploaded exactly once").toBe(1);
 });
 
 test("CSV preview rejects bad rows; confirmation creates opening stock once", async ({ browser, baseURL, env, locale }) => {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useId, useRef, useState } from "react";
-import type { ChangeEvent, ReactNode } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import type { ChangeEvent, MouseEventHandler, ReactNode, Ref } from "react";
 
 import { AppBar } from "@/components/AppBar";
 import { Banner } from "@/components/Banner";
@@ -59,11 +59,9 @@ function Importer() {
   const t = useTranslations();
   const i = useTranslations("catalog.import");
   const [state, setState] = useState<State>({ k: "start" });
-  // Server HTML has no working picker. Enable the button when React commits the input ref.
-  const [picker, setPicker] = useState<HTMLInputElement | null>(null);
+  // The chooser is a native file input, so it works from the server HTML, before hydration.
+  const input = useRef<HTMLInputElement>(null);
   const run = useRef(0);
-
-  const pick = () => picker?.click();
 
   async function upload(file: File) {
     const info: FileInfo = { name: file.name, size: file.size };
@@ -88,12 +86,24 @@ function Importer() {
     }
   }
 
-  function chosen(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  function take(element: HTMLInputElement) {
+    const file = element.files?.[0];
+    if (!file) return;
     // Cleared so that choosing the same file again (after fixing it) is noticed.
-    event.target.value = "";
-    if (file) void upload(file);
+    element.value = "";
+    void upload(file);
   }
+
+  const chosen = (event: ChangeEvent<HTMLInputElement>) => take(event.currentTarget);
+
+  // A file chosen before hydration fired its change event with no handler attached: take it once now.
+  // Whichever of this and a replayed change event runs first clears the input, so the other finds nothing.
+  const takeEarly = useEffectEvent(() => {
+    if (input.current) take(input.current);
+  });
+  useEffect(() => {
+    takeEarly();
+  }, []);
 
   async function confirm() {
     if (state.k !== "preview" || state.confirming || state.batch.status !== "previewed") return;
@@ -111,8 +121,6 @@ function Importer() {
       else setState({ k: "preview", file, batch, confirming: false, failure: error });
     }
   }
-
-  const fileInput = <input ref={setPicker} type="file" accept=".csv,text/csv" hidden data-testid="csv-input" onChange={chosen} />;
 
   if (state.k === "ended") return <SessionEnded />;
   if (state.k === "forbidden") return <NotAllowedToEdit />;
@@ -145,32 +153,23 @@ function Importer() {
     );
   }
 
-  if (state.k === "expired") {
-    return (
-      <Screen>
-        <Bar />
-        <ScreenBody>
-          <div role="alert">
-            <StatusHeader tone="warn" icon="clock" title={i("expired.title")} text={i("expired.text")} />
-          </div>
-        </ScreenBody>
-        <ScreenFooter>
-          {fileInput}
-          <Button
-            onClick={() => {
-              setState({ k: "start" });
-              pick();
-            }}
-          >
-            <UploadIcon width={16} height={16} /> {i("uploadAgain")}
-          </Button>
-        </ScreenFooter>
-      </Screen>
-    );
-  }
-
+  // Footer slots: [lead, chooser, trail]. The chooser keeps its slot in every state, so React keeps the same
+  // <input> when the state changes while the native chooser is open (the expired screen returns to start).
+  const chooser = (label: string, options: { ghost?: boolean; disabled?: boolean; onClick?: MouseEventHandler<HTMLInputElement> } = {}) => (
+    <FilePicker ref={input} variant={options.ghost ? "ghost" : "primary"} disabled={options.disabled} onChange={chosen} onClick={options.onClick}>
+      {options.ghost ? (
+        label
+      ) : (
+        <>
+          <UploadIcon width={16} height={16} /> {label}
+        </>
+      )}
+    </FilePicker>
+  );
   let body: ReactNode;
-  let footer: ReactNode;
+  let lead: ReactNode = null;
+  let picker: ReactNode = null;
+  let trail: ReactNode = null;
 
   if (state.k === "start") {
     body = (
@@ -195,18 +194,21 @@ function Importer() {
         </Banner>
       </>
     );
-    footer = (
-      <Button disabled={!picker} onClick={pick}>
-        <UploadIcon width={16} height={16} /> {i("choose")}
-      </Button>
+    picker = chooser(i("choose"));
+  } else if (state.k === "expired") {
+    body = (
+      <div role="alert">
+        <StatusHeader tone="warn" icon="clock" title={i("expired.title")} text={i("expired.text")} />
+      </div>
     );
+    picker = chooser(i("uploadAgain"), { onClick: () => setState({ k: "start" }) });
   } else if (state.k === "checking") {
     body = (
       <div aria-busy="true">
         <FileCard file={state.file} progress={state.percent} />
       </div>
     );
-    footer = (
+    lead = (
       <Button disabled>
         <SyncIcon width={16} height={16} /> {i("checking")}
       </Button>
@@ -227,14 +229,8 @@ function Importer() {
         <FileCard file={state.file} sub={i("notChecked")} />
       </>
     );
-    footer = (
-      <>
-        <Button onClick={pick}>
-          <UploadIcon width={16} height={16} /> {i("chooseAnother")}
-        </Button>
-        <TemplateLink />
-      </>
-    );
+    picker = chooser(i("chooseAnother"));
+    trail = <TemplateLink />;
   } else if (state.k === "conflict") {
     body = (
       <>
@@ -245,11 +241,7 @@ function Importer() {
         <FileCard file={state.file} />
       </>
     );
-    footer = (
-      <Button onClick={pick}>
-        <UploadIcon width={16} height={16} /> {i("uploadAgain")}
-      </Button>
-    );
+    picker = chooser(i("uploadAgain"));
   } else if (state.batch.errors.length > 0 || state.batch.status === "failed") {
     const { batch } = state;
     const rows = rowsWithErrors(batch.errors);
@@ -262,14 +254,8 @@ function Importer() {
         <Problems rows={batch.errors} />
       </>
     );
-    footer = (
-      <>
-        <Button onClick={pick}>
-          <UploadIcon width={16} height={16} /> {i("uploadFixed")}
-        </Button>
-        <Button disabled>{i("importBlocked", { count: rows })}</Button>
-      </>
-    );
+    picker = chooser(i("uploadFixed"));
+    trail = <Button disabled>{i("importBlocked", { count: rows })}</Button>;
   } else {
     const { batch, confirming, failure } = state;
     body = (
@@ -292,30 +278,69 @@ function Importer() {
         <KeptUntil iso={batch.expires_at} />
       </>
     );
-    footer = (
-      <>
-        <Button loading={confirming} onClick={() => void confirm()}>
-          {confirming ? i("importing") : i("confirm", { count: batch.products })}
-        </Button>
-        <Button variant="ghost" disabled={confirming} onClick={pick}>
-          {i("chooseAnother")}
-        </Button>
-      </>
+    lead = (
+      <Button loading={confirming} onClick={() => void confirm()}>
+        {confirming ? i("importing") : i("confirm", { count: batch.products })}
+      </Button>
     );
+    picker = chooser(i("chooseAnother"), { ghost: true, disabled: confirming });
   }
 
   return (
     <Screen>
       <Bar />
       <ScreenBody>
-        <OfflineNotice />
+        {state.k === "expired" ? null : <OfflineNotice />}
         {body}
       </ScreenBody>
       <ScreenFooter>
-        {fileInput}
-        {footer}
+        {lead}
+        {picker}
+        {trail}
       </ScreenFooter>
     </Screen>
+  );
+}
+
+/**
+ * A native file input laid over a label styled as a button. The input is the one keyboard stop and the
+ * click target, so the chooser opens from the server HTML without JavaScript; the label shows its focus.
+ */
+function FilePicker({
+  ref,
+  variant,
+  disabled,
+  onChange,
+  onClick,
+  children,
+}: {
+  ref: Ref<HTMLInputElement>;
+  variant: "primary" | "ghost";
+  disabled?: boolean;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onClick?: MouseEventHandler<HTMLInputElement>;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className={own.picker}>
+      <input
+        ref={ref}
+        id={id}
+        type="file"
+        accept=".csv,text/csv"
+        // No restored file after Back: a file is only taken when someone chose it on this page.
+        autoComplete="off"
+        className={own.pickerInput}
+        disabled={disabled}
+        data-testid="csv-input"
+        onChange={onChange}
+        onClick={onClick}
+      />
+      <label htmlFor={id} className={`${buttonStyles.button} ${buttonStyles[variant]} ${own.pickerLabel}`}>
+        {children}
+      </label>
+    </div>
   );
 }
 

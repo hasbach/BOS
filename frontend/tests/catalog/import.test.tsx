@@ -1,8 +1,15 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import type { ReactElement } from "react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ImportScreen } from "@/app/[locale]/(shell)/more/catalog/import/ImportScreen";
 import type { ImportBatch } from "@/lib/imports";
+import { MeContext, MeSetterContext } from "@/lib/session";
+import type { Me } from "@/lib/types";
+
+import en from "../../messages/en.json";
 
 import { catalogOwner, catalogStaff } from "../helpers/catalog";
 import type { Call } from "../helpers/fetch";
@@ -70,7 +77,7 @@ describe("CSV import (screens 176 to 183)", () => {
     expect(template).toHaveAttribute("download");
     expect(screen.getByText(/up to 2,000 rows and 2 MB/)).toBeInTheDocument();
     expect(screen.getByText(/Photos can’t be imported/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Choose CSV file/ })).toBeEnabled();
+    expect(screen.getByLabelText(/Choose CSV file/)).toBeEnabled();
     expect(calls).toHaveLength(0);
   });
 
@@ -99,7 +106,7 @@ describe("CSV import (screens 176 to 183)", () => {
     expect(alert).toHaveTextContent("The file has columns that aren't in the template. Photos can't be imported.");
     expect(alert).toHaveTextContent("Columns: photo_url, image");
     expect(screen.getByText(/not checked/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Choose another file/ })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Choose another file/)).toBeEnabled();
     expect(screen.getByRole("link", { name: /Download template/ })).toBeInTheDocument();
   });
 
@@ -131,7 +138,7 @@ describe("CSV import (screens 176 to 183)", () => {
     expect(blocked).toBeDisabled();
     fireEvent.click(blocked);
     expect(confirms(calls)).toHaveLength(0);
-    expect(screen.getByRole("button", { name: /Upload fixed file/ })).toBeEnabled();
+    expect(screen.getByLabelText(/Upload fixed file/)).toBeEnabled();
   });
 
   it("counts rows that need fixing, not errors, and shows a whole-row problem", async () => {
@@ -196,7 +203,7 @@ describe("CSV import (screens 176 to 183)", () => {
     expect(within(rows[0]!).getByText("Row 7")).toBeInTheDocument();
     expect(within(rows[0]!).getByText("This SKU is already used")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Import/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Upload the file again/ })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Upload the file again/)).toBeEnabled();
   });
 
   it("says the preview expired and offers to upload again (screen 183)", async () => {
@@ -206,9 +213,12 @@ describe("CSV import (screens 176 to 183)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Import 12 products" }));
     expect(await screen.findByRole("heading", { name: "This preview has expired" })).toBeInTheDocument();
     expect(screen.getByText(/Nothing was imported/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Upload the file again/ }));
-    // Back at the start, ready for the file again.
-    expect(screen.getByRole("button", { name: /Choose CSV file/ })).toBeInTheDocument();
+    const again = screen.getByLabelText(/Upload the file again/);
+    fireEvent.click(again);
+    // Back at the start, ready for the file again, with the same input whose native chooser is open.
+    expect(screen.getByLabelText(/Choose CSV file/)).toBe(again);
+    choose();
+    await waitFor(() => expect(FakeXhr.instances).toHaveLength(2));
   });
 
   it("is only for owners and managers", () => {
@@ -227,5 +237,141 @@ describe("CSV import (screens 176 to 183)", () => {
     expect(await screen.findByText("مكرّر في الملف")).toBeInTheDocument();
     expect(screen.getByText("السطر 7")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "الاستيراد — صحّح 3 أسطر أولاً" })).toBeDisabled();
+  });
+  it("offers the preview's other file as a secondary chooser, disabled while importing", async () => {
+    mockApi((call) => (call.method === "POST" ? new Promise<Response>(() => undefined) : reply(404)));
+    open();
+    await upload(201, batch());
+    const other = await screen.findByLabelText("Choose another file");
+    expect(other).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Import 12 products" }));
+    await waitFor(() => expect(screen.getByLabelText("Choose another file")).toBeDisabled());
+  });
+});
+
+describe("CSV chooser before and after hydration", () => {
+  const wrap = (ui: ReactElement, me: Me = catalogOwner()) => (
+    <NextIntlClientProvider locale="en" messages={en}>
+      <MeSetterContext.Provider value={() => undefined}>
+        <MeContext.Provider value={me}>{ui}</MeContext.Provider>
+      </MeSetterContext.Provider>
+    </NextIntlClientProvider>
+  );
+
+  /** The server HTML in a container, as the browser has it before the page's scripts run. */
+  function serverHtml() {
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(wrap(<ImportScreen />));
+    document.body.appendChild(container);
+    return container;
+  }
+
+  /** A file the person chose in the native chooser; clearing the value empties it, as in a browser. */
+  function chooseNatively(input: HTMLInputElement, file: File) {
+    let files: File[] = [file];
+    Object.defineProperty(input, "files", { configurable: true, get: () => files });
+    Object.defineProperty(input, "value", {
+      configurable: true,
+      get: () => (files.length ? `C:\\fakepath\\${files[0]!.name}` : ""),
+      set: (value: string) => {
+        if (value === "") files = [];
+      },
+    });
+  }
+
+  it("renders an enabled, labelled native file input in the server HTML", () => {
+    mockApi(() => reply(404));
+    const container = serverHtml();
+    const input = container.querySelector<HTMLInputElement>('[data-testid="csv-input"]')!;
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(input.type).toBe("file");
+    expect(input.accept).toBe(".csv,text/csv");
+    expect(input.disabled).toBe(false);
+    expect(input.hidden).toBe(false);
+    expect(input.tabIndex).toBe(0);
+    expect(input.labels).toHaveLength(1);
+    expect(input.labels![0]).toHaveTextContent("Choose CSV file");
+    // One keyboard stop: the label drawn as the button is not focusable itself.
+    expect(container.querySelectorAll("button")).toHaveLength(0);
+    expect(input.labels![0]!.tabIndex).toBe(-1);
+    container.remove();
+  });
+
+  it("associates the chooser's label with the input in the rendered screen", () => {
+    mockApi(() => reply(404));
+    open();
+    const input = screen.getByLabelText("Choose CSV file");
+    expect(input).toBe(screen.getByTestId("csv-input"));
+    expect(input).toHaveAttribute("type", "file");
+    expect((input as HTMLInputElement).labels![0]).toHaveAttribute("for", input.id);
+  });
+
+  it("uploads a file chosen before hydration exactly once when the screen hydrates", async () => {
+    mockApi(() => reply(404));
+    const container = serverHtml();
+    const input = container.querySelector<HTMLInputElement>('[data-testid="csv-input"]')!;
+    chooseNatively(input, csv("early.csv"));
+    // The browser's change event fired before React listened.
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(FakeXhr.instances).toHaveLength(0);
+
+    render(wrap(<ImportScreen />), { container, hydrate: true });
+    await waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
+    expect((lastUpload().form?.get("file") as File).name).toBe("early.csv");
+    expect(input.value).toBe("");
+    expect(await screen.findByRole("progressbar", { name: "Upload progress" })).toBeInTheDocument();
+    // A change event React replays after hydration finds the input already cleared.
+    fireEvent.change(input);
+    expect(FakeXhr.instances).toHaveLength(1);
+    container.remove();
+  });
+
+  it("does nothing on hydration when no file was chosen", async () => {
+    const calls = mockApi(() => reply(404));
+    const container = serverHtml();
+    render(wrap(<ImportScreen />), { container, hydrate: true });
+    expect(await screen.findByLabelText("Choose CSV file")).toBeEnabled();
+    expect(FakeXhr.instances).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+    container.remove();
+  });
+
+  it("uploads again when the same file is chosen after a refusal", async () => {
+    mockApi(() => reply(404));
+    open();
+    const file = csv();
+    const input = screen.getByTestId("csv-input") as HTMLInputElement;
+    chooseNatively(input, file);
+    fireEvent.change(input);
+    await waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
+    // Cleared, so choosing the same file again is a change the browser reports.
+    expect(input.value).toBe("");
+    lastUpload().respond(400, { error: { code: "file_not_csv", message: "x" } });
+    // The chooser was not shown while checking, so this is a fresh, empty input.
+    const again = (await screen.findByLabelText(/Choose another file/)) as HTMLInputElement;
+    expect(again.value).toBe("");
+
+    chooseNatively(again, file);
+    fireEvent.change(again);
+    await waitFor(() => expect(FakeXhr.instances).toHaveLength(2));
+    expect((lastUpload().form?.get("file") as File).name).toBe("catalog-nov.csv");
+  });
+
+  it("takes the next file from the same, cleared input after an oversize refusal", async () => {
+    mockApi(() => reply(404));
+    open();
+    const input = screen.getByTestId("csv-input") as HTMLInputElement;
+    const big = csv("big.csv", 3 * 1024 * 1024);
+    chooseNatively(input, big);
+    fireEvent.change(input);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The file is too large.");
+    // Refused before sending, so the chooser stayed the same element; its value was cleared.
+    expect(screen.getByLabelText(/Choose another file/)).toBe(input);
+    expect(input.value).toBe("");
+
+    chooseNatively(input, csv());
+    fireEvent.change(input);
+    await waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
+    expect((lastUpload().form?.get("file") as File).name).toBe("catalog-nov.csv");
   });
 });

@@ -8,7 +8,7 @@ import en from "../messages/en.json";
 import { createBusinessApi, expect, me, newApi, newContext, operatorSignInApi, operatorSignInUi, rebase, test, text, unique, uniquePhone, userSignInApi } from "./fixtures";
 import type { E2eEnv } from "./env";
 import type { Locale, NewBusiness } from "./fixtures";
-import { catalogWorld, escapeRegExp } from "./m1-fixtures";
+import { catalogWorld, escapeRegExp, expectNoSidewaysScroll } from "./m1-fixtures";
 import type { ProductPage } from "../src/lib/catalog";
 
 // Task T087: the accessibility pass over every M0 screen, in the language of the project (en, ar), at
@@ -489,8 +489,10 @@ async function checkSearchPlaceholder(search: Locator, info: TestInfo, label: st
   }
 }
 
-async function m1Audit(page: Page, info: TestInfo, locale: Locale, label: string, dialog?: Locator) {
-  await settled(page);
+async function m1Audit(page: Page, info: TestInfo, locale: Locale, label: string, dialog?: Locator, options: { loading?: boolean } = {}) {
+  // A held request leaves its loading state (role=status, spinner) on screen on purpose.
+  if (options.loading) await expect(page.locator('h1').first()).toBeVisible();
+  else await settled(page);
   const html = page.locator('html');
   const scope = dialog ?? page.locator('body');
   await expect.soft(html).toHaveAttribute('lang', locale);
@@ -686,6 +688,197 @@ test('T106 M1 CSV import accessibility at 360 px', async ({ browser, baseURL, en
     await expect(page.getByRole('link', { name: t('done.viewCatalog') })).toBeVisible();
     await audit('CSV import result');
   } finally {
+    await world.close();
+  }
+});
+
+/** The T106 test business's product: size 30 is low (1 left, warns at 2), size 32 has no stock and so no history. */
+async function createA11yProduct(context: BrowserContext, storeId: string) {
+  const response = await context.request.post('/api/v1/catalog/products', {
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+    data: {
+      code: 'A11Y-JEANS', name_en: 'Blue jeans · extra long', name_ar: 'جينز أزرق طويل جداً',
+      store_ids: [storeId], photo_ids: [], options: [{ name: 'Size', values: [{ label: '30' }, { label: '32' }] }],
+      variants: ['30', '32'].map((size, i) => ({ option_values: [size], sku: `A11Y-JEANS-${size}`, price: '89500000', currency: 'LBP', low_stock_level: 2, photo_id: null, opening_quantity: i ? 0 : 1 })),
+    },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const product = await response.json() as { id: string; variants: { id: string; sku: string }[] };
+  const variant = (sku: string) => product.variants.find((v) => v.sku === sku)!;
+  return { id: product.id, withStock: variant('A11Y-JEANS-30'), noStock: variant('A11Y-JEANS-32') };
+}
+
+const UNAVAILABLE = { status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'unavailable', message: 'Service unavailable' } }) };
+
+test('T106 M1 Low stock and stock history loading, empty and error states at 360 px', async ({ browser, baseURL, env, locale }, info) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const world = await catalogWorld(browser, baseURL ?? '', env, locale);
+  const { page, context } = world.owner;
+  const t = createTranslator({ locale, messages: locale === 'ar' ? ar : en });
+  const audit = (label: string, loading = false) => m1Audit(page, info, locale, label, undefined, { loading });
+  await page.setViewportSize({ width: 360, height: 740 });
+
+  // The server renders the first page of each screen (it is not reachable by page.route), so a state that
+  // needs the browser's own request is reached by a read the browser makes itself.
+  const lowStock = `/${locale}/more/catalog/low-stock`;
+  const lowApi = '**/api/v1/catalog/low-stock**';
+  const movementsApi = '**/api/v1/catalog/variants/*/movements**';
+  const retryButton = page.getByRole('button', { name: t('ui.retry') });
+  const pickStore = async (current: string, next: string) => {
+    await page.getByRole('button', { name: current, exact: true }).click();
+    await page.getByRole('dialog', { name: t('catalog.storeMenu'), exact: true }).getByRole('radio', { name: next, exact: true }).click();
+  };
+  const retryWithKeyboard = async () => {
+    await retryButton.focus();
+    await expect(retryButton).toBeFocused();
+    await page.keyboard.press('Enter');
+  };
+
+  try {
+    // ---- Low stock: empty first (a new business has nothing low) -------------------------------------
+    await page.goto(lowStock);
+    await expect(page.getByRole('heading', { name: t('catalog.lowStock.empty.title') })).toBeVisible();
+    await audit('Low stock empty');
+
+    const product = await createA11yProduct(context, world.storeA.id);
+    const detail = `/${locale}/more/catalog/${product.id}`;
+
+    // ---- Low stock loading: choosing Store B reads the list in the browser; the read is held ----------
+    await page.goto(lowStock);
+    await expect(page.getByRole('list', { name: t('catalog.lowStock.title') })).toBeVisible();
+    let releaseLow!: () => void;
+    const lowGate = new Promise<void>((resolve) => { releaseLow = resolve; });
+    await page.route(lowApi, async (route) => {
+      await lowGate;
+      await route.continue();
+    });
+    await pickStore(t('catalog.allStores'), world.storeB.name);
+    const lowLoading = page.getByRole('status').filter({ hasText: t('catalog.lowStock.loading') });
+    await expect(lowLoading).toBeVisible();
+    await audit('Low stock loading', true);
+    releaseLow();
+    await expect(lowLoading).toHaveCount(0);
+    await page.unroute(lowApi);
+
+    // ---- Low stock error with a keyboard Retry (back to all stores, the read answers 503) ------------
+    let lowFailing = true;
+    await page.route(lowApi, (route) => (lowFailing ? route.fulfill(UNAVAILABLE) : route.continue()));
+    await pickStore(world.storeB.name, t('catalog.allStores'));
+    const lowAlert = page.getByRole('alert').filter({ hasText: t('catalog.lowStock.loadError.title') });
+    await expect(lowAlert).toBeVisible();
+    await audit('Low stock error');
+    lowFailing = false;
+    await retryWithKeyboard();
+    await expect(lowAlert).toHaveCount(0);
+    await expect(page.getByRole('list', { name: t('catalog.lowStock.title') })).toBeVisible();
+    await page.unroute(lowApi);
+
+    // ---- Stock history: Back to the product and forward again makes the browser read the movements ---
+    const historyUrl = `${detail}/variants/${product.noStock.id}/history`;
+    const emptyHistory = page.getByRole('heading', { name: t('catalog.history.empty.title') });
+    const viaBackButton = async (handler: Parameters<Page['route']>[1]) => {
+      await page.goto(historyUrl);
+      await expect(emptyHistory).toBeVisible();
+      await page.getByRole('link', { name: t('common.back') }).click();
+      await expect(page).toHaveURL(new RegExp(`${escapeRegExp(detail)}$`));
+      await expect(page.getByRole('table').first()).toBeVisible();
+      await page.route(movementsApi, handler);
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp(`${escapeRegExp(historyUrl)}$`));
+    };
+
+    let releaseHistory!: () => void;
+    const historyGate = new Promise<void>((resolve) => { releaseHistory = resolve; });
+    await viaBackButton(async (route) => {
+      await historyGate;
+      await route.continue();
+    });
+    await expect(page.getByRole('status').filter({ hasText: t('catalog.history.loading') }), 'the history is read by the browser after Back').toBeVisible();
+    await audit('Stock history loading', true);
+    releaseHistory();
+    await expect(emptyHistory).toBeVisible();
+    await audit('Stock history empty');
+    await page.unroute(movementsApi);
+
+    let historyFailing = true;
+    await viaBackButton((route) => (historyFailing ? route.fulfill(UNAVAILABLE) : route.continue()));
+    const historyAlert = page.getByRole('alert').filter({ hasText: t('catalog.history.loadError.title') });
+    await expect(historyAlert).toBeVisible();
+    await audit('Stock history error');
+    historyFailing = false;
+    await retryWithKeyboard();
+    await expect(historyAlert).toHaveCount(0);
+    await expect(emptyHistory).toBeVisible();
+    await page.unroute(movementsApi);
+  } finally {
+    await world.close();
+  }
+});
+
+test('T106 M1 offline notice is one empty live region online and one visible notice offline at 360 px', async ({ browser, baseURL, env, locale }) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const world = await catalogWorld(browser, baseURL ?? '', env, locale);
+  const { page, context } = world.owner;
+  const messages = locale === 'ar' ? ar : en;
+  const t = createTranslator({ locale, messages });
+  const importT = createTranslator({ locale, messages: messages.catalog.import });
+  await page.setViewportSize({ width: 360, height: 740 });
+
+  // AppShell's region is the only one; screens inside the shell must not add a second.
+  const region = page.locator('[aria-live="polite"][aria-atomic="true"]');
+  const offlineNotices = page.locator('[role="status"], [aria-live="polite"]').filter({ hasText: t('ui.offlineTitle') });
+  const layout = () => page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    headingTop: Math.round(document.querySelector('h1')!.getBoundingClientRect().top + window.scrollY),
+  }));
+
+  try {
+    const product = await createA11yProduct(context, world.storeA.id);
+    const catalog = `/${locale}/more/catalog`;
+    const screens: Array<{ label: string; url: string; ready: () => Promise<void> }> = [
+      { label: 'Catalog', url: catalog, ready: () => expect(page.getByRole('list', { name: t('catalog.title') })).toBeVisible() },
+      { label: 'Product detail', url: `${catalog}/${product.id}`, ready: () => expect(page.getByRole('table').first()).toBeVisible() },
+      { label: 'Create product', url: `${catalog}/new`, ready: () => expect(page.getByLabel(t('catalog.form.nameEn'), { exact: true })).toBeVisible() },
+      { label: 'Stock history', url: `${catalog}/${product.id}/variants/${product.withStock.id}/history`, ready: () => expect(page.getByText(t('catalog.reasons.opening'), { exact: true })).toBeVisible() },
+      { label: 'Low stock', url: `${catalog}/low-stock`, ready: () => expect(page.getByRole('list', { name: t('catalog.lowStock.title') })).toBeVisible() },
+      { label: 'CSV upload', url: `${catalog}/import`, ready: () => expect(page.getByRole('link', { name: importT('template') })).toBeVisible() },
+    ];
+
+    for (const screen of screens) {
+      const label = `${screen.label} (${locale})`;
+      await page.goto(screen.url);
+      await screen.ready();
+      await settled(page);
+
+      // Online: one live region, empty, taking no room (the same layout with the region taken out).
+      await expect(region, `${label}: one polite live region`).toHaveCount(1);
+      expect(await region.evaluate((node) => node.innerHTML), `${label}: the region is empty while online`).toBe('');
+      const box = await region.evaluate((node) => { const r = node.getBoundingClientRect(); return { width: r.width, height: r.height }; });
+      expect(box, `${label}: the empty region takes no space`).toEqual({ width: 0, height: 0 });
+      const withRegion = await layout();
+      await region.evaluate((node) => { (node as HTMLElement).style.display = 'none'; });
+      const withoutRegion = await layout();
+      await region.evaluate((node) => { (node as HTMLElement).style.display = ''; });
+      expect(withRegion, `${label}: the empty region shifts nothing`).toEqual(withoutRegion);
+      await expect(offlineNotices).toHaveCount(0);
+
+      // Disconnect, reconnect, disconnect again: one notice each time, inside the same region.
+      for (const round of [1, 2]) {
+        await context.setOffline(true);
+        await expect(offlineNotices, `${label}: one offline notice (disconnect ${round})`).toHaveCount(1);
+        await expect(offlineNotices.first()).toBeVisible();
+        await expect(region, `${label}: still one live region`).toHaveCount(1);
+        await expect(region).toContainText(t('ui.offlineTitle'));
+        await expect(region).toContainText(t('ui.offlineText'));
+        await expect(page.getByText(t('ui.offlineTitle'))).toHaveCount(1);
+        await expectNoSidewaysScroll(page, `${label} offline`);
+        await context.setOffline(false);
+        await expect(offlineNotices, `${label}: the notice clears on reconnect ${round}`).toHaveCount(0);
+        expect(await region.evaluate((node) => node.innerHTML), `${label}: the region is empty again`).toBe('');
+      }
+    }
+  } finally {
+    await context.setOffline(false);
     await world.close();
   }
 });

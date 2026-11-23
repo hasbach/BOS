@@ -1,6 +1,6 @@
 # T108 — M1 defensive security review
 
-**2026-11-20 · baseline `ca14752` · Review complete; security sign-off open.** The application controls for photo serving, file handling, and endpoint permissions are present, migration `0003` declares forced RLS on all 13 M1 tables, and the F-11/F-15 unit tests passed. The review does not establish that arbitrary secrets are excluded from audit `data`: some event fields retain free text without value-level redaction.
+**2026-11-20 · baseline `ca14752` · Review complete. 2026-11-23: A-01 residual risk accepted for M1, and the deployment checks moved to the deployment milestone (see [Sign-off decision](#sign-off-decision-2026-11-23)).** The application controls for photo serving, file handling, and endpoint permissions are present, migration `0003` declares forced RLS on all 13 M1 tables, and the F-11/F-15 unit tests passed. The review does not establish that arbitrary secrets are excluded from audit `data`: some event fields retain free text without value-level redaction.
 
 ## Evidence and limits
 
@@ -37,4 +37,14 @@ Paths below are relative to `/api/v1`. Allocation reserve/release/consume are in
 
 **Regression evidence:** 244 tests passed across the audit completeness, audit API, allocation, catalog import, catalog products, stock adjustment and CLI integration modules. Exact payload assertions use ordinary fixtures and retain actor, target and event count checks, including for bulk seed events. Movement note assertions verify that the ledger still retains notes. Both DB roles were verified on a dedicated disposable test database, which was dropped and verified absent after the run.
 
-**Residual exposure:** History still resolves `target_name` from current records: product English name (Arabic fallback), variant SKU, allocation request key, and import filename. Operational records are unchanged, including stock movement notes, allocation keys, and import metadata. Historical audit entries were not rewritten and may still contain the previous payload fields. Retained identifiers such as product codes and SKUs are not value-redacted. This is not blanket secret redaction; T108 remains open, including deployment checks and security sign-off.
+**Residual exposure:** History still resolves `target_name` from current records: product English name (Arabic fallback), variant SKU, allocation request key, and import filename. Operational records are unchanged, including stock movement notes, allocation keys, and import metadata. Historical audit entries were not rewritten and may still contain the previous payload fields. Retained identifiers such as product codes and SKUs are not value-redacted. This is not blanket secret redaction.
+
+## Sign-off decision (2026-11-23)
+
+**The product owner accepted the A-01 residual exposure for M1.** No rewrite or redaction work is planned before the M1 exit.
+
+- **Historical entries:** M1 has never been deployed. The repository has only a CI workflow and no deployment configuration. Entries written before the forward-only fix exist only in development, demo and disposable test databases. No historical-data scrub is planned. If any pre-fix database is ever promoted, it must be scrubbed or recreated first.
+- **Retained identifiers:** Product codes, SKUs, current product names, allocation request keys and import filenames still appear in History. This is accepted product behaviour, not a redaction defect.
+- **Moved to the deployment milestone (open findings, not M1 blockers):** Before the first deployment, verify that the upload root is not exposed through public ingress, a CDN or a shared cache. Also verify that deployed catalog tables have `relrowsecurity`/`relforcerowsecurity` and that the deployed app role is `NOSUPERUSER NOBYPASSRLS`, and confirm production secret entropy.
+
+The T108 repository review is complete and the remaining items have been explicitly accepted or deferred.
