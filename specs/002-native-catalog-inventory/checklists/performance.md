@@ -1,6 +1,6 @@
 # M1 performance evidence (T107)
 
-**2026-11-24 — T107 remains open (1 measured miss in each of two full sweeps, neither in search).** After the [search render path](#search-render-path-2026-11-24) change, catalog search passed every measured sample: 20/20 in two focused runs and 12/12 in two full sweeps, at 660.4–853.7 ms (final code: 664.2–814.6 ms) against <1,000 ms. The matching row now appears 132–294 ms after the response instead of 327–516 ms. Both full sweeps measured all 72 attempts: **71 passes, 1 measured miss, 0 unmeasured** each. The misses were in other checks, once each: Arabic catalog list at 4,147.6 ms (<3,000) in the first sweep and the cold English CSV upload at 8,344.3 ms (<3,000) in the second. Neither screen runs the changed search code; the evidence is in that section. The [previous full sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24-no-longer-latest) had its one miss in search. Search and screen readiness have separate budgets.
+**2026-11-24 — T107 passed with the two non-search outliers accepted by the product owner (see [Sign-off decision](#sign-off-decision-2026-11-24)).** Measured result: 1 miss in each of two full sweeps, neither in search. After the [search render path](#search-render-path-2026-11-24) change, catalog search passed every measured sample: 20/20 in two focused runs and 12/12 in two full sweeps, at 660.4–853.7 ms (final code: 664.2–814.6 ms) against <1,000 ms. The matching row now appears 132–294 ms after the response instead of 327–516 ms. Both full sweeps measured all 72 attempts: **71 passes, 1 measured miss, 0 unmeasured** each. The misses were in other checks, once each: Arabic catalog list at 4,147.6 ms (<3,000) in the first sweep and the cold English CSV upload at 8,344.3 ms (<3,000) in the second. Neither screen runs the changed search code; the evidence is in that section. The [previous full sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24-no-longer-latest) had its one miss in search. Search and screen readiness have separate budgets.
 
 ## Optimized catalog search, Low Stock list and Sales shortcut (2026-11-23)
 
@@ -475,3 +475,14 @@ Search detail (full sweeps). Each sample sent one search GET after the debounce,
   - e2e: `e2e/run.log`, `e2e2/run.log`;
   - focused runs: `run-search-abdddee4/`, `run-search-15b7eb69/`;
   - full sweeps: `run-full-b591735a/` and `run-full-d45baaa9/`, each with snapshot, run, list, build, Flask, relay, timing and profile logs, `results.json` and the miss's error context; summaries in `full-report.txt`, `full2-report.txt`, `full-search-detail.txt`, `full2-search-detail.txt`.
+
+## Sign-off decision (2026-11-24)
+
+**The product owner accepted the two outliers and closed T107.** Reasons:
+
+- Catalog search (SC-006, <1,000 ms) passed all 32 measured samples on the final code paths, with at least 146 ms of headroom.
+- Each full sweep passed 71 of 72 attempts. The two misses were on different screens (Arabic catalog list, cold English CSV upload), and neither screen runs the code changed for search.
+- The same screens passed in their other 11 samples each, at 1,290.1–1,893.6 ms and 1,441.2–1,853.7 ms, and neither miss repeated across four full sweeps.
+- The misses look like one-off stalls of this development machine (slow loads of the document, font and chunks; a click recorded ~5 s after the page had loaded). That is a judgement, not a proven cause.
+
+If either screen misses again in a later sweep, it is treated as a regression and investigated, not accepted again under this decision.
