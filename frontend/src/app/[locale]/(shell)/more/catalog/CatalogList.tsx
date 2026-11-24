@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AppBar } from "@/components/AppBar";
 import { Banner } from "@/components/Banner";
@@ -143,7 +143,9 @@ export function CatalogList({ initialNoPhoto = false, initial: seed }: { initial
     moreRequest.current = null;
   }, [view]);
 
-  useEffect(() => {
+  // A layout effect sends the request in the same task as the commit. A passive effect would wait
+  // until the loading rows were painted, which costs a throttled phone ~60-90 ms per search (T107).
+  useLayoutEffect(() => {
     if (view.initialPage) return;
     const controller = new AbortController();
     firstRequest.current = controller;
@@ -301,9 +303,7 @@ export function CatalogList({ initialNoPhoto = false, initial: seed }: { initial
           <>
             <Card style={{ paddingBlock: 0 }}>
               <ul className={styles.list} aria-label={c("title")}>
-                {page.items.map((product) => (
-                  <Row key={product.id} product={product} />
-                ))}
+                <Rows items={page.items} staged={!view.initialPage} />
               </ul>
             </Card>
             {more === "error" ? (
@@ -381,6 +381,27 @@ function StockSwitch({ value, counts, onChange }: { value: Stock; counts: Produc
       })}
     </div>
   );
+}
+
+/**
+ * Rows that fill a phone screen: a row is about 120 px tall and the list starts about 265 px
+ * down, so 360 × 740 shows four and a 430 × 932 phone between five and six.
+ */
+export const FIRST_ROWS = 6;
+
+/**
+ * A page that arrived after the list was mounted (a search, filter or retry) shows its first
+ * FIRST_ROWS rows in the commit that replaces the loading rows, and the rest in a transition
+ * right after. Building all 20 rows before the first paint delayed the matches on a throttled
+ * phone (T107: 4× CPU). Same rows in the same order once complete; a server-rendered page shows
+ * all its rows at once, as hydration needs.
+ */
+function Rows({ items, staged }: { items: ProductSummary[]; staged: boolean }) {
+  const [complete, setComplete] = useState(!staged);
+  useEffect(() => {
+    if (!complete) startTransition(() => setComplete(true));
+  }, [complete]);
+  return (complete ? items : items.slice(0, FIRST_ROWS)).map((product) => <Row key={product.id} product={product} />);
 }
 
 function Row({ product }: { product: ProductSummary }) {

@@ -1,6 +1,6 @@
 # M1 performance evidence (T107)
 
-**2026-11-24 — T107 remains open (1 measured miss).** The [final full sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24) ran after every API database connection was set to plan each query for the current business (`plan_cache_mode=force_custom_plan`). It measured all 72 attempts: **71 passes, 1 measured miss, 0 unmeasured**. All 10 screen and interaction checks passed 6/6, and Arabic search passed 3/3. English search passed 2/3; the miss was 1,061.2 ms against <1,000 ms. Its Flask time was 90.8 ms, and the matching row appeared 516 ms after the response arrived. The six timed search GETs took 79.2–100.4 ms in Flask, compared with up to ~2.6 s in the [earlier sweep](#full-sweep-with-the-native-csv-chooser-2026-11-24), so the [generic-plan outliers](#catalog-search-server-outliers-cached-generic-plan-2026-11-24-no-longer-latest) did not recur. Search and screen readiness have separate budgets.
+**2026-11-24 — T107 remains open (1 measured miss in each of two full sweeps, neither in search).** After the [search render path](#search-render-path-2026-11-24) change, catalog search passed every measured sample: 20/20 in two focused runs and 12/12 in two full sweeps, at 660.4–853.7 ms (final code: 664.2–814.6 ms) against <1,000 ms. The matching row now appears 132–294 ms after the response instead of 327–516 ms. Both full sweeps measured all 72 attempts: **71 passes, 1 measured miss, 0 unmeasured** each. The misses were in other checks, once each: Arabic catalog list at 4,147.6 ms (<3,000) in the first sweep and the cold English CSV upload at 8,344.3 ms (<3,000) in the second. Neither screen runs the changed search code; the evidence is in that section. The [previous full sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24-no-longer-latest) had its one miss in search. Search and screen readiness have separate budgets.
 
 ## Optimized catalog search, Low Stock list and Sales shortcut (2026-11-23)
 
@@ -262,7 +262,7 @@ Samples are in repeat order. Pass totals: English 36/36, Arabic 33/36. Interacti
 
 ## Catalog search server outliers: cached generic plan (2026-11-24; no longer latest)
 
-*Superseded:* the per-statement fix described here was replaced by a connection-wide setting, and the full sweep was rerun. See [Connection-wide custom plans and final full sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24).
+*Superseded:* the per-statement fix described here was replaced by a connection-wide setting, and the full sweep was rerun. See [Connection-wide custom plans and final full sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24-no-longer-latest).
 
 **Root cause.** The slow server times were not caused by Arabic text. psycopg prepares a statement on the server after five runs on one pooled connection. PostgreSQL then compares later runs against a generic plan and can keep reusing it. The search SQL is identical for every business, and row-level security reads `app.tenant_id` when a plan is made. If a connection's first runs come from the first demo business (`q=DEMO-SLIM`, 8 variants), the generic plan expects about 4 products and 8 variants and looks cheaper than those custom plans. PostgreSQL then reuses it for Demo Second Shop, which has 1,000 matching products and 5,000 variants. The plan joins variants and balances with a nested loop, discarding 24,995,000 row pairs. In the 2026-11-24 sweep, the q-search GET log had recorded 1, 5 and 9 first-business `DEMO-SLIM` searches before the three English searches and 13, 17 and 21 before the three Arabic searches. That is consistent with the Arabic searches being the ones that got the reused plan. English text in the same state is just as slow (below).
 
@@ -304,7 +304,9 @@ The same pattern appeared through the real Flask app on one pooled connection: 1
 - **Teardown:** stopped Flask `5197`, relay `5187` and Next `3217` (bound to `127.0.0.1`). Afterwards none of the three ports was listening and connections to them were refused. Dropped `bos_t107_f15372f28115` and verified it was absent; the diagnosis database and throwaway test databases were also dropped and verified absent. `bos_t107_5605129e3a4d` and `bos_m1_quickstart_3227` were not touched. Uploads, mail outbox and `LOCALAPPDATA` pointed to run folders in the scratch directory.
 - **Evidence:** local scratch `t107-ar/` (session scratchpad): `explain-*.txt`, `explain2-slim-ar*.txt`, `diag-after-fix.txt`, `full-suite.log`. The browser run is in `run-4a54d1b8/` (`snapshot.json`, `run.json`, build, Flask, relay, timing and profile logs, `results*.json`, error context).
 
-## Connection-wide custom plans and final full sweep (2026-11-24)
+## Connection-wide custom plans and final full sweep (2026-11-24; no longer latest)
+
+*Superseded as the latest T107 evidence by [Search render path](#search-render-path-2026-11-24). The plan setting described here is unchanged.*
 
 **T107 remains open: 71 passes, 1 measured miss, 0 unmeasured** across 72 attempts (12 checks × English/Arabic × 3).
 
@@ -357,3 +359,119 @@ Samples are in repeat order. Pass totals: English 35/36, Arabic 36/36. Interacti
 - **Teardown:** Stopped the three isolated servers and verified that ports 3217, 5187 and 5197 refuse connections and have no listeners. Dropped `bos_t107_dc19da681630` and the four throwaway `bos_t107test_*` databases (two guard runs without the setting, one module run, one full suite) and verified all are absent. Remaining `bos*` databases: `bos`, `bos_m1_quickstart_3227`, `bos_t107_5605129e3a4d`, `bos_test`, `bos_test_import`. Removed the candidate's `node_modules` junction without recursing into it; the repository's `frontend/node_modules` is intact.
 - **Run note:** the first driver attempt stopped with a Python syntax error in the driver before any build, database or server existed; no sample was taken.
 - **Evidence:** local scratch `t107-ccp/` (session scratchpad): `without-setting.log`, `full-suite.log`, `search-detail.txt`, `report.txt`. The browser run is in `run-5acf96cd/` (`snapshot.json`, `run.json`, `list.log`, build, Flask, relay, timing and profile logs, `results.json`, error context for the miss).
+
+## Search render path (2026-11-24)
+
+**Result: catalog search is no longer near its budget, but T107 stays open.** Search passed all 32 measured samples (two focused runs and two full sweeps) at 660.4–853.7 ms against <1,000 ms. On the final code the range was 664.2–814.6 ms, and the matching row appeared 132–294 ms after the response ended (previous sweep: 327–516 ms). Each full sweep had one measured miss, in a check that does not run the changed search code: Arabic catalog list (4,147.6 ms) in the first and the cold English CSV upload (8,344.3 ms) in the second. Neither sweep had an unmeasured attempt.
+
+**Diagnosis.** Browser traces of the T107 flow: same profile as the harness (Edge, 360 × 740, CDP 150 ms / 1.6 / 0.75 Mbps, 4× CPU, cache disabled), Demo Second Shop, `Performance Denim`. They were taken with a separate diagnosis script; the harness was not changed. Main-thread tasks came from a `devtools.timeline` trace, and JavaScript attribution from a webpack build with `--no-mangling --profile` (React's profiling build adds some overhead). One representative English sample (ready at 1,034 ms, row found at 946 ms), times after input:
+
+| Phase | Before (ms after input) | What ran |
+|---|---|---|
+| Debounce fires | +322 | Render and commit of the loading rows, 28 ms |
+| Loading rows painted | +353 | Style 14 ms, paint 8 ms |
+| Request sent | +383, GET start +443 | Passive effects 62 ms: the request effect (`fetch` itself ~26 ms at 4×) ran only after the loading rows were painted |
+| Waiting for the network | +451 to +686 | The shimmer animated `background-position`, so every frame repainted all 16 placeholders on the main thread (6–12 ms per frame) |
+| Response ended | +625 | JSON is 1.1 KB on the wire, 8.2 KB decoded |
+| Results committed | +686 to +853 | 167 ms, starting 61 ms after the response, behind shimmer frames. Building all 20 rows: render 136 ms, commit 24 ms. Main costs: DOM and SVG creation (`setAttribute` 16 ms, `createElementNS` 7 ms), removing the loading rows (15 ms), ICU plural messages (7 ms), `Link` mounting and prefetch registration (7 ms) |
+| First frame with rows | +853 to +1,023 | 170 ms: layout 57, paint 43, style 31, pre-paint 17. The harness's `checkVisibility` poll forces this style and layout |
+| Ready | +1,034 | After the next animation frame |
+
+In the previous sweep, each search profile shows one or two long tasks after the response, matching these: 87–156 ms, then 78–158 ms.
+
+Ruled out, with evidence:
+- No URL or router navigation per keystroke. Search state is local React state; no RSC request was made for it. The RSC requests in the profiles were `Link` prefetches: product rows after ready, and `catalog/new` from the untimed setup.
+- No `Intl` formatter is created per row. `formatAmount` builds strings with no `Intl` objects, and next-intl memoizes its message formats.
+- No `useTransition` or Suspense delay, and no counts request (counts arrive with the page).
+- No image download in the window (thumbnails are lazy).
+- One search GET per sample.
+
+**Change** (`frontend/`, behaviour kept):
+1. `src/app/[locale]/(shell)/more/catalog/CatalogList.tsx`: the first-page request effect is a layout effect, so the GET is sent in the same task as the commit that shows the loading rows, before they are painted. Abort and ownership rules are unchanged: the existing layout-effect cleanup still aborts at the next view commit.
+2. Same file: a page fetched after the list was mounted (search, filters, retry, client-loaded first page) renders its first `FIRST_ROWS = 6` rows in the commit that replaces the loading rows. The remaining rows follow in a `startTransition` right after: same rows, same order, same counts, Load more and states. A server-rendered seed page still renders every row in its first commit, as hydration needs. Six rows fill a 360 × 740 screen (four visible) and a 430 × 932 one (five to six).
+3. `src/app/[locale]/(shell)/more/catalog/catalog.module.css`: `.skeleton` now runs its shimmer as a `transform` animation on a `::before` layer that is four placeholder widths wide. That is equivalent to the old `background-position` animation (gradient period two widths, slid by one period, same 1.4 s ease-in-out). The compositor runs it, so the main thread is free while the request is out. Screenshots in English and Arabic matched the old look. With reduced motion the animation is off and the static gradient is the same as before. The class is shared by the catalog loading rows, Low Stock, product detail and stock history.
+
+Tried and reverted: `content-visibility: auto` on the row text. Chrome still rendered 15 of 20 rows because its proximity margin covers about 2.5 viewports, so there was little to gain. The 300 ms debounce was **not** changed, so the server still gets one request per typing pause. The GET now starts 332–378 ms after input (previously 372–391 ms).
+
+**Diagnosis-script comparison** (not T107 samples; same isolated stack per pair, warm setup, ms from input to ready):
+
+| Build | English | Arabic |
+|---|---|---|
+| Before, profiling build | 839 / 908 / 860 | 855 / 853 / 948 |
+| Layout-effect request + compositor shimmer (+ the reverted `content-visibility`), profiling build | 868 / 784 / 802 | 790 / 866 / 838 |
+| + staged rows, first 8, production build | 707 / 659 / 694 / 672 / 630 / 652 | 748 / 715 / 797 / 708 / 683 / 761 |
+| + staged rows, first 6 (final), production build, same stack as the row above | 618 / 627 / 620 / 640 / 610 / 644 | 641 / 714 / 697 / 623 / 621 / 637 |
+
+Final production trace (first 8 rows): response ended at +546. The commit started at +567 and took 80 ms, then a 59 ms frame (layout 19, style 11, paint 11). The row was found at +684 and ready at +717. The other rows were rendered afterwards in ~5 ms transition slices.
+
+**Tests.**
+- `tests/catalog/catalog-list.test.tsx`, three new tests:
+  - A searched 20-row page commits `FIRST_ROWS` rows and then appends the other 14 to the same list, in API order. Load more and the counts are kept.
+  - A 20-row server seed renders every row in its first commit, with no request.
+  - The request is sent in the commit that shows the loading rows, checked from a layout effect.
+- With the old code restored temporarily (passive request effect, all rows at once), the staged-rows and request-timing tests failed; restored, they pass.
+- Frontend on Node 24: `npx vitest run --maxWorkers=2` **70 files, 952 tests passed** (final code). `npx tsc --noEmit` passed. ESLint passed on the changed TSX and test files; the CSS has no linter.
+- Production e2e (`BOS_E2E_API_PORT=5101 BOS_E2E_PRODUCTION=1`, API `LOCALAPPDATA` in a scratch folder): `m1-catalog`, `m1-low-stock`, `m1-stock` and `a11y` (including the T106 catalog, Low Stock and stock-history loading/empty/error checks), both locales. **22/22 passed** with 8 first rows, and **22/22 passed** again (10.9 min) on the final code.
+
+**Focused T107 search** ([README](../../../frontend/performance/README.md) setup, `--grep 'catalog search$' --repeat-each=5 --workers=1 --retries=0`, `BOS_T107_PROFILE=1`; budgets, throttling and assertions unchanged). Each timed GET was matched by request ID to a Flask `200`.
+
+| Run | Locale | Samples (ms, repeat order) | Passes | Row ready after response (ms) | Flask (ms) |
+|---|---|---|---:|---|---|
+| 1 (first 8 rows) | en | 720.8 / 661.1 / 660.4 / 846.6 / 762.4 | 5/5 | 134.4–295.2 | 86.4–101.6 |
+| 1 (first 8 rows) | ar | 744.1 / 813.3 / 780.2 / 770.7 / 853.7 | 5/5 | 206.2–316.5 | 77.3–117.3 |
+| 2 (final) | en | 664.2 / 724.4 / 684.2 / 681.0 / 750.5 | 5/5 | 137.7–209.1 | 75.4–115.0 |
+| 2 (final) | ar | 809.1 / 745.1 / 753.3 / 755.8 / 728.4 | 5/5 | 193.8–285.1 | 73.3–119.9 |
+
+**Full sweeps on the final code** (README setup, all 12 checks × en/ar × `--repeat-each=3 --workers=1 --retries=0`, `BOS_T107_PROFILE=1`). Each sweep used a fresh database, a fresh build and fresh servers.
+
+| Check | Budget (ms) | Sweep 1 English | Sweep 1 Arabic | Sweep 2 English | Sweep 2 Arabic |
+|---|---:|---|---|---|---|
+| Catalog search | <1,000 | 667.2 / 715.6 / 707.1 | 764.4 / 814.6 / 790.7 | 683.2 / 781.9 / 699.4 | 777.1 / 794.4 / 788.2 |
+| Catalog list | <3,000 | 1,290.1 / 1,302.4 / 1,595.8 | 1,574.7 / 1,485.6 / 4,147.6 **miss** | 1,301.6 / 1,339.5 / 1,356.6 | 1,893.6 / 1,570.7 / 1,786.8 |
+| Product detail | <3,000 | 1,200.5 / 1,215.7 / 1,255.6 | 1,227.7 / 1,314.8 / 1,274.2 | 1,209.7 / 1,210.8 / 1,321.6 | 1,254.9 / 1,185.1 / 1,386.4 |
+| Create product | <3,000 | 1,492.5 / 1,420.6 / 1,415.8 | 1,690.1 / 1,870.1 / 1,780.7 | 1,270.9 / 1,425.1 / 1,445.5 | 1,501.0 / 1,562.9 / 1,769.4 |
+| Edit product | <3,000 | 1,312.1 / 1,277.6 / 1,315.9 | 1,495.4 / 1,433.7 / 1,588.3 | 1,189.2 / 1,383.2 / 1,243.1 | 1,344.0 / 1,362.0 / 1,360.7 |
+| Adjustment sheet | <3,000 | 299.9 / 336.3 / 301.4 | 306.9 / 302.8 / 284.4 | 323.0 / 303.1 / 403.0 | 292.0 / 266.8 / 285.5 |
+| Stock history | <3,000 | 1,214.4 / 1,147.2 / 1,214.5 | 1,256.5 / 1,344.4 / 1,269.0 | 1,205.7 / 1,145.2 / 1,112.3 | 1,249.0 / 1,176.2 / 1,180.2 |
+| Low Stock list | <3,000 | 1,162.2 / 1,193.4 / 1,164.1 | 1,325.1 / 1,383.5 / 1,418.9 | 1,182.0 / 1,161.5 / 1,186.0 | 1,281.5 / 1,189.2 / 1,268.8 |
+| Sales start-tab Low Stock shortcut | <3,000 | 1,224.2 / 1,326.9 / 1,235.5 | 1,378.5 / 1,410.5 / 1,549.0 | 1,150.2 / 1,235.2 / 1,264.9 | 1,259.5 / 1,319.8 / 1,305.8 |
+| CSV upload (cold, first click) | <3,000 | 1,487.8 / 1,623.7 / 1,473.2 | 1,699.6 / 1,698.6 / 1,853.7 | 8,344.3 **miss** / 1,441.2 / 1,543.3 | 1,703.3 / 1,691.9 / 1,655.6 |
+| CSV preview | <3,000 | 2,194.4 / 2,234.9 / 2,072.2 | 2,762.4 / 2,600.0 / 2,441.4 | 2,205.4 / 1,979.2 / 1,899.1 | 2,479.3 / 2,190.1 / 2,147.6 |
+| CSV result | <3,000 | 470.1 / 386.5 / 435.5 | 436.1 / 403.2 / 420.7 | 499.1 / 388.2 / 442.0 | 472.9 / 434.8 / 411.3 |
+
+Samples are in repeat order. Totals for each sweep: 72 timings and 72 profiles, **71 passes, 1 measured miss, 0 unmeasured**.
+
+Search detail (full sweeps). Each sample sent one search GET after the debounce, and each was matched by request ID to a Flask `200`.
+
+| Sample | Sweep 1 readiness / GET start / response end / Flask / row after response (ms) | Sweep 2 readiness / GET start / response end / Flask / row after response (ms) |
+|---|---|---|
+| en 1 | 667.2 / 377.9 / 534.7 / 123.6 / 132.5 | 683.2 / 336.1 / 511.6 / 86.7 / 171.6 |
+| en 2 | 715.6 / 350.7 / 548.9 / 103.1 / 166.7 | 781.9 / 365.1 / 588.4 / 176.4 / 193.5 |
+| en 3 | 707.1 / 359.4 / 529.1 / 146.6 / 178.0 | 699.4 / 366.4 / 524.3 / 78.0 / 175.1 |
+| ar 1 | 764.4 / 357.8 / 534.2 / 84.0 / 230.2 | 777.1 / 359.4 / 543.4 / 90.8 / 233.7 |
+| ar 2 | 814.6 / 362.5 / 542.5 / 93.1 / 272.1 | 794.4 / 332.2 / 500.6 / 85.1 / 293.8 |
+| ar 3 | 790.7 / 362.1 / 537.4 / 125.2 / 253.3 | 788.2 / 346.2 / 522.3 / 101.0 / 265.9 |
+
+**The two misses.** Both are measured budget misses. Neither page renders the changed list rows, request effect or loading placeholders: the catalog list is a server-rendered seed, so all its rows render at once, and the CSV import page does not use `.skeleton`.
+- *Sweep 1, Arabic catalog list, repeat 3 (4,147.6 ms).* Everything on this load was slow:
+  - document first byte 203.8 ms (about 155 ms for most navigations in the sweep);
+  - the Arabic font request, started at 995 ms, got its first byte at 2,587 ms (about 780–790 ms in the other two Arabic list samples);
+  - a single 1,092 ms long task at 2,710 ms;
+  - the late `layout`/`2686` chunks were requested at 3,677–3,686 ms.
+  
+  The other 11 catalog-list samples took 1,290.1–1,893.6 ms, with no long task in their profiles.
+- *Sweep 2, English CSV upload, repeat 1 (8,344.3 ms).* This was the first CSV upload of the sweep (cold), and its action evidence records the first click at 7,656.7 ms after navigation. Before that the page had loaded normally: document first byte 155.0 ms, DOMContentLoaded 1,043 ms, one 591 ms long task at 1,871 ms, last chunk loaded by 2,537 ms. Nothing in the profile explains the ~5 s before Playwright's click. The other 11 CSV upload samples took 1,441.2–1,853.7 ms. The cold first upload was also the outlier of the [previous sweep](#connection-wide-custom-plans-and-final-full-sweep-2026-11-24-no-longer-latest) (2,756.8 ms, within budget).
+- *Unmeasured is not a miss.* No attempt went unmeasured in these runs. The setup flake noted [earlier](#catalog-search-server-outliers-cached-generic-plan-2026-11-24-no-longer-latest) happened once in the diagnosis script on the first-8-rows build, and never in a T107 run. In it, the untimed no-match setup never showed "Nothing matches" and no search GET was sent within the retries. It is a pre-hydration setup race. A harness attempt like that would count as neither a pass nor a miss.
+
+**Snapshot and isolation.**
+- **Snapshot:** `1f86508` plus the uncommitted working tree, 352 files from `frontend/`, `backend/app` and `backend/migrations`. Focused run 2 and both full sweeps share `snapshot.json` SHA-256 `36514fd7cca045dafa5dfb12d7c267100efae2fd27eb23439081cc54811ecad8`; it matches the current `CatalogList.tsx`. Each `frontend/` copy was hash-verified against the working tree. Flask ran from the working tree.
+- **Build and browser:** isolated Next.js 16.4.6 webpack production builds with the TypeScript check and `BOS_NEXT_DIST_DIR=.next-t107`, on Node 24.22.2; Playwright 1.65.0. Before each run, `--list` verified 10 attempts (focused) or 72 attempts in 24 locale/check pairs (full). Process audits before every build and before sampling found no other build or test process.
+- **Databases:** fresh `bos_t107_a65df4ec66fd` and `bos_t107_67db88675d35` (focused), `bos_t107_3d253f20423e` and `bos_t107_cb3a115ea3ed` (full sweeps), plus `bos_t107_60c9a4fcd142` and `bos_t107_b9098b9fe44a` for the diagnosis stacks. All were on the private loopback PostgreSQL 17.4 cluster (`55433`). Each was migrated to `0003` and verified as owner `bos_owner` and app `bos_app`; the app role was neither superuser nor `BYPASSRLS`. Each had 1,000 products, 5,000 variants and 1,000 translated names in Demo Second Shop, was `ANALYZE`d, and had `plan_cache_mode = force_custom_plan` on the API engine.
+- **Servers:** Flask `5197`, relay `5187` and Next `3217`, all bound to `127.0.0.1`. Uploads, mail outbox and `LOCALAPPDATA` used run folders in the scratch directory. Dev, `bos_test`, `bos_test_import`, `bos_m1_quickstart_3227` and `bos_t107_5605129e3a4d` were not used. The e2e runs used their own Playwright-managed servers on `5101`/`5180`/`3200`. Per the e2e config, that API uses the development database.
+- **Teardown:** every isolated server was stopped, and ports 3200, 3217, 5101, 5180, 5187 and 5197 have no listeners. All six `bos_t107_*` databases created here were dropped and verified absent. Remaining databases: `bos`, `bos_m1_quickstart_3227`, `bos_t107_5605129e3a4d`, `bos_test`, `bos_test_import`, `postgres`. Every candidate's `node_modules` junction was removed without recursing into it; the repository's `frontend/node_modules` is intact.
+- **Evidence:** local scratch `t107-srp/` (session scratchpad):
+  - diagnosis: `diag.mjs`, `analyze.py`, `diag/out-*/` traces and results, `diag2/out-a8/`, `diag2/out-a6/`;
+  - unit tests: `vitest.log`, `vitest2.log`;
+  - e2e: `e2e/run.log`, `e2e2/run.log`;
+  - focused runs: `run-search-abdddee4/`, `run-search-15b7eb69/`;
+  - full sweeps: `run-full-b591735a/` and `run-full-d45baaa9/`, each with snapshot, run, list, build, Flask, relay, timing and profile logs, `results.json` and the miss's error context; summaries in `full-report.txt`, `full2-report.txt`, `full-search-detail.txt`, `full2-search-detail.txt`.

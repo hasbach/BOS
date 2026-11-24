@@ -5,7 +5,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CatalogList } from "@/app/[locale]/(shell)/more/catalog/CatalogList";
+import { CatalogList, FIRST_ROWS } from "@/app/[locale]/(shell)/more/catalog/CatalogList";
 import * as catalogApi from "@/lib/catalog";
 import type { ProductPage } from "@/lib/catalog";
 import type { CatalogSeedPage } from "@/lib/serverSession";
@@ -505,6 +505,67 @@ describe("catalog list (screens 132 to 139)", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "linen dress" } });
     expect(await screen.findByText("Nothing matches")).toBeInTheDocument();
     expect(screen.getByText(/contains “linen dress”/)).toBeInTheDocument();
+  });
+
+  describe("search render path (T107)", () => {
+    const twenty = Array.from({ length: 20 }, (_, n) => summary({ id: `p-${n}`, code: `PD-${n}`, name_en: `Performance Denim ${n}` }));
+    /** Rows React appended to an already mounted list, i.e. after the list's first commit. */
+    const appendedRows = (records: MutationRecord[]) =>
+      records.filter((record) => record.target instanceof HTMLUListElement).flatMap((record) => [...record.addedNodes]).filter((node) => node instanceof HTMLLIElement).length;
+
+    it("shows a searched page's first rows with the commit that replaces the loading rows, then the rest in order", async () => {
+      mockApi((call) => reply(200, call.url.includes("q=") ? page(twenty, { next_cursor: "c-2" }) : page([JEANS])));
+      renderMe(<CatalogList initial={seededPage("staged-rows", page([JEANS]))} />, catalogOwner());
+      expect(screen.getByText("Slim blue jeans")).toBeInTheDocument();
+
+      const records: MutationRecord[] = [];
+      const observer = new MutationObserver((batch) => records.push(...batch));
+      observer.observe(document.body, { childList: true, subtree: true });
+      fireEvent.change(screen.getByRole("searchbox"), { target: { value: "performance denim" } });
+      await waitFor(() => expect(within(listed()).getAllByRole("listitem")).toHaveLength(20));
+      records.push(...observer.takeRecords());
+      observer.disconnect();
+
+      // The list arrived with FIRST_ROWS rows; the other 14 were added to it afterwards.
+      expect(FIRST_ROWS).toBe(6);
+      expect(appendedRows(records)).toBe(20 - FIRST_ROWS);
+      expect(within(listed()).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(twenty.map((product) => `/more/catalog/${product.id}`));
+      expect(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: /All.*86/ })).toBeInTheDocument();
+    });
+
+    it("renders every row of a server page in its first commit, as hydration needs", () => {
+      const calls = mockApi(() => reply(200, page([])));
+      const observer = new MutationObserver(() => undefined);
+      observer.observe(document.body, { childList: true, subtree: true });
+      renderMe(<CatalogList initial={seededPage("server-twenty", page(twenty))} />, catalogOwner());
+      const records = observer.takeRecords();
+      observer.disconnect();
+
+      expect(within(listed()).getAllByRole("listitem")).toHaveLength(20);
+      expect(appendedRows(records)).toBe(0);
+      expect(productCalls(calls)).toHaveLength(0);
+    });
+
+    it("sends the request in the commit that shows the loading rows, before passive effects", async () => {
+      const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(() => new Promise<Response>(() => {}));
+      vi.stubGlobal("fetch", fetch);
+      const update = renderMountedCatalog({ initial: seededPage("request-at-commit", page([JEANS])) });
+      expect(fetch).not.toHaveBeenCalled();
+
+      let sentAtCommit: number | undefined;
+      let loadingAtCommit: boolean | undefined;
+      act(() => {
+        flushSync(() => update({ initialNoPhoto: true, initial: seededPage("request-at-commit", page([JEANS])) }, () => {
+          sentAtCommit = fetch.mock.calls.length;
+          loadingAtCommit = screen.queryByRole("status")?.textContent?.includes("Loading products…");
+        }));
+      });
+
+      expect(loadingAtCommit).toBe(true);
+      expect(sentAtCommit).toBe(1);
+      expect(queryOf({ method: "GET", url: fetch.mock.calls[0]![0] } as Parameters<typeof queryOf>[0])).toEqual({ no_photo: "true" });
+    });
   });
 
   it("shows the could-not-load state with a retry that loads again", async () => {

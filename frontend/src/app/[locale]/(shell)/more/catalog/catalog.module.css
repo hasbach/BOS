@@ -294,24 +294,43 @@
   border-radius: 50%;
 }
 
+/*
+ * The shimmer moves a layer instead of animating background-position, so the compositor runs it.
+ * Repainting every placeholder on each frame kept a throttled phone's main thread busy while a
+ * search was loading and delayed the results (T107). It looks the same: the repeating gradient
+ * (one period is twice the placeholder's width) slides by one period. The layer is four widths
+ * wide and moves from -3 to -1 widths, which covers the placeholder throughout.
+ */
 .skeleton {
-  background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2));
-  background-size: 200% 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2);
   border-radius: 8px;
+}
+
+.skeleton::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  inline-size: 400%;
+  block-size: 100%;
+  background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2));
+  background-size: 50% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
 @keyframes shimmer {
   0% {
-    background-position: 100% 0;
+    transform: translateX(-75%);
   }
   100% {
-    background-position: -100% 0;
+    transform: translateX(-25%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton {
+  .skeleton::before {
     animation: none;
   }
 }
