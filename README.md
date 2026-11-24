@@ -10,16 +10,25 @@ their orders, stores and staff from one place. It ships as one platform in two e
 - **BOS Commerce** for businesses that connect WooCommerce and run several stores.
 
 The product brief is [social_commerce_saas_mvp_speckit.md](social_commerce_saas_mvp_speckit.md).
-This repository currently contains **milestone M0, the platform foundation**: businesses
-(tenants) with row-level isolation, stores, staff, roles and store access, sign-in, the
-operator area for Beta staff, the history (audit) trail, and the English/Arabic mobile app
-shell. Orders, WhatsApp and WooCommerce come in later milestones.
+This repository currently contains two completed milestones:
+
+- **M0, the platform foundation**: businesses (tenants) with row-level isolation, stores,
+  staff, roles and store access, sign-in, the operator area for Beta staff, the history
+  (audit) trail, and the English/Arabic mobile app shell.
+- **M1, native catalog and inventory**: products with variants and photos, bilingual
+  search, CSV import, stock adjustments and history, low stock, and stock reservations.
+
+Orders (M2, next), delivery, WhatsApp and WooCommerce come in later milestones; see the
+[roadmap](social_commerce_saas_mvp_speckit.md#92-implementation-milestones-features-not-spec-kit-command-phases).
 
 - Constitution: [.specify/memory/constitution.md](.specify/memory/constitution.md)
 - M0 specification, plan, tasks, contracts: [specs/001-platform-foundation/](specs/001-platform-foundation/)
   (start with [spec.md](specs/001-platform-foundation/spec.md),
   [plan.md](specs/001-platform-foundation/plan.md) and
   [quickstart.md](specs/001-platform-foundation/quickstart.md))
+- M1 specification, plan, tasks, contracts: [specs/002-native-catalog-inventory/](specs/002-native-catalog-inventory/)
+  (start with [spec.md](specs/002-native-catalog-inventory/spec.md) and
+  [quickstart.md](specs/002-native-catalog-inventory/quickstart.md))
 
 ## Stack
 

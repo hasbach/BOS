@@ -342,17 +342,19 @@ Use `/speckit.constitution` to establish these non-negotiable principles:
 
 ### 9.2 Implementation milestones (features, not Spec Kit command phases)
 
-| Milestone | Spec Kit feature | Deliverable | Exit gate |
-|---|---|---|---|
-| M0 | `platform-foundation` | Repo, auth, tenant/store model, RBAC, PWA shell, migrations, CI, seed data | Multi-tenant isolation tests pass |
-| M1 | `native-catalog-inventory` | Native products/variants, CSV import, inventory ledger/adjustment, low stock | SKU and allocation integrity tests pass |
-| M2 | `sales-orders` | Customers, draft cart, custom items, store attribution, confirmation, cancellation, order idempotency | Mobile sales journey E2E passes |
-| M3 | `packing-delivery-cod` | Packing queue, mixed-store picklist, courier manifests, statuses, COD ledger, returns inspection | One order to final cash remittance E2E passes |
-| M3.5 | `whatsapp-inbox` | Cloud API connection per store number (coexistence), in-app chat, create order from chat, confirmation sent from BOS | Meta eligibility confirmed for the pilot numbers; send/receive, webhook replay and 24-hour-window tests pass on a test number; fallback to copy/open workflow verified |
-| M4 | `woocommerce-readonly-connector` | Both Woo API connections, read-only product/order import, variation matching, divergence reports | No live inventory writes; mappings verified |
-| M5 | `woocommerce-shared-stock-sync` | WP connector, checkout-time central allocations, projected Woo stock, outbox/retry/reconciliation | Concurrent last-unit, timeout, webhook replay tests pass on staging |
-| M6 | `cross-store-woo-orders` | Master order to both Woo child orders, partial-sync recovery, one shipment/COD | Full two-store mixed basket E2E passes |
-| M7 | `pilot-hardening` | Backups, monitoring, release rollback, performance checks, merchant onboarding, metrics | Safe controlled live pilot approved |
+**Status (2026-11-24):** M0 and M1 are complete and merged into `main`. M2 (`sales-orders`) is next and on hold until the product owner starts it. Open M1 follow-ups: the human first-use timing and screen-reader checks ([manual acceptance](specs/002-native-catalog-inventory/checklists/manual-acceptance.md)), and the deployment security checks deferred to the first deployment ([security review](specs/002-native-catalog-inventory/checklists/security.md#sign-off-decision-2026-11-23)).
+
+| Milestone | Spec Kit feature | Deliverable | Exit gate | Status |
+|---|---|---|---|---|
+| M0 | `platform-foundation` | Repo, auth, tenant/store model, RBAC, PWA shell, migrations, CI, seed data | Multi-tenant isolation tests pass | **Done**: exit gate approved 2026-11-14 ([evidence](specs/001-platform-foundation/checklists/exit-gate.md)) |
+| M1 | `native-catalog-inventory` | Native products/variants, CSV import, inventory ledger/adjustment, low stock | SKU and allocation integrity tests pass | **Done**: exit gate approved 2026-11-24; human timing and screen-reader checks still open ([evidence](specs/002-native-catalog-inventory/checklists/exit-gate.md)) |
+| M2 | `sales-orders` | Customers, draft cart, custom items, store attribution, confirmation, cancellation, order idempotency | Mobile sales journey E2E passes | Next; on hold until the product owner starts it |
+| M3 | `packing-delivery-cod` | Packing queue, mixed-store picklist, courier manifests, statuses, COD ledger, returns inspection | One order to final cash remittance E2E passes | Not started |
+| M3.5 | `whatsapp-inbox` | Cloud API connection per store number (coexistence), in-app chat, create order from chat, confirmation sent from BOS | Meta eligibility confirmed for the pilot numbers; send/receive, webhook replay and 24-hour-window tests pass on a test number; fallback to copy/open workflow verified | Not started |
+| M4 | `woocommerce-readonly-connector` | Both Woo API connections, read-only product/order import, variation matching, divergence reports | No live inventory writes; mappings verified | Not started |
+| M5 | `woocommerce-shared-stock-sync` | WP connector, checkout-time central allocations, projected Woo stock, outbox/retry/reconciliation | Concurrent last-unit, timeout, webhook replay tests pass on staging | Not started |
+| M6 | `cross-store-woo-orders` | Master order to both Woo child orders, partial-sync recovery, one shipment/COD | Full two-store mixed basket E2E passes | Not started |
+| M7 | `pilot-hardening` | Backups, monitoring, release rollback, performance checks, merchant onboarding, metrics | Safe controlled live pilot approved | Not started |
 
 **Suggested release points:** native social-seller beta after M3; WhatsApp inbox after M3.5; connected-commerce pilot only after M7. Do not expose shared inventory sync before M5 gates pass.
 
