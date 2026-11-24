@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BOS API — Platform Foundation (M0)
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Contract for milestone M0, revision 2 (one business per user; review fixes of 2026-11-10).
     All paths are under /api/v1 on the same origin as the web app.
@@ -34,6 +34,14 @@ info:
       it is not repeated on each operation below.
     - Sign-out (`/auth/sign-out`, `/ops/auth/sign-out`) needs no valid session and always
       answers 204, so a user of a suspended business can still sign out.
+
+    Version 0.7.0 (2026-11-15): changes made in place by milestone M1
+    (specs/002-native-catalog-inventory, whose contract describes them as a delta):
+    - `GET /business` and `PATCH /business` gain `low_stock_default` (integer 0–1000000,
+      default 2; `settings.manage` to change; recorded as `tenant.settings_changed`).
+    - `GET /audit`: `target_type` may also be `product`, `variant`, `allocation` or
+      `import_batch`; `target_name` is then the product's English name (else its Arabic
+      name), the variant's SKU, the allocation's request key or the import's file name.
 servers:
   - url: /api/v1
 
@@ -223,14 +231,14 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Business' } } } }
     patch:
       tags: [business]
-      summary: Change name, default currency, exchange rate or default delivery fee (permission settings.manage)
+      summary: Change name, default currency, exchange rate, default delivery fee or low-stock default (permission settings.manage)
       requestBody:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/BusinessSettingsUpdate' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Business' } } } }
-        '400': { description: "`validation_failed` — `usd_lbp_rate` must be > 0 and at most 10000000; `default_delivery_fee` ≥ 0 and at most 100000000; both decimal strings (see conventions)" }
+        '400': { description: "`validation_failed` — `usd_lbp_rate` must be > 0 and at most 10000000; `default_delivery_fee` ≥ 0 and at most 100000000; both decimal strings (see conventions); `low_stock_default` (since 0.7.0) a JSON integer from 0 to 1000000, field code `invalid` or `too_large`" }
         '403': { description: "`forbidden`" }
 
   /stores:
@@ -559,6 +567,7 @@ components:
         default_delivery_fee: { $ref: '#/components/schemas/Money' }
         default_delivery_fee_currency: { $ref: '#/components/schemas/Currency' }
         timezone: { const: Asia/Beirut }
+        low_stock_default: { type: integer, minimum: 0, maximum: 1000000, description: "Since 0.7.0 (M1). A variant with no level of its own warns when its available quantity is at or below this; 0 turns the warning off. Default 2." }
     BusinessSettingsUpdate:
       type: object
       properties:
@@ -567,6 +576,7 @@ components:
         usd_lbp_rate: { $ref: '#/components/schemas/Money' }
         default_delivery_fee: { $ref: '#/components/schemas/Money' }
         default_delivery_fee_currency: { $ref: '#/components/schemas/Currency' }
+        low_stock_default: { type: integer, minimum: 0, maximum: 1000000, description: Since 0.7.0 (M1) }
     Store:
       type: object
       properties:
@@ -648,9 +658,9 @@ components:
               actor_type: { enum: [user, operator, system, anonymous] }
               actor_id: { type: [string, 'null'], format: uuid, description: Set only when actor_type is user }
               actor_name: { type: [string, 'null'], description: "The user's current name; null for operator (shown as the Beta team), system and anonymous" }
-              target_type: { type: [string, 'null'], enum: [tenant, store, user, invitation, session, null] }
+              target_type: { type: [string, 'null'], enum: [tenant, store, user, invitation, session, product, variant, allocation, import_batch, null], description: "product, variant, allocation and import_batch since 0.7.0 (M1)" }
               target_id: { type: [string, 'null'], format: uuid }
-              target_name: { type: [string, 'null'], description: "Current readable name of the target in the same business (business name for tenant targets, store name, user name, invitee name); null when there is none" }
+              target_name: { type: [string, 'null'], description: "Current readable name of the target in the same business (business name for tenant targets, store name, user name, invitee name; since 0.7.0 the product's English name else its Arabic name, the variant's SKU, the allocation's request key, the import's file name); null when there is none" }
               data:
                 type: object
                 description: |

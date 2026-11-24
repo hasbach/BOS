@@ -1,7 +1,8 @@
 """Migration 0002 (invitation codes) rolls back and forward cleanly (constitution VIII).
 
 The whole history is rolled back and reapplied at the start of every test session
-(``owner_engine``); this checks the latest step on its own, with data in its table.
+(``owner_engine``); this checks that step on its own, with data in its table (later migrations are rolled back
+and reapplied around it).
 """
 
 from __future__ import annotations
@@ -34,7 +35,8 @@ def test_0002_downgrades_to_0001_and_upgrades_again(
     config: Config, owner_engine: Engine, worlds: TwoTenants
 ) -> None:
     alembic = alembic_config(config.migration_database_url)
-    assert _value(owner_engine, "SELECT version_num FROM alembic_version") == "0002"
+    head = _value(owner_engine, "SELECT version_num FROM alembic_version")
+    assert head >= "0002"
     assert _value(owner_engine, "SELECT count(*) FROM invitation_codes") == 2
 
     try:
@@ -50,7 +52,7 @@ def test_0002_downgrades_to_0001_and_upgrades_again(
     finally:
         command.upgrade(alembic, "head")
 
-    assert _value(owner_engine, "SELECT version_num FROM alembic_version") == "0002"
+    assert _value(owner_engine, "SELECT version_num FROM alembic_version") == head
     forced = _value(
         owner_engine,
         "SELECT relrowsecurity AND relforcerowsecurity FROM pg_class "

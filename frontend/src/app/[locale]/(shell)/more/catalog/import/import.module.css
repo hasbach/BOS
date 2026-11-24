@@ -1,0 +1,134 @@
+/* Screens 176 to 183: CSV import. */
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stepTitle {
+  font-weight: 600;
+}
+
+.fileCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fileText {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.progress {
+  block-size: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.progressFill {
+  display: block;
+  block-size: 100%;
+  background: var(--accent);
+  transition: inline-size 0.2s;
+}
+
+.counts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.counts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+
+.count {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-block: 10px;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.download {
+  text-decoration: none;
+}
+
+/* File chooser: a transparent native input over a label drawn as the button (see FilePicker). */
+.picker {
+  position: relative;
+  display: flex;
+}
+
+.pickerInput {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.pickerInput::file-selector-button {
+  cursor: pointer;
+}
+
+.pickerInput:disabled,
+.pickerInput:disabled::file-selector-button {
+  cursor: not-allowed;
+}
+
+.pickerLabel {
+  display: flex;
+}
+
+.pickerInput:hover:not(:disabled) + .pickerLabel {
+  filter: brightness(0.96);
+}
+
+/* The input is invisible, so its focus ring is drawn on the label it covers. */
+.pickerInput:focus-visible + .pickerLabel {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pickerInput:disabled + .pickerLabel {
+  background: var(--surface-2);
+  color: var(--fg-2);
+  border-color: var(--border);
+  cursor: not-allowed;
+}

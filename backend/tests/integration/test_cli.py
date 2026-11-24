@@ -74,6 +74,15 @@ def _snapshot(owner: Engine) -> dict[str, list[Any]]:
         "login_attempts",
         "idempotency_keys",
         "audit_entries",
+        "warehouses",
+        "products",
+        "product_stores",
+        "product_options",
+        "option_values",
+        "variants",
+        "inventory_items",
+        "stock_balances",
+        "stock_movements",
     ]
     with owner.connect() as conn:
         return {
@@ -271,6 +280,8 @@ def test_maintenance_removes_only_what_has_expired_and_records_the_run(
     # History refuses keys mentioning passwords, so that one count is recorded renamed.
     recorded = dict(expected)
     recorded["resets_deleted"] = recorded.pop("password_resets_deleted")
+    recorded["staged_photos_deleted"] = 0  # M1: the per-business step (T051)
+    recorded["expired_import_batches_deleted"] = 0  # M1: no import batches in this scenario
     assert run.data == recorded
     assert len(after["audit_entries"]) == len(before["audit_entries"]) + 1
 
@@ -390,16 +401,27 @@ def test_seed_demo_creates_exactly_the_documented_rows(
             assert user.phone_e164 in result.output
         for store in demo.stores:
             assert normalize_phone(store.whatsapp) == store.whatsapp
+        # Every business has exactly one default warehouse (FR-011, research R39).
+        warehouses = _rows(
+            owner_engine, "SELECT name, is_default FROM warehouses WHERE tenant_id = :t", t=demo.id
+        )
+        assert [(w.name, w.is_default) for w in warehouses] == [("Main", True)]
         history = _rows(
             owner_engine,
             "SELECT event, actor_type, actor_id, target_type, target_id FROM audit_entries "
             "WHERE tenant_id = :t ORDER BY event, target_id",
             t=demo.id,
         )
-        assert sorted((h.event, h.target_id) for h in history) == sorted(
+        setup_history = [h for h in history if h.event != "product.created"]
+        assert sorted((h.event, h.target_id) for h in setup_history) == sorted(
             [("tenant.created", demo.id)] + [("store.created", s.id) for s in stores]
         )
-        assert {(h.actor_type, h.actor_id) for h in history} == {("system", None)}
+        assert {(h.actor_type, h.actor_id) for h in setup_history} == {("system", None)}
+        products = _rows(owner_engine, "SELECT id FROM products WHERE tenant_id = :t", t=demo.id)
+        owner = next(u for u in demo.users if u.role == "owner")
+        assert [
+            (h.target_id, h.actor_type, h.actor_id) for h in history if h.event == "product.created"
+        ] == [(product.id, "user", owner.id) for product in sorted(products)]
 
     denim = seed.DEMO_TENANTS[0]
     limited = _rows(
@@ -440,6 +462,37 @@ def test_seed_demo_twice_changes_nothing_the_second_time(
     assert _snapshot(owner_engine) == before
 
 
+@pytest.mark.usefixtures("integrity_check")
+def test_seed_demo_catalog_shows_low_and_out_of_stock_across_both_stores(
+    app: Flask, owner_engine: Engine, clean_db: None
+) -> None:
+    result = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": STRONG})
+    assert result.exit_code == 0, result.output
+    denim = seed.DEMO_TENANTS[0]
+    [count] = _rows(owner_engine, "SELECT count(*) FROM products WHERE tenant_id = :t", t=denim.id)
+    assert count[0] == 8
+    assert set(_rows(owner_engine, "SELECT DISTINCT store_id FROM product_stores")) == {
+        (store.id,) for store in denim.stores
+    }
+    stock = _rows(
+        owner_engine,
+        "SELECT b.on_hand, COALESCE(v.low_stock_level, t.low_stock_default) AS level, "
+        "m.reason, m.quantity, m.on_hand_after FROM variants v "
+        "JOIN tenants t ON t.id = v.tenant_id "
+        "JOIN stock_balances b ON b.inventory_item_id = v.inventory_item_id "
+        "LEFT JOIN stock_movements m ON m.inventory_item_id = b.inventory_item_id "
+        "WHERE v.tenant_id = :t",
+        t=denim.id,
+    )
+    assert sum(s.on_hand == 0 for s in stock) == 1
+    assert sum(0 < s.on_hand <= s.level for s in stock) == 1
+    assert any(s.on_hand > s.level for s in stock)
+    for s in stock:
+        assert (s.reason, s.quantity, s.on_hand_after) == (
+            ("opening", s.on_hand, s.on_hand) if s.on_hand else (None, None, None)
+        )
+
+
 def test_seed_demo_leaves_other_businesses_alone(
     app: Flask, owner_engine: Engine, fresh_tenants: TwoTenants
 ) -> None:
@@ -453,3 +506,230 @@ def test_seed_demo_leaves_other_businesses_alone(
         assert set(rows) <= set(after[table]), table
     demo_ids = {str(t.id) for t in seed.DEMO_TENANTS}
     assert {row[0] for row in after["tenants"]} - {row[0] for row in before["tenants"]} == demo_ids
+
+
+# ---- seed-catalog (M1 T104) --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("environment", "allow", "error"),
+    [
+        ("development", "", "BOS_ALLOW_DEMO_SEED=true"),
+        ("development", "1", "BOS_ALLOW_DEMO_SEED=true"),
+        ("staging", "true", "BOS_ENVIRONMENT=development"),
+        ("production", "true", "BOS_ENVIRONMENT=development"),
+    ],
+)
+def test_seed_catalog_refuses_without_both_development_guards(
+    app: Flask, owner_engine: Engine, clean_db: None, environment: str, allow: str, error: str
+) -> None:
+    app.extensions["bos_config"] = dataclasses.replace(
+        app.extensions["bos_config"], environment=environment
+    )
+    result = _run(
+        app,
+        "seed-catalog",
+        "--variants",
+        "5",
+        "--tenant",
+        str(seed.DEMO_TENANTS[0].id),
+        env={"BOS_ALLOW_DEMO_SEED": allow},
+    )
+    assert result.exit_code != 0
+    assert error in result.output
+    assert _rows(owner_engine, "SELECT id FROM products") == []
+
+
+@pytest.mark.usefixtures("integrity_check")
+@pytest.mark.parametrize(("variants", "full_products", "remainder"), [(7, 1, 2), (5000, 1000, 0)])
+def test_seed_catalog_creates_exact_variant_count_with_opening_stock(
+    app: Flask,
+    owner_engine: Engine,
+    clean_db: None,
+    variants: int,
+    full_products: int,
+    remainder: int,
+) -> None:
+    app.extensions["bos_config"] = dataclasses.replace(
+        app.extensions["bos_config"], environment="development"
+    )
+    # The second demo business starts empty; the first already has its demo catalog.
+    setup = _run(app, "seed-demo", env={**ALLOW_SEED, "BOS_DEMO_PASSWORD": STRONG})
+    assert setup.exit_code == 0, setup.output
+    other, target = seed.DEMO_TENANTS
+    before = _rows(
+        owner_engine, "SELECT id FROM products WHERE tenant_id = :t ORDER BY id", t=other.id
+    )
+    result = _run(
+        app, "seed-catalog", "--variants", str(variants), "--tenant", str(target.id), env=ALLOW_SEED
+    )
+    assert result.exit_code == 0, result.output or repr(result.exception)
+    assert str(variants) in result.output
+    assert (
+        _rows(owner_engine, "SELECT id FROM products WHERE tenant_id = :t ORDER BY id", t=other.id)
+        == before
+    )
+
+    counts = _rows(
+        owner_engine,
+        "SELECT count(v.id) FROM products p LEFT JOIN variants v ON v.product_id = p.id "
+        "WHERE p.tenant_id = :t GROUP BY p.id ORDER BY count(v.id)",
+        t=target.id,
+    )
+    assert [n for (n,) in counts] == ([remainder] if remainder else []) + [5] * full_products
+    assert _rows(
+        owner_engine,
+        "SELECT count(*) FROM variants v "
+        "JOIN stock_balances b ON b.inventory_item_id = v.inventory_item_id "
+        "JOIN stock_movements m ON m.inventory_item_id = v.inventory_item_id "
+        "WHERE v.tenant_id = :t AND m.reason = 'opening' AND m.quantity = b.on_hand "
+        "AND m.on_hand_after = b.on_hand AND b.on_hand > 0 AND b.allocated = 0",
+        t=target.id,
+    ) == [(variants,)]
+    [store] = _rows(owner_engine, "SELECT id FROM stores WHERE tenant_id = :t", t=target.id)
+    seeded = _rows(
+        owner_engine,
+        "SELECT p.id, p.code, count(v.id) AS variants, sum(b.on_hand) AS opening_units "
+        "FROM products p JOIN variants v ON v.product_id = p.id "
+        "JOIN stock_balances b ON b.inventory_item_id = v.inventory_item_id "
+        "WHERE p.tenant_id = :t GROUP BY p.id ORDER BY p.id",
+        t=target.id,
+    )
+    entries = _rows(
+        owner_engine,
+        "SELECT actor_type, actor_id, target_type, target_id, data FROM audit_entries "
+        "WHERE tenant_id = :t AND event = 'product.created' ORDER BY target_id",
+        t=target.id,
+    )
+    assert len(entries) == len(seeded)
+    for entry, product in zip(entries, seeded, strict=True):
+        assert (entry.actor_type, entry.actor_id) == ("system", None)
+        assert (entry.target_type, entry.target_id) == ("product", product.id)
+        assert entry.data == {
+            "code": product.code,
+            "source": "seed-catalog",
+            "variants": product.variants,
+            "store_ids": [str(store.id)],
+            "opening_units": product.opening_units,
+        }
+
+
+@pytest.mark.parametrize(
+    ("variants", "tenant", "error"),
+    [
+        ("0", "existing", "Invalid value for '--variants'"),
+        ("5", "not-a-uuid", "not a business id"),
+        ("5", str(uuid.UUID(int=7)), "No demo business"),
+        ("5", "existing", "No demo business"),
+    ],
+)
+def test_seed_catalog_refuses_invalid_arguments_or_non_demo_target(
+    app: Flask,
+    owner_engine: Engine,
+    fresh_tenants: TwoTenants,
+    variants: str,
+    tenant: str,
+    error: str,
+) -> None:
+    app.extensions["bos_config"] = dataclasses.replace(
+        app.extensions["bos_config"], environment="development"
+    )
+    if tenant == "existing":
+        tenant = str(fresh_tenants.a.tenant_id)
+    before = _snapshot(owner_engine)
+    result = _run(app, "seed-catalog", "--variants", variants, "--tenant", tenant, env=ALLOW_SEED)
+    assert result.exit_code != 0
+    assert error in result.output
+    assert _snapshot(owner_engine) == before
+
+
+# ---- stock-check (M1 T073, FR-022, R45) -----------------------------------------------------------
+
+
+def _report_lines(output: str, tenant_id: uuid.UUID) -> list[str]:
+    """The lines about one business: its summary line and the problems listed under it."""
+    lines = output.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"business {tenant_id}"))
+    block = [lines[start]]
+    for line in lines[start + 1 :]:
+        if not line.startswith("  "):
+            break
+        block.append(line)
+    return block
+
+
+def test_stock_check_reports_0_differences_for_every_business(
+    app: Flask, owner_engine: Engine, fresh_catalog_tenants: TwoTenants
+) -> None:
+    worlds = fresh_catalog_tenants
+
+    result = _run(app, "stock-check")
+
+    assert result.exit_code == 0, result.output
+    # Both businesses are found although row-level security is forced on ``tenants``.
+    for world in (worlds.a, worlds.b):
+        assert _report_lines(result.output, world.tenant_id) == [
+            f"business {world.tenant_id} (Tenant {world.label}): 0 differences"
+        ]
+
+
+def test_stock_check_lists_each_difference_and_exits_non_zero(
+    app: Flask, owner_engine: Engine, fresh_catalog_tenants: TwoTenants
+) -> None:
+    a, b = fresh_catalog_tenants.a, fresh_catalog_tenants.b
+    item = a.catalog.item_id
+    with owner_engine.begin() as conn:
+        # On hand 5 -> 7 without a movement; allocated 1 -> 2 without an allocation line.
+        conn.execute(
+            text(
+                "UPDATE stock_balances SET on_hand = 7, allocated = 2 WHERE inventory_item_id = :i"
+            ),
+            {"i": item},
+        )
+
+    result = _run(app, "stock-check")
+
+    assert result.exit_code != 0
+    assert _report_lines(result.output, a.tenant_id) == [
+        f"business {a.tenant_id} (Tenant a): 3 differences",
+        f"  rule 2 (on hand equals the sum of movements) broken for item {item}: "
+        "expected 5, found 7",
+        f"  rule 3 (on hand equals the latest movement's on hand after) broken for item {item}: "
+        "expected 5, found 7",
+        f"  rule 4 (allocated equals the active allocation lines) broken for item {item}: "
+        "expected 1, found 2",
+    ]
+    assert _report_lines(result.output, b.tenant_id) == [
+        f"business {b.tenant_id} (Tenant b): 0 differences"
+    ]
+    assert "1 business(es) with differences" in result.output
+
+
+def test_stock_check_can_check_one_business(
+    app: Flask, owner_engine: Engine, fresh_catalog_tenants: TwoTenants
+) -> None:
+    a, b = fresh_catalog_tenants.a, fresh_catalog_tenants.b
+    with owner_engine.begin() as conn:
+        conn.execute(
+            text("UPDATE stock_balances SET on_hand = 9 WHERE inventory_item_id = :i"),
+            {"i": b.catalog.item_id},
+        )
+
+    only_a = _run(app, "stock-check", "--tenant", str(a.tenant_id))
+    only_b = _run(app, "stock-check", "--tenant", str(b.tenant_id))
+
+    assert only_a.exit_code == 0, only_a.output
+    assert f"business {a.tenant_id}" in only_a.output
+    assert str(b.tenant_id) not in only_a.output
+    assert only_b.exit_code != 0
+    assert str(a.tenant_id) not in only_b.output
+
+
+@pytest.mark.parametrize("tenant", ["not-a-uuid", str(uuid.UUID(int=7))])
+def test_stock_check_refuses_an_unknown_business(
+    app: Flask, fresh_catalog_tenants: TwoTenants, tenant: str
+) -> None:
+    result = _run(app, "stock-check", "--tenant", tenant)
+
+    assert result.exit_code != 0
+    assert "differences" not in result.output

@@ -1,9 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { Browser, BrowserContext, Page } from "@playwright/test";
+import type { Browser, BrowserContext, Locator, Page, TestInfo } from "@playwright/test";
+import type { RunOptions } from "axe-core";
+import { createTranslator } from "next-intl";
 
+import ar from "../messages/ar.json";
+import en from "../messages/en.json";
 import { createBusinessApi, expect, me, newApi, newContext, operatorSignInApi, operatorSignInUi, rebase, test, text, unique, uniquePhone, userSignInApi } from "./fixtures";
 import type { E2eEnv } from "./env";
 import type { Locale, NewBusiness } from "./fixtures";
+import { catalogWorld, escapeRegExp, expectNoSidewaysScroll } from "./m1-fixtures";
+import type { ProductPage } from "../src/lib/catalog";
 
 // Task T087: the accessibility pass over every M0 screen, in the language of the project (en, ar), at
 // 360 x 740. On each screen: axe (WCAG 2.2 A/AA and best practice) in light mode, axe colour contrast
@@ -354,4 +360,525 @@ test("a load error, the offline notice and a save that did not go through pass a
     for (const created of contexts) await created.close();
   }
   verdict(lang, "errors and offline");
+});
+
+// T106 uses separate checks/evidence so M0's findings and verdict don't change.
+const M1_CONTROLS = 'a[href], button, input:not([type=hidden]), select, textarea, [role=button], [role=radio], [role=checkbox], summary, [tabindex]';
+// axe.run deep-merges built-in check options; axe.configure would replace them.
+// RunOptions does not currently declare the per-check override accepted by axe.run.
+const M1_CONTRAST = { 'color-contrast': { options: { contrastRatio: { large: { expected: 4.5 } } } } };
+
+async function m1Keyboard(page: Page, root: Locator, dialog: boolean, label: string) {
+  if (dialog) {
+    await expect.soft(root, `${label}: initial dialog focus`).toBeFocused();
+  } else {
+    // Reset sequential navigation and leave all controls unfocused for the style baseline.
+    await page.evaluate(() => {
+      const start = document.createElement('span');
+      start.tabIndex = -1;
+      document.body.prepend(start);
+      start.focus();
+      start.remove();
+    });
+  }
+
+  // Measure all rendered controls (including radio choices that are not Tab stops).
+  const controls = await root.locator(M1_CONTROLS).evaluateAll((nodes) => nodes.flatMap((node, index) => {
+    if (node.closest('nextjs-portal, [inert], [hidden]') || node.matches(':disabled, [aria-disabled=true]')) return [];
+    const style = getComputedStyle(node);
+    const { width, height } = node.getBoundingClientRect();
+    if (style.visibility !== 'visible' || !width || !height) return [];
+    const label = node.matches('input[type=checkbox], input[type=radio]') ? (node as HTMLInputElement).labels?.[0] : null;
+    const target = label && label.contains(node) ? label.getBoundingClientRect() : { width, height };
+    const description = node.getAttribute('aria-label') || label?.textContent?.trim() || node.textContent?.trim() || node.outerHTML.slice(0, 140);
+    const inlineLink = node.matches('p a') && style.display === 'inline';
+    const visuallyHiddenPicker = node.matches('input[type=file][tabindex="-1"]') && width <= 1 && height <= 1;
+    if (visuallyHiddenPicker) return []; // the visible picker button is the interactive target
+    return [{ index, description: description.slice(0, 140), tab: (node as HTMLElement).tabIndex >= 0, width: target.width, height: target.height, inlineLink,
+      outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}`, shadow: style.boxShadow }];
+  }));
+  const small = controls.filter((c) => !c.inlineLink && (c.width < 44 || c.height < 44));
+  expect.soft(small.map(({ description, width, height }) => ({ description, width, height })), `${label}: targets below 44 × 44 CSS px`).toEqual([]);
+
+  const expected = controls.filter((c) => c.tab).map((c) => c.index);
+  expect.soft(expected.length, `${label}: keyboard controls present`).toBeGreaterThan(0);
+
+  const seen: number[] = [];
+  const missingFocus: string[] = [];
+  let wrapped = false;
+  for (let step = 0; step <= expected.length + 2; step += 1) {
+    await page.keyboard.press('Tab');
+    const focus = await root.evaluate((scope, selector) => {
+      const active = document.activeElement;
+      if (active === document.body) return null; // normal browser chrome stop between page cycles
+      if (!active) return null;
+      if (active.closest('nextjs-portal')) return { index: -2, visible: false, outline: null, shadow: null };
+      const style = getComputedStyle(active);
+      const outlined = !['none', 'hidden'].includes(style.outlineStyle) && parseFloat(style.outlineWidth) > 0 && style.outlineColor !== 'rgba(0, 0, 0, 0)';
+      return {
+        index: Array.from(scope.querySelectorAll(selector)).indexOf(active),
+        visible: active.matches(':focus-visible'),
+        outline: outlined ? `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}` : null,
+        shadow: style.boxShadow === 'none' ? null : style.boxShadow,
+      };
+    }, M1_CONTROLS);
+    if (!focus && !dialog) continue;
+    // Next's development-only shadow UI is not an app control.
+    if (!dialog && focus?.index === -2) continue;
+    if (!focus || focus.index < 0) break;
+    if (seen.includes(focus.index)) {
+      wrapped = focus.index === seen[0];
+      break;
+    }
+    seen.push(focus.index);
+    const baseline = controls.find((c) => c.index === focus.index);
+    const changed = baseline && ((focus.outline && focus.outline !== baseline.outline) || (focus.shadow && focus.shadow !== baseline.shadow));
+    if (!focus.visible || !changed) missingFocus.push(baseline?.description ?? `control ${focus.index}`);
+  }
+  expect.soft(seen, `${label}: Tab follows the rendered control order without skipping controls`).toEqual(expected);
+  expect.soft(wrapped, `${label}: Tab returns to the first control${dialog ? ' without leaving the dialog' : ''}`).toBe(true);
+  expect.soft(missingFocus, `${label}: no visible keyboard focus indicator`).toEqual([]);
+  if (dialog && wrapped && expected.length > 0) {
+    await page.keyboard.press('Shift+Tab');
+    const last = root.locator(M1_CONTROLS).nth(expected[expected.length - 1]!);
+    await expect.soft(last, `${label}: reverse Tab wraps within the dialog`).toBeFocused();
+    // Native focus scrolling can expose the button but leave its outer focus ring clipped.
+    const bottom = await last.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const outset = ['none', 'hidden'].includes(style.outlineStyle)
+        ? 0 : Math.max(0, parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset));
+      const dialog = element.closest('[role="dialog"]')!;
+      return {
+        ring: element.getBoundingClientRect().bottom + outset,
+        clip: Math.min(innerHeight, dialog.getBoundingClientRect().top + dialog.clientHeight),
+      };
+    });
+    expect.soft(bottom.ring, `${label}: reverse Tab leaves the last focus ring inside the sheet viewport`).toBeLessThanOrEqual(bottom.clip);
+  }
+}
+
+// Axe does not report the search placeholder, which supplies the visible search hint.
+async function checkSearchPlaceholder(search: Locator, info: TestInfo, label: string) {
+  const contrast = await search.evaluate((input: HTMLInputElement) => {
+    if (input.value) return null;
+    const placeholder = getComputedStyle(input, '::placeholder');
+    const foreground = placeholder.color;
+    const background = getComputedStyle(input).backgroundColor === 'rgba(0, 0, 0, 0)'
+      ? getComputedStyle(input.parentElement!).backgroundColor
+      : getComputedStyle(input).backgroundColor;
+    const rgba = (color: string) => {
+      const channels = /^rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)$/.exec(color);
+      if (!channels) throw new Error(`Expected an sRGB color, got ${color}`);
+      return [Number(channels[1]), Number(channels[2]), Number(channels[3]), Number(channels[4] ?? 1)];
+    };
+    const bg = rgba(background);
+    if (bg[3] !== 1) throw new Error(`Expected an opaque search background, got ${background}`);
+    const fg = rgba(foreground);
+    const alpha = fg[3]! * Number(placeholder.opacity);
+    const blended = bg.slice(0, 3).map((channel, i) => alpha * fg[i]! + (1 - alpha) * channel);
+    const luminance = (channels: number[]) => channels.slice(0, 3).reduce((sum, channel, i) => {
+      const c = channel / 255;
+      return sum + (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4) * [0.2126, 0.7152, 0.0722][i]!;
+    }, 0);
+    const [bright, dim] = [luminance(blended), luminance(bg)].sort((a, b) => b - a);
+    return { ratio: (bright! + 0.05) / (dim! + 0.05), foreground, background };
+  });
+  if (contrast) {
+    await info.attach(`${label} search placeholder contrast`, { body: JSON.stringify(contrast), contentType: 'application/json' });
+    expect.soft(contrast.ratio, `${label}: search placeholder contrast (${contrast.foreground} on ${contrast.background})`).toBeGreaterThanOrEqual(4.5);
+  }
+}
+
+async function m1Audit(page: Page, info: TestInfo, locale: Locale, label: string, dialog?: Locator, options: { loading?: boolean } = {}) {
+  // A held request leaves its loading state (role=status, spinner) on screen on purpose.
+  if (options.loading) await expect(page.locator('h1').first()).toBeVisible();
+  else await settled(page);
+  const html = page.locator('html');
+  const scope = dialog ?? page.locator('body');
+  await expect.soft(html).toHaveAttribute('lang', locale);
+  await expect.soft(html).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
+  await expect.soft(page.getByRole('main')).toHaveCount(1);
+  await expect.soft(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  await expect.soft(page).toHaveTitle(/ · BOS$/);
+  try {
+    for (const mode of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: mode });
+      const width = await scope.evaluate((node, modal) => ({
+        viewport: window.innerWidth,
+        page: document.documentElement.scrollWidth,
+        dialog: modal ? node.scrollWidth - node.clientWidth : 0,
+      }), !!dialog);
+      expect.soft(width.viewport, `${label}: mobile viewport`).toBe(360);
+      expect.soft(width.page, `${label} (${mode}): page has horizontal overflow`).toBeLessThanOrEqual(width.viewport);
+      expect.soft(width.dialog, `${label} (${mode}): dialog has horizontal overflow`).toBeLessThanOrEqual(0);
+
+      // Match M0's rule set, but enforce T106's 4.5:1 even for large text.
+      const options: RunOptions & { checks: typeof M1_CONTRAST } = {
+        checks: M1_CONTRAST,
+        runOnly: mode === 'light' ? { type: 'tag', values: AXE_TAGS } : { type: 'rule', values: ['color-contrast'] },
+      };
+      const result = await new AxeBuilder({ page }).options(options).exclude('nextjs-portal').analyze();
+      await info.attach(`${label} (${mode}) axe`, { body: JSON.stringify({ violations: result.violations, needsReview: result.incomplete }, null, 2), contentType: 'application/json' });
+      const blocking = result.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical' || v.id === 'color-contrast');
+      expect.soft(blocking.map((v) => ({ rule: v.id, nodes: v.nodes.map((n) => n.target) })), `${label} (${mode}): axe violations`).toEqual([]);
+      const search = scope.getByRole('searchbox');
+      if (!dialog && await search.count()) await checkSearchPlaceholder(search, info, `${label} (${mode})`);
+      if (dialog) await dialog.focus();
+      await m1Keyboard(page, scope, !!dialog, `${label} (${mode})`);
+    }
+  } finally {
+    await page.emulateMedia({ colorScheme: 'light' });
+  }
+}
+
+async function m1Sheet(page: Page, opener: Locator, name: string, info: TestInfo, locale: Locale) {
+  await opener.press('Enter');
+  const dialog = page.getByRole('dialog', { name, exact: true });
+  await expect(dialog).toBeVisible();
+  await expect.soft(dialog).toHaveAttribute('aria-modal', 'true');
+  await expect.soft(dialog, `${name}: focus starts inside the sheet`).toBeFocused();
+  await expect.soft(dialog.getByRole('button', { name: text(locale, 'ui.close') })).toBeVisible();
+  await m1Audit(page, info, locale, name, dialog);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect.soft(opener, `${name}: Escape restores focus to the opener`).toBeFocused();
+}
+
+test('T106 M1 catalog, stock and start tab accessibility at 360 px', async ({ browser, baseURL, env, locale }, info) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const world = await catalogWorld(browser, baseURL ?? '', env, locale);
+  const { page, context } = world.owner;
+  const t = createTranslator({ locale, messages: locale === 'ar' ? ar : en });
+  const catalog = `/${locale}/more/catalog`;
+  const audit = (label: string) => m1Audit(page, info, locale, label);
+  await page.setViewportSize({ width: 360, height: 740 }); // catalogWorld creates its own context
+
+  try {
+    await page.goto(catalog);
+    await expect(page.getByRole('heading', { name: t('catalog.empty.title') })).toBeVisible();
+    await audit('Catalog empty');
+
+    const response = await context.request.post('/api/v1/catalog/products', {
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+      data: {
+        code: 'A11Y-JEANS', name_en: 'Blue jeans · extra long', name_ar: 'جينز أزرق طويل جداً',
+        store_ids: [world.storeA.id], photo_ids: [], options: [{ name: 'Size', values: [{ label: '30' }, { label: '32' }] }],
+        variants: ['30', '32'].map((size, i) => ({ option_values: [size], sku: `A11Y-JEANS-${size}`, price: '89500000', currency: 'LBP', low_stock_level: 2, photo_id: null, opening_quantity: i ? 0 : 1 })),
+      },
+    });
+    expect(response.status(), await response.text()).toBe(201);
+    const product = await response.json() as { id: string; variants: { id: string; sku: string }[] };
+    const withStock = product.variants.find((variant) => variant.sku === 'A11Y-JEANS-30')!;
+    const detail = `${catalog}/${product.id}`;
+
+    await page.reload();
+    const list = page.getByRole('list', { name: t('catalog.title') });
+    await expect(list.getByText(t('catalog.stock.low'), { exact: true })).toBeVisible();
+    const search = page.getByRole('searchbox', { name: t('catalog.search') });
+    // Start from an empty search result so a server-seeded row can't satisfy the next wait.
+    const searchFor = async (query: string) => {
+      const [result] = await Promise.all([
+        page.waitForResponse((response) => {
+          const url = new URL(response.url());
+          return response.request().method() === 'GET' && url.pathname === '/api/v1/catalog/products' && url.searchParams.get('q') === query;
+        }),
+        search.fill(query),
+      ]);
+      expect(result.ok(), `catalog search for ${query}`).toBe(true);
+      return (await result.json() as ProductPage).items.map(({ id }) => id);
+    };
+    // Server-rendered rows can be visible before the search handler attaches.
+    // Retry only this untimed setup; the actual SKU search must succeed once.
+    await expect(async () => {
+      await search.fill('');
+      await search.fill('NO-A11Y-MATCH');
+      await expect(page.getByRole('heading', { name: t('catalog.noMatch.title') })).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
+    expect(await searchFor(withStock.sku)).toEqual([product.id]);
+    const row = list.getByRole('link').and(page.locator(`a[href="${detail}"]`));
+    await expect(row.getByText(t('catalog.stock.low'), { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: t('catalog.clearSearch') })).toBeVisible();
+    await audit('Catalog populated with search');
+    const stockGroup = page.getByRole('radiogroup', { name: t('catalog.stockFilter') });
+    const all = stockGroup.getByRole('radio', { name: new RegExp(`^${escapeRegExp(t('catalog.filters.all'))}\\s`), checked: true });
+    const inStock = stockGroup.getByRole('radio', { name: new RegExp(`^${escapeRegExp(t('catalog.filters.inStock'))}\\s`) });
+    const [firstBox, nextBox] = await Promise.all([all.boundingBox(), inStock.boundingBox()]);
+    expect.soft(firstBox && nextBox && (locale === 'ar' ? firstBox.x > nextBox.x : firstBox.x < nextBox.x), 'Stock options mirror in RTL').toBe(true);
+    await all.press(locale === 'ar' ? 'ArrowLeft' : 'ArrowRight');
+    await expect.soft(inStock).toBeFocused();
+    await expect.soft(inStock).toHaveAttribute('aria-checked', 'true');
+    await inStock.press('Home');
+    await expect(all).toBeFocused();
+    await m1Sheet(page, page.getByRole('button', { name: t('catalog.allStores'), exact: true }), t('catalog.storeMenu'), info, locale);
+    await m1Sheet(page, page.getByRole('button', { name: t('catalog.moreFilters'), exact: true }), t('catalog.moreFilters'), info, locale);
+
+    await page.goto(detail);
+    const table = page.getByRole('table').first();
+    await expect(table.getByText(t('catalog.stock.low'), { exact: true })).toBeVisible();
+    await expect(table.getByText(t('catalog.stock.out'), { exact: true })).toBeVisible();
+    await expect(table.getByText('A11Y-JEANS-30', { exact: true })).toHaveAttribute('dir', 'ltr');
+    await audit('Product detail');
+    await m1Sheet(page, page.getByRole('button', { name: t('catalog.detail.adjust'), exact: true }), t('catalog.adjust.title'), info, locale);
+
+    await page.goto(`${detail}/variants/${withStock.id}/history`);
+    await expect(page.getByText(t('catalog.reasons.opening'), { exact: true })).toBeVisible();
+    await audit('Stock history');
+
+    await page.goto(`${catalog}/new`);
+    await expect(page.getByLabel(t('catalog.form.nameEn'), { exact: true })).toHaveAttribute('dir', 'ltr');
+    await expect(page.getByLabel(t('catalog.form.nameAr'), { exact: true })).toHaveAttribute('dir', 'rtl');
+    await audit('Create product');
+    await page.getByRole('button', { name: t('catalog.form.save'), exact: true }).press('Enter');
+    const name = page.getByLabel(t('catalog.form.nameEn'), { exact: true });
+    await expect(name).toHaveAttribute('aria-invalid', 'true');
+    await expect(name).toHaveAccessibleDescription(/\S/);
+    await audit('Create product with errors');
+
+    await page.goto(`${detail}/edit`);
+    await expect(page.getByLabel(t('catalog.form.code'), { exact: true })).toHaveValue('A11Y-JEANS');
+    await expect(page.getByRole('button', { name: t('catalog.form.details', { variant: '30' }), exact: true })).toBeVisible();
+    await audit('Edit product with variants');
+
+    await page.goto(`${catalog}/low-stock`);
+    const warnings = page.getByRole('list', { name: t('catalog.lowStock.title') });
+    await expect(warnings.getByText(t('catalog.stock.low'), { exact: true })).toBeVisible();
+    await expect(warnings.getByText(t('catalog.stock.out'), { exact: true })).toBeVisible();
+    await audit('Low stock list');
+
+    await page.goto(`/${locale}/sales`);
+    const shortcut = page.getByRole('region', { name: t('catalog.lowStock.row.label') }).getByRole('link');
+    await expect(shortcut).toHaveAccessibleName(new RegExp(escapeRegExp(t('catalog.lowStock.row.count', { count: 2 }))));
+    await expect(shortcut).toHaveAttribute('href', `${catalog}/low-stock`);
+    await audit('Start tab with Needs attention');
+  } finally {
+    await world.close();
+  }
+});
+
+test('T106 M1 CSV import accessibility at 360 px', async ({ browser, baseURL, env, locale }, info) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const world = await catalogWorld(browser, baseURL ?? '', env, locale);
+  const { page } = world.owner;
+  const t = createTranslator({ locale, messages: (locale === 'ar' ? ar : en).catalog.import });
+  const audit = (label: string) => m1Audit(page, info, locale, label);
+  await page.setViewportSize({ width: 360, height: 740 });
+  const upload = (price: string) => page.getByTestId('csv-input').setInputFiles({
+    name: 'catalog.csv', mimeType: 'text/csv',
+    buffer: Buffer.from(`product_code,name_en,name_ar,sku,price,currency,opening_quantity\r\nA11Y-CSV,Imported hat,قبعة مستوردة,A11Y-CSV-SKU,${price},USD,١\r\n`),
+  });
+
+  try {
+    await page.goto(`/${locale}/more/catalog/import`);
+    await expect(page.getByRole('link', { name: t('template') })).toBeVisible();
+    await expect(page.getByRole('button', { name: t('choose') })).toBeEnabled();
+    await audit('CSV upload');
+
+    await upload('');
+    await expect(page.getByRole('list', { name: `${t('problems')} · 1` }).getByRole('listitem')).toContainText(t('row', { row: 2 }));
+    await expect(page.getByRole('button', { name: t('importBlocked', { count: 1 }) })).toBeDisabled();
+    await audit('CSV preview with row errors');
+
+    await upload('12');
+    await expect(page.getByRole('group', { name: t('ifImport') })).toBeVisible();
+    const confirm = page.getByRole('button', { name: t('confirm', { count: 1 }) });
+    await expect(confirm).toBeEnabled();
+    await audit('CSV valid preview');
+    await confirm.press('Enter');
+    await expect(page.getByRole('heading', { name: t('done.title') })).toBeVisible();
+    await expect(page.getByRole('link', { name: t('done.viewCatalog') })).toBeVisible();
+    await audit('CSV import result');
+  } finally {
+    await world.close();
+  }
+});
+
+/** The T106 test business's product: size 30 is low (1 left, warns at 2), size 32 has no stock and so no history. */
+async function createA11yProduct(context: BrowserContext, storeId: string) {
+  const response = await context.request.post('/api/v1/catalog/products', {
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+    data: {
+      code: 'A11Y-JEANS', name_en: 'Blue jeans · extra long', name_ar: 'جينز أزرق طويل جداً',
+      store_ids: [storeId], photo_ids: [], options: [{ name: 'Size', values: [{ label: '30' }, { label: '32' }] }],
+      variants: ['30', '32'].map((size, i) => ({ option_values: [size], sku: `A11Y-JEANS-${size}`, price: '89500000', currency: 'LBP', low_stock_level: 2, photo_id: null, opening_quantity: i ? 0 : 1 })),
+    },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const product = await response.json() as { id: string; variants: { id: string; sku: string }[] };
+  const variant = (sku: string) => product.variants.find((v) => v.sku === sku)!;
+  return { id: product.id, withStock: variant('A11Y-JEANS-30'), noStock: variant('A11Y-JEANS-32') };
+}
+
+const UNAVAILABLE = { status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'unavailable', message: 'Service unavailable' } }) };
+
+test('T106 M1 Low stock and stock history loading, empty and error states at 360 px', async ({ browser, baseURL, env, locale }, info) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const world = await catalogWorld(browser, baseURL ?? '', env, locale);
+  const { page, context } = world.owner;
+  const t = createTranslator({ locale, messages: locale === 'ar' ? ar : en });
+  const audit = (label: string, loading = false) => m1Audit(page, info, locale, label, undefined, { loading });
+  await page.setViewportSize({ width: 360, height: 740 });
+
+  // The server renders the first page of each screen (it is not reachable by page.route), so a state that
+  // needs the browser's own request is reached by a read the browser makes itself.
+  const lowStock = `/${locale}/more/catalog/low-stock`;
+  const lowApi = '**/api/v1/catalog/low-stock**';
+  const movementsApi = '**/api/v1/catalog/variants/*/movements**';
+  const retryButton = page.getByRole('button', { name: t('ui.retry') });
+  const pickStore = async (current: string, next: string) => {
+    await page.getByRole('button', { name: current, exact: true }).click();
+    await page.getByRole('dialog', { name: t('catalog.storeMenu'), exact: true }).getByRole('radio', { name: next, exact: true }).click();
+  };
+  const retryWithKeyboard = async () => {
+    await retryButton.focus();
+    await expect(retryButton).toBeFocused();
+    await page.keyboard.press('Enter');
+  };
+
+  try {
+    // ---- Low stock: empty first (a new business has nothing low) -------------------------------------
+    await page.goto(lowStock);
+    await expect(page.getByRole('heading', { name: t('catalog.lowStock.empty.title') })).toBeVisible();
+    await audit('Low stock empty');
+
+    const product = await createA11yProduct(context, world.storeA.id);
+    const detail = `/${locale}/more/catalog/${product.id}`;
+
+    // ---- Low stock loading: choosing Store B reads the list in the browser; the read is held ----------
+    await page.goto(lowStock);
+    await expect(page.getByRole('list', { name: t('catalog.lowStock.title') })).toBeVisible();
+    let releaseLow!: () => void;
+    const lowGate = new Promise<void>((resolve) => { releaseLow = resolve; });
+    await page.route(lowApi, async (route) => {
+      await lowGate;
+      await route.continue();
+    });
+    await pickStore(t('catalog.allStores'), world.storeB.name);
+    const lowLoading = page.getByRole('status').filter({ hasText: t('catalog.lowStock.loading') });
+    await expect(lowLoading).toBeVisible();
+    await audit('Low stock loading', true);
+    releaseLow();
+    await expect(lowLoading).toHaveCount(0);
+    await page.unroute(lowApi);
+
+    // ---- Low stock error with a keyboard Retry (back to all stores, the read answers 503) ------------
+    let lowFailing = true;
+    await page.route(lowApi, (route) => (lowFailing ? route.fulfill(UNAVAILABLE) : route.continue()));
+    await pickStore(world.storeB.name, t('catalog.allStores'));
+    const lowAlert = page.getByRole('alert').filter({ hasText: t('catalog.lowStock.loadError.title') });
+    await expect(lowAlert).toBeVisible();
+    await audit('Low stock error');
+    lowFailing = false;
+    await retryWithKeyboard();
+    await expect(lowAlert).toHaveCount(0);
+    await expect(page.getByRole('list', { name: t('catalog.lowStock.title') })).toBeVisible();
+    await page.unroute(lowApi);
+
+    // ---- Stock history: Back to the product and forward again makes the browser read the movements ---
+    const historyUrl = `${detail}/variants/${product.noStock.id}/history`;
+    const emptyHistory = page.getByRole('heading', { name: t('catalog.history.empty.title') });
+    const viaBackButton = async (handler: Parameters<Page['route']>[1]) => {
+      await page.goto(historyUrl);
+      await expect(emptyHistory).toBeVisible();
+      await page.getByRole('link', { name: t('common.back') }).click();
+      await expect(page).toHaveURL(new RegExp(`${escapeRegExp(detail)}$`));
+      await expect(page.getByRole('table').first()).toBeVisible();
+      await page.route(movementsApi, handler);
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp(`${escapeRegExp(historyUrl)}$`));
+    };
+
+    let releaseHistory!: () => void;
+    const historyGate = new Promise<void>((resolve) => { releaseHistory = resolve; });
+    await viaBackButton(async (route) => {
+      await historyGate;
+      await route.continue();
+    });
+    await expect(page.getByRole('status').filter({ hasText: t('catalog.history.loading') }), 'the history is read by the browser after Back').toBeVisible();
+    await audit('Stock history loading', true);
+    releaseHistory();
+    await expect(emptyHistory).toBeVisible();
+    await audit('Stock history empty');
+    await page.unroute(movementsApi);
+
+    let historyFailing = true;
+    await viaBackButton((route) => (historyFailing ? route.fulfill(UNAVAILABLE) : route.continue()));
+    const historyAlert = page.getByRole('alert').filter({ hasText: t('catalog.history.loadError.title') });
+    await expect(historyAlert).toBeVisible();
+    await audit('Stock history error');
+    historyFailing = false;
+    await retryWithKeyboard();
+    await expect(historyAlert).toHaveCount(0);
+    await expect(emptyHistory).toBeVisible();
+    await page.unroute(movementsApi);
+  } finally {
+    await world.close();
+  }
+});
+
+test('T106 M1 offline notice is one empty live region online and one visible notice offline at 360 px', async ({ browser, baseURL, env, locale }) => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+  const world = await catalogWorld(browser, baseURL ?? '', env, locale);
+  const { page, context } = world.owner;
+  const messages = locale === 'ar' ? ar : en;
+  const t = createTranslator({ locale, messages });
+  const importT = createTranslator({ locale, messages: messages.catalog.import });
+  await page.setViewportSize({ width: 360, height: 740 });
+
+  // AppShell's region is the only one; screens inside the shell must not add a second.
+  const region = page.locator('[aria-live="polite"][aria-atomic="true"]');
+  const offlineNotices = page.locator('[role="status"], [aria-live="polite"]').filter({ hasText: t('ui.offlineTitle') });
+  const layout = () => page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    headingTop: Math.round(document.querySelector('h1')!.getBoundingClientRect().top + window.scrollY),
+  }));
+
+  try {
+    const product = await createA11yProduct(context, world.storeA.id);
+    const catalog = `/${locale}/more/catalog`;
+    const screens: Array<{ label: string; url: string; ready: () => Promise<void> }> = [
+      { label: 'Catalog', url: catalog, ready: () => expect(page.getByRole('list', { name: t('catalog.title') })).toBeVisible() },
+      { label: 'Product detail', url: `${catalog}/${product.id}`, ready: () => expect(page.getByRole('table').first()).toBeVisible() },
+      { label: 'Create product', url: `${catalog}/new`, ready: () => expect(page.getByLabel(t('catalog.form.nameEn'), { exact: true })).toBeVisible() },
+      { label: 'Stock history', url: `${catalog}/${product.id}/variants/${product.withStock.id}/history`, ready: () => expect(page.getByText(t('catalog.reasons.opening'), { exact: true })).toBeVisible() },
+      { label: 'Low stock', url: `${catalog}/low-stock`, ready: () => expect(page.getByRole('list', { name: t('catalog.lowStock.title') })).toBeVisible() },
+      { label: 'CSV upload', url: `${catalog}/import`, ready: () => expect(page.getByRole('link', { name: importT('template') })).toBeVisible() },
+    ];
+
+    for (const screen of screens) {
+      const label = `${screen.label} (${locale})`;
+      await page.goto(screen.url);
+      await screen.ready();
+      await settled(page);
+
+      // Online: one live region, empty, taking no room (the same layout with the region taken out).
+      await expect(region, `${label}: one polite live region`).toHaveCount(1);
+      expect(await region.evaluate((node) => node.innerHTML), `${label}: the region is empty while online`).toBe('');
+      const box = await region.evaluate((node) => { const r = node.getBoundingClientRect(); return { width: r.width, height: r.height }; });
+      expect(box, `${label}: the empty region takes no space`).toEqual({ width: 0, height: 0 });
+      const withRegion = await layout();
+      await region.evaluate((node) => { (node as HTMLElement).style.display = 'none'; });
+      const withoutRegion = await layout();
+      await region.evaluate((node) => { (node as HTMLElement).style.display = ''; });
+      expect(withRegion, `${label}: the empty region shifts nothing`).toEqual(withoutRegion);
+      await expect(offlineNotices).toHaveCount(0);
+
+      // Disconnect, reconnect, disconnect again: one notice each time, inside the same region.
+      for (const round of [1, 2]) {
+        await context.setOffline(true);
+        await expect(offlineNotices, `${label}: one offline notice (disconnect ${round})`).toHaveCount(1);
+        await expect(offlineNotices.first()).toBeVisible();
+        await expect(region, `${label}: still one live region`).toHaveCount(1);
+        await expect(region).toContainText(t('ui.offlineTitle'));
+        await expect(region).toContainText(t('ui.offlineText'));
+        await expect(page.getByText(t('ui.offlineTitle'))).toHaveCount(1);
+        await expectNoSidewaysScroll(page, `${label} offline`);
+        await context.setOffline(false);
+        await expect(offlineNotices, `${label}: the notice clears on reconnect ${round}`).toHaveCount(0);
+        expect(await region.evaluate((node) => node.innerHTML), `${label}: the region is empty again`).toBe('');
+      }
+    }
+  } finally {
+    await context.setOffline(false);
+    await world.close();
+  }
 });

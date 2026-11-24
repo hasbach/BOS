@@ -80,6 +80,22 @@ describe("Sheet", () => {
     expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
   });
 
+  it("wraps around the tabbable radio, not the inactive radio after it", () => {
+    renderWithIntl(
+      <Sheet open onClose={() => {}} title="Choose a store">
+        <button type="button" role="radio" aria-checked="true">All stores</button>
+        <button type="button" role="radio" aria-checked="false" tabIndex={-1}>Store B</button>
+      </Sheet>,
+    );
+    const current = screen.getByRole("radio", { name: "All stores" });
+    const close = screen.getByRole("button", { name: "Close" });
+    current.focus();
+    fireEvent.keyDown(current, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(current).toHaveFocus();
+  });
+
   it("calls onClose when asked to close", () => {
     const onClose = vi.fn();
     renderWithIntl(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +16,7 @@ from tests.contract.support import (
     contract_operations,
     undocumented_routes,
 )
+from tests.paths import OPENAPI_CONTRACTS, openapi_contract_for
 
 Contract = Callable[[Any], None]
 
@@ -23,7 +25,7 @@ def test_every_registered_api_route_is_in_the_contract(app: Flask) -> None:
     missing = undocumented_routes(app)
 
     assert missing == [], (
-        "Routes missing from specs/001-platform-foundation/contracts/openapi.yaml "
+        "Routes missing from every feature's contracts/openapi.yaml "
         "(add them to the contract in the same change):\n  " + "\n  ".join(missing)
     )
 
@@ -106,6 +108,39 @@ def test_a_response_that_differs_from_the_contract_fails(status: int, body: dict
 
     with pytest.raises(AssertionError, match=r"does not match openapi\.yaml"):
         assert_matches_contract(response)
+
+
+def test_each_path_is_checked_against_the_feature_that_defines_it() -> None:
+    m0, m1 = OPENAPI_CONTRACTS
+    assert m0.parent.parent.name == "001-platform-foundation"
+    assert m1.parent.parent.name == "002-native-catalog-inventory"
+
+    assert openapi_contract_for("/api/v1/health") == m0
+    assert openapi_contract_for(f"/api/v1/stores/{uuid.uuid4()}/logo") == m0
+    # Changed in place by M1 but an M0 endpoint: M0's file carries the change.
+    assert openapi_contract_for("/api/v1/business") == m0
+    assert openapi_contract_for("/api/v1/catalog/products") == m1
+    assert openapi_contract_for(f"/api/v1/catalog/photos/{uuid.uuid4()}/thumb") == m1
+    assert openapi_contract_for("/api/v1/catalog/products/x/y/z") is None
+    assert openapi_contract_for("/api/v1/nowhere") is None
+
+
+def test_operations_of_every_feature_count_as_documented() -> None:
+    assert ("GET", "/health") in contract_operations()
+    assert ("POST", "/catalog/products") in contract_operations()
+    assert ("POST", "/catalog/imports/{}/confirm") in contract_operations()
+
+    app = _bare_app()
+
+    @app.post("/api/v1/catalog/imports/<uuid:batch_id>/confirm")
+    def confirm(batch_id: Any) -> ResponseReturnValue:
+        return jsonify()
+
+    @app.get("/api/v1/catalog/secret")
+    def secret() -> ResponseReturnValue:
+        return jsonify()
+
+    assert undocumented_routes(app) == ["GET /api/v1/catalog/secret"]
 
 
 def test_an_unknown_path_fails() -> None:

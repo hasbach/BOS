@@ -20,14 +20,20 @@ export const ERROR_CODES = [
   "already_member",
   "business_pending",
   "business_suspended",
+  "combination_in_use",
   "cannot_modify_self",
   "code_invalid",
   "code_not_required",
   "confirmation_required",
+  "file_not_csv",
   "file_not_image",
   "file_too_large",
+  "has_history",
   "idempotency_conflict",
   "identifier_unavailable",
+  "import_conflict",
+  "import_expired",
+  "import_has_errors",
   "invalid_credentials",
   "invalid_idempotency_key",
   "invitation_closed",
@@ -35,9 +41,22 @@ export const ERROR_CODES = [
   "last_owner",
   "link_already_used",
   "link_invalid",
+  "missing_columns",
+  "not_enough_stock",
+  "options_locked",
   "owner_has_email",
+  "product_archived",
+  "product_changed",
+  "product_code_in_use",
+  "sku_in_use",
+  "stock_changed",
   "store_name_in_use",
+  "too_many_rows",
+  "try_again",
+  "unknown_columns",
   "user_inactive",
+  "value_in_use",
+  "variant_has_allocations",
   "weak_password",
   "whatsapp_number_in_use",
   "wrong_password",
@@ -45,13 +64,47 @@ export const ERROR_CODES = [
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
-export const FIELD_ERROR_CODES = ["required", "invalid_phone", "invalid_email", "invalid", "too_long"] as const;
+export const FIELD_ERROR_CODES = [
+  "required",
+  "invalid_phone",
+  "invalid_email",
+  "invalid",
+  "too_long",
+  "too_large",
+  "too_many",
+  "duplicate",
+  "not_whole",
+  "in_use",
+] as const;
 export type FieldErrorCode = (typeof FIELD_ERROR_CODES)[number];
+
+/** Row-level codes of an import preview (ImportError.code in contracts/openapi.yaml); the text is under "importErrors". */
+export const IMPORT_ERROR_CODES = [
+  "required",
+  "invalid",
+  "too_long",
+  "too_large",
+  "negative",
+  "not_whole",
+  "invalid_currency",
+  "sku_in_use",
+  "product_code_in_use",
+  "duplicate_in_file",
+  "unknown_store",
+  "inconsistent_product",
+  "duplicate_combination",
+  "missing_option_value",
+  "too_many_options",
+  "too_many_values",
+  "too_many_variants",
+] as const;
+export type ImportErrorCode = (typeof IMPORT_ERROR_CODES)[number];
 
 export const UNKNOWN_ERROR_KEY = "errors.unknown";
 
 const errorCodeSet: ReadonlySet<string> = new Set(ERROR_CODES);
 const fieldCodeSet: ReadonlySet<string> = new Set(FIELD_ERROR_CODES);
+const importCodeSet: ReadonlySet<string> = new Set(IMPORT_ERROR_CODES);
 
 /** Translation key for an API error code; unknown codes fall back to a generic message. */
 export function errorMessageKey(code: string): string {
@@ -61,6 +114,11 @@ export function errorMessageKey(code: string): string {
 /** Translation key for a per-field code from the envelope's `fields` map. */
 export function fieldErrorMessageKey(code: string): string {
   return fieldCodeSet.has(code) ? `fieldErrors.${code}` : UNKNOWN_ERROR_KEY;
+}
+
+/** Translation key for the code of one import row error. */
+export function importErrorMessageKey(code: string): string {
+  return importCodeSet.has(code) ? `importErrors.${code}` : UNKNOWN_ERROR_KEY;
 }
 
 type Translate = (key: string) => string;

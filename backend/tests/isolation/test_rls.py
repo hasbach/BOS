@@ -6,13 +6,26 @@ filter, these are the guarantees that still hold.
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections.abc import Iterator
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
-from tests.dbsupport import RLS_TABLES, TwoTenants, World, as_tenant, insert
+from tests.dbsupport import (
+    CATALOG_TABLES,
+    RLS_TABLES,
+    TwoTenants,
+    World,
+    as_tenant,
+    insert,
+    insert_product,
+    make_two_tenants,
+    truncate_all,
+)
 
 TABLES = sorted(RLS_TABLES)
 
@@ -314,3 +327,192 @@ def test_user_needs_a_phone_or_an_email(owner_engine: Engine, two_tenants: TwoTe
             )
         finally:
             trans.rollback()
+
+
+# ---- M1 catalog and inventory tables (T015) ---------------------------------------------------
+#
+# These use their own module fixture: two businesses with one row in every catalog table. It
+# is set up after every test above has run (pytest runs a module's tests in file order) and
+# wipes and re-creates the data, so keep these tests at the end of the file.
+
+_GENERATED = {"code_key", "sku_key", "seq"}
+
+
+@pytest.fixture(scope="module")
+def catalog_tenants(owner_engine: Engine) -> Iterator[TwoTenants]:
+    yield make_two_tenants(owner_engine, catalog=True)
+    truncate_all(owner_engine)
+
+
+@pytest.mark.parametrize("table", CATALOG_TABLES)
+def test_catalog_table_has_row_level_security_enabled_and_forced(
+    app_engine: Engine, table: str
+) -> None:
+    with app_engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = :t"),
+            {"t": table},
+        ).one()
+    assert (row.relrowsecurity, row.relforcerowsecurity) == (True, True)
+
+
+@pytest.mark.parametrize("table", CATALOG_TABLES)
+def test_tenant_sees_only_its_own_catalog_rows(
+    app_engine: Engine, catalog_tenants: TwoTenants, table: str
+) -> None:
+    with as_tenant(app_engine, catalog_tenants.a.tenant_id) as conn:
+        own = _count(conn, table, "tenant_id = :tid", tid=catalog_tenants.a.tenant_id)
+        foreign = _count(conn, table, "tenant_id = :tid", tid=catalog_tenants.b.tenant_id)
+        total = _count(conn, table)
+    assert (own, foreign, total) == (1, 0, 1)
+
+
+@pytest.mark.parametrize("table", CATALOG_TABLES)
+def test_no_tenant_or_a_made_up_tenant_sees_no_catalog_rows(
+    app_engine: Engine, catalog_tenants: TwoTenants, table: str
+) -> None:
+    with as_tenant(app_engine, None) as conn:
+        assert _count(conn, table) == 0
+    with as_tenant(app_engine, uuid.uuid4()) as conn:
+        assert _count(conn, table) == 0
+
+
+def _row_of(owner: Engine, table: str, tenant_id: uuid.UUID) -> dict[str, Any]:
+    with owner.connect() as conn:
+        found = conn.execute(
+            text(f"SELECT to_jsonb(t) FROM {table} t WHERE tenant_id = :t LIMIT 1"),  # noqa: S608
+            {"t": tenant_id},
+        ).scalar_one()
+    assert isinstance(found, dict)
+    return {name: value for name, value in found.items() if name not in _GENERATED}
+
+
+@pytest.mark.parametrize("table", CATALOG_TABLES)
+def test_tenant_cannot_insert_a_catalog_row_into_another_tenant(
+    app_engine: Engine, owner_engine: Engine, catalog_tenants: TwoTenants, table: str
+) -> None:
+    """A copy of one of B's own rows (new id), inserted while A is the tenant: refused by RLS."""
+    planted = _row_of(owner_engine, table, catalog_tenants.b.tenant_id)
+    if "id" in planted:
+        planted["id"] = str(uuid.uuid4())
+    columns = ", ".join(planted)
+    statement = text(
+        f"INSERT INTO {table} ({columns}) SELECT {columns} "  # noqa: S608
+        f"FROM jsonb_populate_record(NULL::{table}, CAST(:row AS jsonb))"
+    )
+    with (
+        as_tenant(app_engine, catalog_tenants.a.tenant_id) as conn,
+        pytest.raises(DBAPIError) as refused,
+    ):
+        conn.execute(statement, {"row": json.dumps(planted)})
+    assert refused.value.orig.sqlstate == "42501"  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize("table", CATALOG_TABLES)
+def test_tenant_cannot_update_or_delete_another_tenants_catalog_rows(
+    app_engine: Engine, catalog_tenants: TwoTenants, table: str
+) -> None:
+    for statement in (
+        f"UPDATE {table} SET tenant_id = tenant_id WHERE tenant_id = :tid",  # noqa: S608
+        f"DELETE FROM {table} WHERE tenant_id = :tid",  # noqa: S608
+    ):
+        with as_tenant(app_engine, catalog_tenants.a.tenant_id) as conn:
+            try:
+                affected = conn.execute(
+                    text(statement), {"tid": catalog_tenants.b.tenant_id}
+                ).rowcount
+            except DBAPIError:
+                affected = 0  # no UPDATE or DELETE privilege at all is also a refusal
+        assert affected == 0, statement
+
+
+def test_tenant_can_append_to_its_own_ledger(
+    app_engine: Engine, catalog_tenants: TwoTenants
+) -> None:
+    """The application role adds movements (identity column included) in its own business."""
+    a = catalog_tenants.a
+    with as_tenant(app_engine, a.tenant_id) as conn:
+        insert(
+            conn,
+            "stock_movements",
+            id=uuid.uuid4(),
+            tenant_id=a.tenant_id,
+            warehouse_id=a.warehouse_id,
+            inventory_item_id=a.catalog.item_id,
+            quantity=1,
+            reason="received",
+            on_hand_after=6,
+            source="manual",
+            actor_type="user",
+            actor_id=a.user_id,
+        )
+        assert _count(conn, "stock_movements") == 2
+
+
+@pytest.mark.parametrize(
+    "statement", ["UPDATE stock_movements SET note = 'changed'", "DELETE FROM stock_movements"]
+)
+def test_ledger_cannot_be_changed_or_deleted_by_the_application(
+    app_engine: Engine, catalog_tenants: TwoTenants, statement: str
+) -> None:
+    with as_tenant(app_engine, catalog_tenants.a.tenant_id) as conn, pytest.raises(DBAPIError):
+        conn.execute(text(statement))
+
+
+@pytest.mark.parametrize(
+    "statement", ["UPDATE stock_movements SET note = 'changed'", "DELETE FROM stock_movements"]
+)
+def test_ledger_cannot_be_changed_or_deleted_even_by_the_owner_role(
+    owner_engine: Engine, catalog_tenants: TwoTenants, statement: str
+) -> None:
+    with (
+        owner_engine.connect() as conn,
+        conn.begin() as trans,
+        pytest.raises(DBAPIError) as refused,
+    ):
+        try:
+            conn.execute(text(statement))
+        finally:
+            trans.rollback()
+    assert "append-only" in str(refused.value)
+
+
+def test_variant_cannot_point_at_another_tenants_inventory_item(
+    owner_engine: Engine, catalog_tenants: TwoTenants
+) -> None:
+    a, b = catalog_tenants.a, catalog_tenants.b
+    with (
+        owner_engine.connect() as conn,
+        conn.begin() as trans,
+        pytest.raises(DBAPIError) as refused,
+    ):
+        try:
+            item_id = uuid.uuid4()  # an unused item of B: only the tenant mismatch can refuse it
+            insert(conn, "inventory_items", id=item_id, tenant_id=b.tenant_id)
+            conn.execute(
+                text("UPDATE variants SET inventory_item_id = :item WHERE id = :id"),
+                {"item": item_id, "id": a.catalog.variant_id},
+            )
+        finally:
+            trans.rollback()
+    assert refused.value.orig.sqlstate == "23503"  # type: ignore[union-attr]
+
+
+def test_variant_cannot_use_a_photo_of_another_product(
+    owner_engine: Engine, catalog_tenants: TwoTenants
+) -> None:
+    a = catalog_tenants.a
+    with (
+        owner_engine.connect() as conn,
+        conn.begin() as trans,
+        pytest.raises(DBAPIError) as refused,
+    ):
+        try:
+            other = insert_product(conn, a.tenant_id, a.user_id, code="OTHER")
+            conn.execute(
+                text("UPDATE variants SET photo_id = :photo WHERE id = :id"),
+                {"photo": a.catalog.photo_id, "id": other.variant_ids[0]},
+            )
+        finally:
+            trans.rollback()
+    assert refused.value.orig.sqlstate == "23503"  # type: ignore[union-attr]

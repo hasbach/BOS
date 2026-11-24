@@ -105,6 +105,21 @@ users and 5 history entries):
 - Not undone: files uploaded to `BOS_UPLOAD_DIR` (logos). The `files` table rows are gone, so
   the files on disk are orphaned; delete the folder if you are discarding the data.
 
+## Catalog and inventory (`0003`)
+
+PostgreSQL must provide the trusted `pg_trgm` extension. The migration role needs `CREATE`
+on the database if the extension is not already installed. For staging and production (M7),
+initialize the database with a UTF-8 locale such as `C.UTF-8`, not `C`: under `C`, `pg_trgm`
+does not extract Arabic trigrams. UTF-8 encoding alone does not change the locale.
+
+Back up databases that hold real data before rolling back, and rehearse on a disposable database
+first. To undo M1 only, use `flask db downgrade 0002`; `flask db upgrade head` recreates the
+schema but does not restore the data. The downgrade removes products, variants, warehouses,
+balances, movements, allocations, photo records, import batches, and the business low-stock
+default. Product photo files remain on disk without database records. Append-only history
+remains and can refer to removed records. M0 data and the `pg_trgm` extension are retained.
+See “What a rollback loses” in the [M1 data model](../../specs/002-native-catalog-inventory/data-model.md).
+
 ## Verifying a rollback yourself
 
 Never run this against the development database `bos` or the test database. Create a

@@ -11,6 +11,8 @@ export interface Business {
   default_delivery_fee: string;
   default_delivery_fee_currency: Currency;
   timezone: string;
+  /** M1: the low-stock level of variants that have none of their own (0 turns the warning off). */
+  low_stock_default?: number;
 }
 
 export interface BusinessChange {
@@ -19,4 +21,6 @@ export interface BusinessChange {
   usd_lbp_rate?: string;
   default_delivery_fee?: string;
   default_delivery_fee_currency?: Currency;
+  /** M1: 0 to 1,000,000; 0 turns the warning off. */
+  low_stock_default?: number;
 }

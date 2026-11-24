@@ -71,7 +71,7 @@ export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
     if (event.key !== "Tab") return;
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
+    const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((item) => item.tabIndex >= 0);
     const first = items[0];
     const last = items[items.length - 1];
     if (!first || !last) {

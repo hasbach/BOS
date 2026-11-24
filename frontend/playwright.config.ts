@@ -15,6 +15,9 @@ const channel = process.env.BOS_E2E_BROWSER === "chrome" ? "chrome" : "msedge";
 
 const uv = join(process.env.USERPROFILE ?? "", ".local", "bin", "uv.exe");
 const nextBin = join("node_modules", "next", "dist", "bin", "next");
+const next = `"${process.execPath}" ${nextBin}`;
+// A production build avoids on-demand compilation timeouts on slower Windows disks.
+const production = process.env.BOS_E2E_PRODUCTION === "1";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -58,13 +61,15 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: `"${process.execPath}" ${nextBin} dev -H 127.0.0.1 -p ${WEB_PORT}`,
+      command: production
+        ? `${next} build && ${next} start -H 127.0.0.1 -p ${WEB_PORT}`
+        : `${next} dev -H 127.0.0.1 -p ${WEB_PORT}`,
       url: `${WEB_ORIGIN}/en/sign-in`,
       reuseExistingServer: false,
-      timeout: 240_000,
+      timeout: production ? 600_000 : 240_000,
       env: {
         BOS_API_INTERNAL_URL: `http://127.0.0.1:${RELAY_PORT}`,
-        // A separate build folder: two `next dev` servers cannot share one.
+        // Separate outputs keep test and development builds independent.
         BOS_NEXT_DIST_DIR: ".next-e2e",
       },
     },

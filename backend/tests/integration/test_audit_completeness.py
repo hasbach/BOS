@@ -7,10 +7,14 @@ actor id and target. The history written during the test must equal that list ex
 and every entry's time must lie within the test. Then ``GET /audit`` must return the
 entries with their actor and target fields right, and never resolve the name of a record of
 another business.
+
+T105 checks the M1 catalog and stock actions against the documented event list and
+each entry's full payload.
 """
 
 from __future__ import annotations
 
+import io
 import re
 import uuid
 from collections import Counter
@@ -24,7 +28,12 @@ from flask.testing import FlaskClient
 from sqlalchemy import Engine
 
 from app.core import audit
+from app.core.tenancy import tenant_transaction
+from app.services import allocation
+from app.services.inventory import StockActor
 from tests.dbsupport import TwoTenants, insert
+from tests.integration import catalog_support as catalog
+from tests.integration.stock_support import adjust, arrange_product, change, item_movements
 from tests.integration.us1_support import (
     CSRF,
     NEW_PASSWORD,
@@ -42,6 +51,7 @@ from tests.integration.us1_support import (
     with_valid_phones,
 )
 from tests.integration.us3_support import STORES, image_bytes, upload, with_upload_dir
+from tests.paths import DATA_MODELS, documented_events
 
 UserClient = Callable[[uuid.UUID, uuid.UUID], FlaskClient]
 OperatorClient = Callable[[uuid.UUID], FlaskClient]
@@ -398,7 +408,10 @@ def test_every_action_leaves_exactly_one_entry(
     expected = Counter(log.rows)
     assert recorded - expected == Counter(), "recorded but not expected"
     assert expected - recorded == Counter(), "expected but not recorded"
-    assert {r.event for r in rows} == set(audit.EVENTS)
+    # Every event of M0's fixed list. T105 checks M1 separately below.
+    m0_events = documented_events(DATA_MODELS[0])
+    assert m0_events <= set(audit.EVENTS)
+    assert {r.event for r in rows} == m0_events
     assert all(started <= r.at <= ended for r in rows)
     # Only the fixture's own entries were there before.
     assert (
@@ -558,3 +571,202 @@ def _check_operator_entries_api(client: FlaskClient, tenant: uuid.UUID, owner: u
     assert (reset["target_id"], reset["target_name"]) == (str(owner), "Rana Haddad")
     sign_in = by_event["auth.sign_in"]
     assert (sign_in["actor_id"], sign_in["actor_name"]) == (str(owner), "Rana Haddad")
+
+
+@pytest.mark.usefixtures("integrity_check")
+def test_every_m1_action_leaves_exactly_one_entry(
+    owner_engine: Engine, app_engine: Engine, worlds: TwoTenants, user_client: UserClient
+) -> None:
+    a = worlds.a
+    tenant, owner_id, manager_id = a.tenant_id, a.user_id, a.user("manager")
+    owner = user_client(owner_id, tenant)
+    manager = user_client(manager_id, tenant)
+    person = StockActor(tenant_id=tenant, user_id=owner_id)
+    system = StockActor(tenant_id=tenant)
+
+    # A product with stock history cannot be deleted. Release and consume also need
+    # different allocations; set up the release candidate before the audit window.
+    deletable = arrange_product(owner_engine, tenant, owner_id, code="DELETE-ME", on_hand=0)
+    stocked = arrange_product(owner_engine, tenant, owner_id, code="RELEASE-ME", on_hand=2)
+    release_item = stocked.item_ids[0]
+    with tenant_transaction(app_engine, tenant) as db:
+        held = allocation.allocate(db, system, "order-cancelled", [(release_item, 1)])
+    started = owner_value(owner_engine, "SELECT clock_timestamp()")
+
+    store_id = str(a.store_id)
+    sku = "AUDIT-TEE-SKU"
+    product = catalog.created(
+        owner,
+        catalog.simple(
+            "AUDIT-TEE",
+            store_ids=[store_id],
+            name_ar="قميص",
+            variants=[catalog.variant(sku=sku, price="25.00", opening=8)],
+        ),
+    )
+    product_id = uuid.UUID(product["id"])
+    update = catalog.as_update(product)
+    update["name_en"] = "Cotton tee"
+    update["variants"][0]["price"] = "27.50"
+    updated = ok(catalog.put(owner, product_id, update))
+    archived = ok(catalog.action(owner, product_id, "archive", updated["version"]))
+    restored = ok(catalog.action(owner, product_id, "restore", archived["version"]))
+    ok(catalog.delete(owner, deletable.product_id, 1), 204)
+
+    [variant] = restored["variants"]
+    note = "Counted during stocktake"
+    ok(
+        adjust(
+            manager,
+            variant["id"],
+            change(
+                "count_correction",
+                version=variant["stock"]["version"],
+                counted=6,
+                note=note,
+            ),
+        ),
+        201,
+    )
+    item = uuid.UUID(variant["inventory_item_id"])
+    assert item_movements(owner_engine, item)[-1].note == note
+    with tenant_transaction(app_engine, tenant) as db:
+        reserved = allocation.allocate(db, person, "order-packed", [(item, 2)])
+    with tenant_transaction(app_engine, tenant) as db:
+        allocation.release(db, system, held.id)
+    with tenant_transaction(app_engine, tenant) as db:
+        allocation.consume(db, person, reserved.id)
+
+    imports = "/api/v1/catalog/imports"
+    csv = (
+        b"product_code,name_en,sku,price,currency,opening_quantity\n"
+        b"IMPORT-A,Apron,SKU-A,10,USD,3\nIMPORT-B,Bag,SKU-B,15,USD,4\n"
+    )
+    preview = ok(
+        owner.post(
+            imports,
+            data={"file": (io.BytesIO(csv), "stocktake.csv")},
+            headers=CSRF,
+        ),
+        201,
+    )
+    ok(_post(owner, f"{imports}/{preview['id']}/confirm"))
+    ok(_patch(owner, "/api/v1/business", {"low_stock_default": 5}))
+
+    packed = {
+        "lines": [{"sku": sku, "inventory_item_id": str(item), "quantity": 2}],
+    }
+    # Each expected row gives actor id (None for system), target type/id and exact JSON data.
+    expected = {
+        "product.created": (
+            owner_id,
+            "product",
+            product_id,
+            {
+                "code": "AUDIT-TEE",
+                "variants": 1,
+                "store_ids": [store_id],
+                "opening_units": 8,
+            },
+        ),
+        "product.updated": (
+            owner_id,
+            "product",
+            product_id,
+            {
+                "before": {},
+                "after": {},
+                "changed_fields": ["name_en"],
+                "variants_added": [],
+                "variants_archived": [],
+                "variants_restored": [],
+                "variants_deleted": [],
+                "variants_changed": [
+                    {"sku": sku, "before": {"price": "25.00"}, "after": {"price": "27.50"}},
+                ],
+            },
+        ),
+        "product.archived": (
+            owner_id,
+            "product",
+            product_id,
+            {"before": "active", "after": "archived"},
+        ),
+        "product.restored": (
+            owner_id,
+            "product",
+            product_id,
+            {"before": "archived", "after": "active"},
+        ),
+        "product.deleted": (
+            owner_id,
+            "product",
+            deletable.product_id,
+            {"code": "DELETE-ME"},
+        ),
+        "stock.adjusted": (
+            manager_id,
+            "variant",
+            uuid.UUID(variant["id"]),
+            {
+                "sku": sku,
+                "reason": "count_correction",
+                "quantity": -2,
+                "counted_quantity": 6,
+                "on_hand_before": 8,
+                "on_hand_after": 6,
+            },
+        ),
+        "stock.allocated": (owner_id, "allocation", reserved.id, packed),
+        "stock.released": (
+            None,
+            "allocation",
+            held.id,
+            {
+                "lines": [
+                    {"sku": stocked.skus[0], "inventory_item_id": str(release_item), "quantity": 1}
+                ],
+            },
+        ),
+        "stock.consumed": (owner_id, "allocation", reserved.id, packed),
+        "catalog.imported": (
+            owner_id,
+            "import_batch",
+            uuid.UUID(preview["id"]),
+            {
+                "products": 2,
+                "variants": 2,
+                "opening_units": 7,
+            },
+        ),
+        "tenant.settings_changed": (
+            owner_id,
+            "tenant",
+            tenant,
+            {
+                "before": {"low_stock_default": 2},
+                "after": {"low_stock_default": 5},
+            },
+        ),
+    }
+    # M1 also mentions M0's refusal events, covered by T077 above. The setting
+    # change reuses an M0 event too, but has a new payload to exercise here.
+    inherited = documented_events(DATA_MODELS[0]) - {"tenant.settings_changed"}
+    assert set(expected) == documented_events(DATA_MODELS[1]) - inherited
+    assert set(expected) <= set(audit.EVENTS)
+
+    # Do not filter by event or tenant: that could hide extra or misattributed entries.
+    rows = owner_rows(
+        owner_engine,
+        "SELECT tenant_id, event, actor_type, actor_id, target_type, target_id, data "
+        "FROM audit_entries WHERE at >= :started",
+        started=started,
+    )
+    assert Counter(row.event for row in rows) == Counter(expected.keys())
+    for row in rows:
+        actor_id, target_type, target_id, data = expected[row.event]
+        actor_type = "user" if actor_id is not None else "system"
+        assert row.tenant_id == tenant, row.event
+        assert (row.actor_type, row.actor_id) == (actor_type, actor_id), row.event
+        assert (row.target_type, row.target_id) == (target_type, target_id), row.event
+        assert row.data == data, row.event

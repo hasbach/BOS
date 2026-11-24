@@ -46,7 +46,7 @@ describe("settings (screen 91)", () => {
     expect(screen.getByLabelText(RATE)).toHaveValue("89,500");
     expect(screen.getByLabelText(FEE)).toHaveValue("3.00");
     expect(screen.getAllByRole("radio", { checked: true }).map((radio) => radio.textContent)).toEqual(["USD", "USD"]);
-    expect(screen.getByText("Digits 0–9 only. Use a dot for decimals.")).toBeInTheDocument();
+    expect(screen.getByText("Digits 0–9 or ٠–٩ both work. Use a dot or ٫ for decimals.")).toBeInTheDocument();
   });
 
   it("keeps Latin digits in Arabic", async () => {
@@ -110,13 +110,32 @@ describe("settings (screen 91)", () => {
     expect(writes(calls)).toHaveLength(0);
   });
 
-  it("refuses Arabic-Indic digits and a decimal comma instead of converting them", async () => {
+  it("accepts Arabic-Indic digits and separators and sends ASCII decimal strings (R48)", async () => {
     const calls = businessApi();
     await open();
-    type(RATE, "٨٩٥٠٠");
+    type(RATE, "٨٩٬٥٠٠");
+    type(FEE, "٢٫٥");
+    save();
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0]!.body).toMatchObject({ usd_lbp_rate: "89500", default_delivery_fee: "2.5" });
+  });
+
+  it("accepts extended Arabic-Indic digits and the Arabic screen too", async () => {
+    const calls = businessApi();
+    await open("owner", "ar");
+    type(/سعر الصرف/, "۹۰٬۰۰۰");
+    type("رسم التوصيل الافتراضي", "٣٫٥٠");
+    fireEvent.click(screen.getByRole("button", { name: "حفظ التغييرات" }));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0]!.body).toMatchObject({ usd_lbp_rate: "90000", default_delivery_fee: "3.50" });
+  });
+
+  it("still refuses a decimal comma instead of guessing (3,50 is not 350)", async () => {
+    const calls = businessApi();
+    await open();
+    type(RATE, "89,500");
     type(FEE, "3,50");
     save();
-    expect(screen.getByText(/Enter the rate as a number above 0/)).toBeInTheDocument();
     expect(screen.getByText("Enter an amount with up to 2 decimals. Example: 3.50")).toBeInTheDocument();
     expect(writes(calls)).toHaveLength(0);
   });
@@ -208,5 +227,70 @@ describe("settings for a sales agent (screen 99)", () => {
   it("is in Arabic", () => {
     renderAs(<SettingsForm />, "sales", "ar");
     expect(screen.getByText("لا يمكنك فتح الإعدادات")).toBeInTheDocument();
+  });
+});
+
+describe("settings: low-stock default (screens 162 and 163)", () => {
+  const M1: Business = { ...BUSINESS, low_stock_default: 2 };
+  const LOW = "Low-stock warning level";
+  const m1Api = (handler: Parameters<typeof mockApi>[0] = (call) => reply(200, { ...M1, ...(call.body as object) })) =>
+    mockApi((call) => (call.url === "/api/v1/business" && call.method === "GET" ? reply(200, M1) : handler(call)));
+
+  it("shows the saved level with its hint and sends it with the other settings", async () => {
+    const calls = m1Api();
+    await open();
+    expect(screen.getByLabelText(LOW)).toHaveValue("2");
+    expect(screen.getByText(/0 turns warnings off/)).toBeInTheDocument();
+    type(LOW, "5");
+    save();
+    await screen.findByText("Saved. The new values apply from now on.");
+    expect(writes(calls)[0]!.body).toMatchObject({ low_stock_default: 5 });
+    expect(screen.getByLabelText(LOW)).toHaveValue("5");
+  });
+
+  it("accepts Arabic-Indic digits and 0 (warnings off)", async () => {
+    const calls = m1Api();
+    await open();
+    type(LOW, "١٢");
+    save();
+    await screen.findByText("Saved. The new values apply from now on.");
+    expect(writes(calls)[0]!.body).toMatchObject({ low_stock_default: 12 });
+    type(LOW, "٠");
+    save();
+    await waitFor(() => expect(writes(calls)).toHaveLength(2));
+    expect(writes(calls)[1]!.body).toMatchObject({ low_stock_default: 0 });
+  });
+
+  it.each([["2.5"], ["-1"], ["abc"], [""], ["1000001"]])("refuses %j under the field and sends nothing", async (value) => {
+    const calls = m1Api();
+    await open();
+    type(LOW, value);
+    save();
+    expect(screen.getByText("Enter a whole number from 0 to 1,000,000. 0 turns warnings off.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("1 thing to fix before saving.");
+    expect(writes(calls)).toHaveLength(0);
+  });
+
+  it("shows the server's refusal of the level under the field", async () => {
+    m1Api(() => apiError(400, "validation_failed", { low_stock_default: "too_large" }));
+    await open();
+    save();
+    expect(await screen.findByText("Enter a whole number from 0 to 1,000,000. 0 turns warnings off.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("1 thing to fix before saving.");
+  });
+
+  it("is in Arabic", async () => {
+    m1Api();
+    await open("owner", "ar");
+    expect(screen.getByLabelText("حدّ التنبيه لانخفاض المخزون")).toHaveValue("2");
+  });
+
+  it("is left out when the server does not send a level (nothing extra is sent)", async () => {
+    const calls = businessApi(() => reply(200, BUSINESS));
+    await open();
+    expect(screen.queryByLabelText(LOW)).not.toBeInTheDocument();
+    save();
+    await screen.findByText("Saved. The new values apply from now on.");
+    expect(writes(calls)[0]!.body).not.toHaveProperty("low_stock_default");
   });
 });

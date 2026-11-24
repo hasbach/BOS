@@ -93,6 +93,11 @@ def _fake_app() -> Flask:
     def wrong_store_arg(id: str) -> str:
         return ""
 
+    @app.route("/api/v1/catalog/products", methods=["GET", "POST"])
+    @require("catalog.view", store_filtered=True)
+    def products() -> str:
+        return ""
+
     @app.get("/elsewhere")
     def not_under_the_api() -> str:
         return ""
@@ -101,7 +106,14 @@ def _fake_app() -> Flask:
 
 
 STORE = "/api/v1/stores/<uuid:store_id>"
+PRODUCTS = "/api/v1/catalog/products"
 CASES = {
+    # A store-filtered route needs a cross-store case exactly like a store_param route (T017).
+    Case("GET", PRODUCTS, "cross_tenant"),
+    Case("GET", PRODUCTS, "missing_permission"),
+    Case("POST", PRODUCTS, "cross_tenant"),
+    Case("POST", PRODUCTS, "missing_permission"),
+    Case("POST", PRODUCTS, "cross_store"),
     Case("GET", STORE, "cross_tenant"),
     Case("GET", STORE, "missing_permission"),
     Case("POST", STORE, "cross_tenant"),
@@ -120,6 +132,7 @@ def test_harness_lists_exactly_what_is_missing() -> None:
     assert missing_coverage(_fake_app(), CASES) == [
         Case("GET", "/api/v1/business-ops", "ops_area"),
         Case("GET", "/api/v1/business-ops", "tenant_user_refused"),
+        Case("GET", PRODUCTS, "cross_store"),
         Case("GET", "/api/v1/gone", "no_such_route"),
         Case("GET", "/api/v1/me/things", "cross_tenant"),
         Case("GET", "/api/v1/ops/businesses", "tenant_user_refused"),
@@ -142,6 +155,8 @@ def test_harness_failure_message_names_each_missing_entry() -> None:
     assert "(GET, /api/v1/me/things, cross_tenant)" in message
     assert "(GET, /api/v1/ops/businesses, tenant_user_refused)" in message
     assert f"(POST, {STORE}, cross_store)" not in message
+    assert f"(GET, {PRODUCTS}, cross_store)" in message
+    assert f"(POST, {PRODUCTS}, cross_store)" not in message
     assert "/elsewhere" not in message
 
 
@@ -158,9 +173,17 @@ def test_harness_passes_when_everything_is_covered() -> None:
     def ops_businesses() -> str:
         return ""
 
+    @app.get("/api/v1/catalog/products")
+    @require("catalog.view", store_filtered=True)
+    def products() -> str:
+        return ""
+
     assert_covered(
         app,
         {
+            Case("GET", PRODUCTS, "cross_tenant"),
+            Case("GET", PRODUCTS, "missing_permission"),
+            Case("GET", PRODUCTS, "cross_store"),
             Case("GET", STORE, "cross_tenant"),
             Case("GET", STORE, "missing_permission"),
             Case("GET", STORE, "cross_store"),

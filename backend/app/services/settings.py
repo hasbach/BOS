@@ -26,6 +26,7 @@ SETTINGS = (
     "usd_lbp_rate",
     "default_delivery_fee",
     "default_delivery_fee_currency",
+    "low_stock_default",
 )
 _COLUMNS = "id, edition, " + ", ".join(SETTINGS)
 
@@ -59,6 +60,7 @@ def business(db: Session, tenant_id: uuid.UUID) -> dict[str, Any]:
         "usd_lbp_rate": money(row.usd_lbp_rate),
         "default_delivery_fee": money(row.default_delivery_fee),
         "default_delivery_fee_currency": row.default_delivery_fee_currency,
+        "low_stock_default": row.low_stock_default,
         "timezone": TIMEZONE,
     }
 

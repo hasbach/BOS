@@ -7,7 +7,7 @@ import { showsTabBar } from "@/lib/tabs";
 
 import { BottomNav } from "./BottomNav";
 import { InstallCard } from "./InstallCard";
-import { OfflineNotice } from "./OfflineNotice";
+import { OfflineNotice, SuppressOfflineNotices } from "./OfflineNotice";
 import styles from "./AppShell.module.css";
 
 /**
@@ -23,7 +23,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className={styles.notice}>
         <OfflineNotice />
       </div>
-      <div className={styles.content}>{children}</div>
+      <div className={styles.content}>
+        <SuppressOfflineNotices>{children}</SuppressOfflineNotices>
+      </div>
       {tabs ? (
         <>
           <div className={styles.install}>

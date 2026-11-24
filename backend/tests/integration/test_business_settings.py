@@ -83,6 +83,7 @@ def test_everyone_in_the_business_can_read_its_settings(
         "usd_lbp_rate": "89500.00",
         "default_delivery_fee": "0.00",
         "default_delivery_fee_currency": "USD",
+        "low_stock_default": 2,
         "timezone": "Asia/Beirut",
     }
 
@@ -102,10 +103,12 @@ def test_owners_and_managers_change_the_settings_and_it_is_recorded(
             usd_lbp_rate="90000.5",
             default_delivery_fee="3",
             default_delivery_fee_currency="USD",
+            low_stock_default=0,
         )
     )
 
     assert body["name"] == "Denim House"
+    assert body["low_stock_default"] == 0
     assert (body["default_currency"], body["usd_lbp_rate"]) == ("LBP", "90000.50")
     assert (body["default_delivery_fee"], body["default_delivery_fee_currency"]) == ("3.00", "USD")
     assert ok(client.get(BUSINESS)) == body
@@ -126,12 +129,14 @@ def test_owners_and_managers_change_the_settings_and_it_is_recorded(
             "default_currency": "USD",
             "usd_lbp_rate": "89500.00",
             "default_delivery_fee": "0.00",
+            "low_stock_default": 2,
         },
         "after": {
             "name": "Denim House",
             "default_currency": "LBP",
             "usd_lbp_rate": "90000.50",
             "default_delivery_fee": "3.00",
+            "low_stock_default": 0,
         },
     }
 
@@ -157,6 +162,10 @@ def test_decimals_are_kept_exactly(
 def test_a_delivery_fee_of_zero_is_allowed(owner: FlaskClient) -> None:
     assert ok(_patch(owner, default_delivery_fee="5"))["default_delivery_fee"] == "5.00"
     assert ok(_patch(owner, default_delivery_fee="0"))["default_delivery_fee"] == "0.00"
+
+
+def test_the_maximum_low_stock_default_is_allowed(owner: FlaskClient) -> None:
+    assert ok(_patch(owner, low_stock_default=1_000_000))["low_stock_default"] == 1_000_000
 
 
 def test_an_empty_or_unchanged_update_records_nothing(
@@ -196,6 +205,17 @@ def test_an_empty_or_unchanged_update_records_nothing(
         ({"name": ""}, {"name": "required"}),
         ({"name": "x" * 121}, {"name": "too_long"}),
         ({"name": 7}, {"name": "invalid"}),
+        *[
+            ({"low_stock_default": v}, {"low_stock_default": "invalid"})
+            for v in (
+                -1,
+                "3",
+                3.0,
+                True,
+                None,
+            )
+        ],
+        ({"low_stock_default": 1_000_001}, {"low_stock_default": "too_large"}),
         (
             {"usd_lbp_rate": "0", "default_delivery_fee": "-1", "name": ""},
             {"usd_lbp_rate": "invalid", "default_delivery_fee": "invalid", "name": "required"},
@@ -230,7 +250,7 @@ def test_other_roles_cannot_change_the_settings(
     a = worlds.a
     before = _tenant(owner_engine, a.tenant_id)
 
-    response = _patch(user_client(a.user(role), a.tenant_id), usd_lbp_rate="1.00")
+    response = _patch(user_client(a.user(role), a.tenant_id), low_stock_default=3)
 
     refused(response, 403, "forbidden")
     assert _tenant(owner_engine, a.tenant_id) == before

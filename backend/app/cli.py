@@ -165,18 +165,71 @@ def maintenance_history(counts: dict[str, int]) -> dict[str, int]:
 
 @bos_cli.command("maintenance")
 def maintenance() -> None:
-    """Expire old invitations; delete ended sessions, old sign-in attempts and old keys."""
+    """Expire old invitations; delete ended sessions, old sign-in attempts and old keys;
+    delete expired staged product photos and uncommitted imports (per business)."""
     from app.core import audit
     from app.core.db import get_engine, transaction
+    from app.core.storage import storage_for
+    from app.services.maintenance import run_tenant_steps
 
     engine = get_engine()
     with transaction(engine) as db:
-        counts = db.execute(text("SELECT platform_maintenance()")).scalar_one()
+        counts = dict(db.execute(text("SELECT platform_maintenance()")).scalar_one())
+    per_tenant = run_tenant_steps(engine, storage_for(current_app))
+    counts.update(per_tenant.counts())
     audit.record_platform(
         engine, actor_type="system", event="maintenance.run", data=maintenance_history(counts)
     )
     for name, count in sorted(counts.items()):
         click.echo(f"{name}: {count}")
+    if per_tenant.failed:
+        raise click.ClickException(
+            f"{len(per_tenant.failed)} business(es) failed and were rolled back: "
+            + ", ".join(str(t) for t in per_tenant.failed)
+        )
+
+
+@bos_cli.command("stock-check")
+@click.option("--tenant", "tenant", default=None, help="Check only this business (its id).")
+def stock_check(tenant: str | None) -> None:
+    """Check every business's stock: on hand against the ledger, allocated against active
+    allocations, no negative availability (FR-022). Exits non-zero on any difference.
+
+    Businesses are listed in operator context (row-level security is forced on every table);
+    each is then checked in its own tenant transaction, which changes nothing.
+    """
+    from app.core.db import get_engine
+    from app.core.tenancy import operator_transaction, tenant_transaction
+    from app.services.inventory import integrity_report
+
+    wanted: uuid.UUID | None = None
+    if tenant is not None:
+        try:
+            wanted = uuid.UUID(tenant)
+        except ValueError:
+            raise click.ClickException(f"{tenant!r} is not a business id.") from None
+    engine = get_engine()
+    with operator_transaction(engine) as db:
+        businesses = db.execute(
+            text(
+                "SELECT id, name FROM tenants "
+                "WHERE CAST(:wanted AS uuid) IS NULL OR id = CAST(:wanted AS uuid) ORDER BY id"
+            ),
+            {"wanted": wanted},
+        ).all()
+    if wanted is not None and not businesses:
+        raise click.ClickException(f"No business has the id {wanted}.")
+
+    inconsistent = 0
+    for business in businesses:
+        with tenant_transaction(engine, business.id) as db:
+            problems = integrity_report(db)
+        click.echo(f"business {business.id} ({business.name}): {len(problems)} differences")
+        for problem in problems:
+            click.echo(f"  {problem}")
+        inconsistent += bool(problems)
+    if inconsistent:
+        raise click.ClickException(f"{inconsistent} business(es) with differences.")
 
 
 @bos_cli.command("seed-demo")
@@ -208,6 +261,33 @@ def seed_demo() -> None:
         click.echo("Demo data already present; nothing changed.")
     else:
         click.echo(f"Every demo user's password is the one in {DEMO_PASSWORD_ENV}.")
+
+
+@bos_cli.command("seed-catalog")
+@click.option("--variants", required=True, type=click.IntRange(min=1), help="Variants to add.")
+@click.option("--tenant", required=True, help="Demo business id.")
+def seed_catalog(variants: int, tenant: str) -> None:
+    """Append synthetic catalog data to a demo business (development only)."""
+    from app import get_config
+    from app.core.db import get_engine
+    from app.services.seed import CatalogSeedError
+    from app.services.seed import seed_catalog as run_seed
+
+    if get_config(current_app).environment != "development":
+        raise click.ClickException("seed-catalog requires BOS_ENVIRONMENT=development.")
+    if os.environ.get(ALLOW_DEMO_SEED_ENV, "").strip().lower() != "true":
+        raise click.ClickException(f"seed-catalog requires {ALLOW_DEMO_SEED_ENV}=true.")
+    try:
+        tenant_id = uuid.UUID(tenant)
+    except ValueError:
+        raise click.ClickException(f"{tenant!r} is not a business id.") from None
+    try:
+        products = run_seed(get_engine(), tenant_id, variants)
+    except CatalogSeedError as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(
+        f"Added {variants} variants across {products} products to demo business {tenant_id}."
+    )
 
 
 def register_cli(app: Flask) -> None:

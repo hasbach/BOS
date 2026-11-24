@@ -15,6 +15,8 @@ Required cases per (method, rule):
 * ``@authenticated``                — ``cross_tenant``, unless declared ``self_only=True``.
 * ``@require(p)``                   — ``cross_tenant`` and ``missing_permission``.
 * ``@require(p, store_param=...)``  — also ``cross_store``.
+* ``@require(p, store_filtered=True)`` — also ``cross_store`` (the store scope is applied to
+  the data, research R52).
 * ``@operator_only``                — ``tenant_user_refused``.
 
 Besides missing cases the harness reports: ``policy`` (no declared policy), ``ops_area``
@@ -126,7 +128,9 @@ def missing_coverage(app: Flask, cases: Iterable[Case]) -> list[Case]:
             if policy.store_param is not None and policy.store_param not in rule.arguments:
                 problems.add(Case(method, rule.rule, "store_param"))
             needed = _required(
-                policy.kind, self_only=policy.self_only, store=policy.store_param is not None
+                policy.kind,
+                self_only=policy.self_only,
+                store=policy.store_param is not None or policy.store_filtered,
             )
             for kind in needed:
                 if Case(method, rule.rule, kind) not in registered:

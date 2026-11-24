@@ -8,6 +8,7 @@
 // shows sign-in or not-allowed itself), 404, 5xx, a timeout, an unreachable API or an odd body.
 
 import type { Business } from "./business";
+import type { ProductPage } from "./catalog";
 import { DEFAULT_API_URL, SESSION_COOKIE, TOKEN } from "./serverMe";
 import type { CookieReader } from "./serverMe";
 import type { StaffList } from "./staff";
@@ -63,6 +64,22 @@ const STAFF_STATUSES = new Set(["active", "inactive"]);
 const INVITATION_STATUSES = new Set(["pending", "expired"]);
 const STORE_STATUSES = new Set(["active", "inactive"]);
 const CURRENCIES = new Set(["USD", "LBP"]);
+const PRODUCT_STATUSES = new Set(["active", "archived"]);
+const STOCK_STATES = new Set(["ok", "low", "out"]);
+
+export function isProductPage(body: unknown): body is ProductPage {
+  if (!isRecord(body) || !Array.isArray(body.items) || !isNullableString(body.next_cursor)) return false;
+  const counts = body.counts;
+  if (counts !== null && (!isRecord(counts) || ![counts.all, counts.in_stock, counts.low, counts.out].every(Number.isSafeInteger))) return false;
+  return body.items.every((item) =>
+    isRecord(item) && isString(item.id) && isString(item.code) && isNullableString(item.name_en) && isNullableString(item.name_ar) &&
+    PRODUCT_STATUSES.has(String(item.status)) && isNullableString(item.main_photo_id) && isStringArray(item.store_ids) &&
+    Number.isSafeInteger(item.variant_count) && Number.isSafeInteger(item.available_total) && STOCK_STATES.has(String(item.stock_state)) &&
+    Array.isArray(item.prices) && item.prices.every((price) =>
+      isRecord(price) && CURRENCIES.has(String(price.currency)) && isString(price.min) && isString(price.max),
+    ),
+  );
+}
 
 function isPersonBase(value: Record<string, unknown>): boolean {
   return (

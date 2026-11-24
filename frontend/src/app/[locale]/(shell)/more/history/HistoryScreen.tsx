@@ -34,6 +34,7 @@ import { Loading } from "@/components/Loading";
 import { Screen, ScreenBody, ScreenFooter, StatusHeader } from "@/components/Screen";
 import { SessionEnded } from "@/components/SessionEnded";
 import { Sheet } from "@/components/Sheet";
+import { useRovingRadio } from "@/components/useRovingRadio";
 import { api, isApiError, isSessionEnded } from "@/lib/api";
 import { EVENT_GROUPS, EVENT_ICONS, actorLabel, describeEntry, eventName } from "@/lib/audit";
 import type { AuditEntry, AuditPage, EventIcon } from "@/lib/audit";
@@ -347,16 +348,6 @@ function EventSheetBody({ current, onClose, onApply }: { current: string; onClos
   const h = useTranslations("history");
   const [draft, setDraft] = useState(current);
 
-  const option = (value: string, label: string) => {
-    const on = draft === value;
-    return (
-      <button key={value || "all"} type="button" role="radio" aria-checked={on} className={`${styles.option} ${on ? styles.optionOn : ""}`} onClick={() => setDraft(value)}>
-        {on ? <CheckIcon width={14} height={14} /> : null}
-        {label}
-      </button>
-    );
-  };
-
   return (
     <Sheet
       open
@@ -366,7 +357,7 @@ function EventSheetBody({ current, onClose, onApply }: { current: string; onClos
     >
       <div className={styles.sheetScroll}>
         <div className={styles.pills} role="radiogroup" aria-label={h("allEvents")}>
-          {option("", h("allEvents"))}
+          <EventOptions values={[""]} labels={{ "": h("allEvents") }} draft={draft} onPick={setDraft} />
         </div>
         {EVENT_GROUPS.map((group) => (
           <div key={group.key}>
@@ -374,12 +365,30 @@ function EventSheetBody({ current, onClose, onApply }: { current: string; onClos
               {h(`group.${group.key}`)}
             </p>
             <div className={styles.pills} role="radiogroup" aria-label={h(`group.${group.key}`)}>
-              {group.events.map((event) => option(event, eventName(event, t as never)))}
+              <EventOptions values={group.events} labels={Object.fromEntries(group.events.map((event) => [event, eventName(event, t as never)]))} draft={draft} onPick={setDraft} />
             </div>
           </div>
         ))}
       </div>
     </Sheet>
+  );
+}
+
+/** The radios of one group: arrow keys, Home and End move the choice (one Tab stop per group). */
+function EventOptions({ values, labels, draft, onPick }: { values: readonly string[]; labels: Record<string, string>; draft: string; onPick: (value: string) => void }) {
+  const item = useRovingRadio<string>(values, draft, onPick);
+  return (
+    <>
+      {values.map((value) => {
+        const on = draft === value;
+        return (
+          <button key={value || "all"} type="button" role="radio" aria-checked={on} className={`${styles.option} ${on ? styles.optionOn : ""}`} {...item(value)} onClick={() => onPick(value)}>
+            {on ? <CheckIcon width={14} height={14} /> : null}
+            {labels[value]}
+          </button>
+        );
+      })}
+    </>
   );
 }
 
@@ -425,6 +434,7 @@ function PersonSheetBody({ current, meId, onClose, onApply, people, onRetry }: P
 
   const members = people.k === "ready" ? people.members : [];
   const chosen = members.find((member) => member.user_id === draft);
+  const item = useRovingRadio<string>(["", ...members.map((member) => member.user_id)], draft, setDraft);
 
   return (
     <Sheet
@@ -447,14 +457,14 @@ function PersonSheetBody({ current, meId, onClose, onApply, people, onRetry }: P
         {people.k === "loading" || people.k === "idle" ? <Loading /> : null}
         {people.k === "ready" ? (
           <div role="radiogroup" aria-label={h("person")}>
-            <button type="button" role="radio" aria-checked={draft === ""} className={styles.radioRow} onClick={() => setDraft("")}>
+            <button type="button" role="radio" aria-checked={draft === ""} className={styles.radioRow} {...item("")} onClick={() => setDraft("")}>
               <span className={`${styles.radio} ${draft === "" ? styles.radioOn : ""}`} aria-hidden="true" />
               <span className={styles.name}>{h("everyone")}</span>
             </button>
             {members.map((member) => {
               const on = draft === member.user_id;
               return (
-                <button key={member.user_id} type="button" role="radio" aria-checked={on} className={styles.radioRow} onClick={() => setDraft(member.user_id)}>
+                <button key={member.user_id} type="button" role="radio" aria-checked={on} className={styles.radioRow} {...item(member.user_id)} onClick={() => setDraft(member.user_id)}>
                   <span className={`${styles.radio} ${on ? styles.radioOn : ""}`} aria-hidden="true" />
                   <span className={styles.name} style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span>{member.name}</span>
